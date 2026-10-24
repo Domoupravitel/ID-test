@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://domoupravitel.github.io/ID-test/sitemap.xml

@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="bg">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Описание на функционалностите | Етажна собственост</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;600;800&display=swap"
+        rel="stylesheet">
+    <style>
+        :root {
+            --primary: #3b6edc;
+            --primary-dark: #2563eb;
+            --secondary: #10b981;
+            --warning: #f59e0b;
+            --bg-light: #f8fafc;
+            --text-main: #0F172A;
+            --text-muted: #64748b;
+            --radius-lg: 20px;
+            --radius-md: 12px;
+            --shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-light);
+            color: var(--text-main);
+            line-height: 1.6;
+            margin: 0;
+            padding: 0;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+            color: white;
+            padding: 60px 20px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 2.5rem;
+            margin: 0;
+            letter-spacing: -0.02em;
+        }
+
+        .header p {
+            opacity: 0.8;
+            font-size: 1.1rem;
+            max-width: 600px;
+            margin: 15px auto 0;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: -40px auto 60px;
+            background: white;
+            padding: 50px;
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow);
+            position: relative;
+        }
+
+        .section {
+            margin-bottom: 50px;
+        }
+
+        h2 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.8rem;
+            color: var(--primary);
+            border-bottom: 2px solid #f1f5f9;
+            padding-bottom: 12px;
+            margin-bottom: 25px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .feature-list {
+            list-style: none;
+            padding: 0;
+        }
+
+        .feature-list li {
+            padding: 12px 0;
+            padding-left: 30px;
+            position: relative;
+            border-bottom: 1px solid #f8fafc;
+        }
+
+        .feature-list li::before {
+            content: '✓';
+            position: absolute;
+            left: 0;
+            color: var(--secondary);
+            font-weight: bold;
+        }
+
+        .important-box {
+            background: #fffbeb;
+            border-left: 5px solid var(--warning);
+            padding: 30px;
+            border-radius: 8px;
+            margin: 30px 0;
+        }
+
+        .important-box h4 {
+            color: #92400e;
+            margin-top: 0;
+            font-size: 1.2rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .step-guide {
+            background: #f1f5f9;
+            padding: 25px;
+            border-radius: var(--radius-md);
+            margin-top: 15px;
+        }
+
+        .step-guide ol {
+            margin-bottom: 0;
+        }
+
+        .step-guide ol li {
+            margin-bottom: 8px;
+        }
+
+        .highlight {
+            color: var(--primary);
+            font-weight: 600;
+        }
+
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            margin-top: 40px;
+            color: var(--primary);
+            text-decoration: none;
+            font-weight: 700;
+            transition: transform 0.2s;
+        }
+
+        .back-link:hover {
+            transform: translateX(-5px);
+        }
+
+        code {
+            background: #e2e8f0;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 0.9em;
+        }
+
+        .video-container {
+            margin: 25px 0;
+            border-radius: var(--radius-md);
+            overflow: hidden;
+            box-shadow: var(--shadow);
+            background: #000;
+            line-height: 0;
+        }
+
+        .video-container video {
+            width: 100%;
+            display: block;
+        }
+
+        .video-caption {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            text-align: center;
+            margin-top: 10px;
+            font-style: italic;
+            margin-bottom: 30px;
+        }
+
+        @media (max-width: 600px) {
+            .container {
+                padding: 30px 20px;
+                border-radius: 0;
+                margin-top: 0;
+            }
+
+            .header {
+                padding: 40px 20px;
+            }
+
+            h1 {
+                font-size: 1.8rem;
+            }
+        }
+
+        /* Lightbox Style */
+        .lightbox {
+            display: none;
+            position: fixed;
+            z-index: 9999;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            justify-content: center;
+            align-items: center;
+            cursor: zoom-out;
+            transition: opacity 0.3s ease;
+        }
+
+        .lightbox img {
+            max-width: 90%;
+            max-height: 90%;
+            box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
+            transform: scale(0.9);
+            transition: transform 0.3s ease;
+        }
+
+        .lightbox.active {
+            display: flex;
+        }
+
+        .lightbox.active img {
+            transform: scale(1);
+        }
+
+        .zoomable {
+            cursor: zoom-in;
+            transition: opacity 0.2s;
+        }
+
+        .zoomable:hover {
+            opacity: 0.85;
+        }
+
+        /* Floating Side Navigation */
+        .float-nav {
+            position: fixed;
+            top: 50%;
+            right: 24px;
+            transform: translateY(-50%);
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .float-nav a {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            text-decoration: none;
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            font-weight: 600;
+            background: white;
+            border: 2px solid #e2e8f0;
+            border-radius: 30px;
+            padding: 8px 14px 8px 10px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            transition: all 0.25s ease;
+            white-space: nowrap;
+            max-width: 44px;
+            overflow: hidden;
+        }
+
+        .float-nav a:hover,
+        .float-nav a.active {
+            max-width: 220px;
+            border-color: var(--primary);
+            color: var(--primary);
+            background: #f0f7ff;
+        }
+
+        .float-nav a.active {
+            border-color: var(--primary);
+            color: var(--primary);
+            font-weight: 700;
+        }
+
+        .float-nav a .nav-dot {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #e2e8f0;
+            flex-shrink: 0;
+            transition: background 0.25s ease;
+        }
+
+        .float-nav a:hover .nav-dot,
+        .float-nav a.active .nav-dot {
+            background: var(--primary);
+        }
+
+        .float-nav a .nav-label {
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+
+        .float-nav a:hover .nav-label,
+        .float-nav a.active .nav-label {
+            opacity: 1;
+        }
+
+        @media (max-width: 1100px) {
+            .float-nav {
+                display: none;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <header class="header">
+        <h1>Прозрачно и Модерно Управление</h1>
+        <p>Всичко, което трябва да знаете за вашата Етажна собственост в една платформа.</p>
+    </header>
+
+    <!-- Floating Side Navigation -->
+    <nav class="float-nav" id="floatNav">
+        <a href="#sec-sobstvenici" id="nav-sobstvenici">
+            <span class="nav-dot"></span>
+            <span class="nav-label">Собственици</span>
+        </a>
+        <a href="#sec-domoupraviteli" id="nav-domoupraviteli">
+            <span class="nav-dot"></span>
+            <span class="nav-label">За Домоуправители</span>
+        </a>
+        <a href="#sec-zues" id="nav-zues">
+            <span class="nav-dot"></span>
+            <span class="nav-label">ЗУЕС помощник</span>
+        </a>
+    </nav>
+
+    <div class="container">
+        <!-- Section 1: За Собственици -->
+        <div class="section" id="sec-sobstvenici">
+            <h2>🏠 За собственици и обитатели</h2>
+            <ul class="feature-list">
+                <li><span class="highlight">Пълна прозрачност</span>: Виждате точно колко дължите и за какво (асансьор,
+                    почистване, фондове).</li>
+                <li><span class="highlight">Известия</span>: Получаване по имейл на задължения към ЕС и месечни отчети.</li>
+                <li><span class="highlight">История на плащанията</span>: Достъп до всички ваши вноски през времето.
+                </li>
+                <li><span class="highlight">Общо състояние</span>: Виждате текущия баланс на входа и общите неплатени
+                    суми от съседите.</li>
+                <li><span class="highlight">Месечни финансови отчети (Чл. 23 ЗУЕС)</span>: Детайлна справка за приходите
+                    и разходите, достъпна за всеки.</li>
+                <li><span class="highlight">Удобен достъп</span>: Без пароли – чрез уникален линк или ID.</li>
+                <li><span class="highlight">Инструкции за плащане</span>: Бърз достъп до сметката на входа.</li>
+                <li><span class="highlight">📢 Важни съобщения</span>: Директна връзка с Домоуправителя чрез актуални
+                    обяви и лични бележки в таблото.</li>
+            </ul>
+
+            <div class="video-container">
+                <iframe src="https://drive.google.com/file/d/1Vprw9yQjH228decDtfwh0-EAzyXFQQmm/preview" width="100%"
+                    height="480" allow="autoplay"></iframe>
+            </div>
+            <div class="video-caption">🎬 Видео демонстрация на потребителския интерфейс</div>
+
+            <!-- Lightbox Overlay -->
+            <div id="lightbox" class="lightbox" onclick="closeLightbox()">
+                <img id="lightbox-img" src="" alt="Zoomed view">
+            </div>
+
+            <script>
+                function openLightbox(src) {
+                    const lb = document.getElementById('lightbox');
+                    const img = document.getElementById('lightbox-img');
+                    img.src = src;
+                    lb.classList.add('active');
+                    document.body.style.overflow = 'hidden';
+                }
+
+                function closeLightbox() {
+                    const lb = document.getElementById('lightbox');
+                    lb.classList.remove('active');
+                    document.body.style.overflow = 'auto';
+                }
+            </script>
+
+            <div class="important-box" style="background: #f0f7ff; border-left-color: var(--primary); margin-top: 30px;">
+                <h4 style="color: var(--primary);">💳 Стандартизирано плащане за обитатели (ID-Apt)</h4>
+                <p>
+                    За да може системата автоматично да разпознае Вашето плащане и да го отрази в салдото Ви веднага, е
+                    необходимо при банков превод или плащане през/към ePay/Revolut да посочвате правилното
+                    <strong>Основание</strong>.
+                </p>
+                <p>
+                    <strong>Формат:</strong> <code>[Вашият Вход ID]</code> - <code>[Вашият Апартамент]</code>
+                </p>
+                <div
+                    style="background: white; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0; margin: 10px 0;">
+                    <p style="margin:0; font-size: 0.95rem;"><strong>Пример:</strong> Ако ID на Вашия вход е
+                        <code>***********</code> и сте от апартамент <code>A10</code>, основанието трябва да бъде:
+                    </p>
+                    <div
+                        style="margin-top:10px; font-family: monospace; font-weight: bold; font-size: 1.1rem; color: #d32f2f; text-align: center;">
+                        ***********-A10
+                    </div>
+                </div>
+                <p style="font-size: 0.9rem; margin-top: 10px; color: var(--text-muted);">
+                    Всеки апартамент може да види своя уникален код за плащане в платформата, след като го избере от
+                    падащото меню.
+                </p>
+            </div>
+
+            <h2 id="sec-domoupraviteli">⚙️ За Домоуправители</h2>
+            <ul class="feature-list">
+                <li><span class="highlight">Пълен ЗУЕС Мениджър</span>: Специализиран модул за пълно съответствие със
+                    закона (Чл. 7, 13, 16, 23, 47).</li>
+                <li><span class="highlight">Видове операции</span>: Въвеждане на плащания от Апарт. и Външни източници (наем, ВЕИ и т. н.), начисляване на Разходи и разпределяне на Приходи от Външни източници.</li>
+                <li><span class="highlight">Лесно въвеждане</span>: Добавяте нови данни за секунди. Изключително пригодно за смарттелефони.</li>
+                <li><span class="highlight">Автоматизация</span>: Възможност за автоматично въвеждане на нови разходи и плащания в ЕС.</li>
+                <li><span class="highlight">Автоматични изчисления</span>: Системата сама разпределя общите разходи по
+                    апартаменти.</li>
+                <li><span class="highlight">Контрол на достъпа</span>: Пълен мониторинг на платеното и дължимото за
+                    всяко жилище.</li>
+                <li><span class="highlight">📢 Известия до живущите</span>: Публикуване на важни съобщения до целия вход
+                    или персонални бележки до конкретен апартамент.</li>
+                <li><span class="highlight">⚡ Глобална комуникация</span>: Получаване на директни известия от Супер
+                    Админа на системата за техническа поддръжка или новини.</li>
+                <li><span class="highlight">💎 Индивидуални цени</span>: Възможност за задаване на преференциални цени
+                    или безплатно ползване на платформата за определени входове.</li>
+                <li><span class="highlight">Отчети</span>: Ежемесечно получаване на пълен отчет за архив на приходите, разходите и разпределенията.</li>
+            </ul>
+
+            <h2 style="color: #4a7cf7;">⚖️ ЗУЕС Мениджър (Законова съвместимост)</h2>
+            <div
+                style="background: #f8fafc; padding: 20px; border-radius: var(--radius-md); border: 1px solid #e2e8f0; margin-bottom: 30px;">
+                <p>Административният панел вече включва мощен инструмент за управление на правните аспекти на входа:</p>
+                <ul class="feature-list" style="margin-top: 15px;">
+                    <li><strong>Електронна Книга на ЕС (Чл. 7)</strong>: Вече не е нужно да поддържате хартиени
+                        тетрадки. Всички данни за собственици, обитатели и домашни любимци са дигитализирани.</li>
+                    <li><strong>Общо събрание (Чл. 13-16)</strong>:
+                        <ul>
+                            <li>Интелигентен калкулатор за кворум на база идеални части.</li>
+                            <li>Автоматично генериране на Присъствен списък за подписи.</li>
+                            <li>Чернова на Протокол от ОС с попълнени законови реквизити.</li>
+                            <li><strong>Месечен финансов отчет</strong>: Директен преглед на приходите и разходите.</li>
+                        </ul>
+                    </li>
+                    <li><strong>Декларации (Чл. 7, ал. 3)</strong>: Генериране на попълнена Декларация за вписване само с един
+                        клик за всеки апартамент.</li>
+                </ul>
+            </div>
+
+            <div class="video-container">
+                <iframe src="https://drive.google.com/file/d/14uEc_kjV4y4BjtRSQ-lCJDc3u_KTQuY4/preview" width="100%"
+                    height="480" allow="autoplay"></iframe>
+            </div>
+            <div class="video-caption">🎬 Видео демонстрация на административния панел</div>
+
+            <div class="important-box" style="background: #f0f7ff; border-left-color: var(--primary);">
+                <h4 style="color: var(--primary);">💳 Плащане на абонамент за входа</h4>
+                <p>
+                    За да може системата автоматично да разпознае Вашето плащане и да го отрази в салдото Ви веднага, е необходимо при плащане през/към ePay да посочвате правилното <strong>Основание</strong>.
+                </p>
+                <p>
+                    <strong>Формат:</strong> <code>[Вашият Вход ID]</code>
+                </p>
+                <div
+                    style="background: white; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0; margin: 10px 0;">
+                    <p style="margin:0; font-size: 0.95rem;"><strong>Пример:</strong> Ако ID на Вашия вход е
+                        <code>АСФ426288</code>, основанието трябва да бъде:
+                    </p>
+                    <div
+                        style="margin-top:10px; font-family: monospace; font-weight: bold; font-size: 1.1rem; color: #d32f2f; text-align: center;">
+                        АСФ426288
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Section 3: Автоматизация на процеса -->
+        <div class="section">
+            <h2>⚡ АВТОМАТИЗАЦИЯ НА ПРОЦЕСА</h2>
+            <div class="important-box">
+                <h4>⚠️ ВАЖНО! За да бъде напълно автоматизиран процесът:</h4>
+
+                <p><strong>1. Домоуправителят трябва да се регистрира в платформата с имейл, който е регистриран в ePay, за получаване уведомления за постъпления и за възникнали задължения.</strong></p>
+
+                <p>
+                    <strong>Примерно:</strong> за регистрация за известие по имейл на задължение за битови сметки в <code>ePay.bg</code>: <i>Плащане на битови сметки → Промяна → +Нова регистрация на сметка</i>.
+                    За автоматично разпределяне на разходите използвайте следните ключови думи при наименуване:
+                </p>
+                <ul style="margin-top: 10px; margin-bottom: 10px;">
+                    <li><strong>„асансьор“</strong> – за ел. енергия за асансьора.</li>
+                    <li><strong>„осветление“</strong> – за ел. енергия в общите части.</li>
+                    <li><strong>„ВиК“</strong> – за разходи за ВиК в общите части.</li>
+                </ul>
+                <!-- BEGIN EPAY EXPENSE HELP -->
+                <p>Автоматичният импорт изисква надежден идентификатор на събитието от доставчика. При липса известието остава за ръчна обработка.</p>
+                <p>Всеки еднозначно разпознат ред е отделен разход: Асансьор, Осветление / Ток или ВиК. Поддържат се и досегашните описания „етажно“ и „ВиК ЕС“. При неясен, неизвестен или двусмислен ред цялото известие остава за ръчна обработка без автоматични записи. Периодът се определя от датата на имейла; не се извежда от свободен текст.</p>
+                <p><strong>„Повтори“ е отделен механизъм</strong> за предвидими/фиксирани разходи: Абонамент, Охрана, Почистване, Поддръжка и Абонамент Платформа. Администраторът настройва правилото ръчно и го записва чрез „Запази“. ePay не създава такива правила и не импортира автоматично тези категории или Фонд ремонт.</p>
+                <p>Автоматичният импорт сам по себе си не създава правно основание за разхода. Посочените три ePay категории са текущият продуктов договор; бъдещо разширяване изисква отделно изрично решение.</p>
+                <!-- END EPAY EXPENSE HELP -->
+
+                <p>В имейла, който ще получите от <code>ePay.bg</code> за ново задължение за битови сметки, ще се съдържа текст, примерно:</p>
+
+                <div style="background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px; margin: 12px 0 20px; font-family: monospace; font-size: 0.85rem; color: #374151; white-space: pre-wrap;">ePay.bg Ви уведомява за задълженията по регистрираните
+от Вас периодични сметки:
+
+Търговец                    Абонатен номер     Сума
+---------------------------------------------------
+Електрохолд България ЕООД   асансьор           16.81 EUR
+Електрохолд България ЕООД   етажно             4.16 EUR</div>
+
+                <p><strong>2. Имейлът на домоуправителя</strong> трябва да има настройка за пренасочване към този на платформата. Препоръчваме имейл на Google. Gmail може да прави точно това чрез филтри + препращане.</p>
+
+                <div class="step-guide">
+                    <strong>Как да настроите пренасочване в Gmail:</strong>
+                    <ol>
+                        <li>Отидете в <strong>Settings</strong> (иконката със зъбчето) → <strong>Преглед на всички настройки</strong></li>
+                        <li><strong>Препращане и POP/IMAP достъп</strong> → Добавяне на имейл за препращане<br>
+                            <span style="font-size: 0.9rem; color: #555; display: block; margin-top: 4px;"><i>Следвайте стъпките. Ще бъде изпратена връзка за потвърждение на получателя. Системата ни проверява автоматично и одобрява на всеки 15 мин.</i></span>
+                        </li>
+                        <li>Отидете в таб на <strong>Филтри и блокирани адреси</strong> или в горното меню</li>
+                        <li>Кликнете <strong>Създаване на нов филтър</strong></li>
+                        <li>В полето <strong>От</strong> въведете имейл адреса на подателя (<code>ntf@epay.bg</code>), чиито писма искате да препращате.</li>
+                        <li>Кликнете <strong>Създаване на филтър</strong></li>
+                        <li>Постави отметка на <strong>Препращане до:</strong> и избери адреса от падащото меню, към който да се препращат</li>
+                        <li>Кликнете <strong>Създай филтър</strong></li>
+                    </ol>
+                    <p style="margin-top: 12px; margin-bottom: 8px; font-size: 0.9rem;">В Gmail / Настройки / Филтри и блокирани адреси, филтърът трябва да изглежда така:</p>
+                    <div style="background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px; margin-bottom: 12px;">
+                        <p style="margin: 0 0 6px; font-family: monospace; font-size: 0.85rem; color: #374151;"><strong>Съответства на:</strong> from:(ntf@epay.bg)</p>
+                        <p style="margin: 0; font-family: monospace; font-size: 0.85rem; color: #374151;"><strong>Направете следното:</strong> Означаване като прочетени, Да се препрати до <code>info.domoupravitel@gmail.com</code>, Да не се изпраща никога в „Спам"</p>
+                    </div>
+                    <p style="margin-top:15px; font-size: 0.9rem;">
+                        <strong>Какво още можете да филтрирате (освен подател):</strong><br>
+                        • <code>Subject</code> – само писма с определена тема<br>
+                        • <code>To</code> – писма изпратени до определен твой адрес<br>
+                        • Комбинации от горните
+                    </p>
+                </div>
+
+                <p style="margin-top: 20px;"><strong>3. Автоматизацията за постъпили плащания и възникнали задължения към ЕС работи единствено чрез ePay, затова, като начин на плащане към ЕС посочвайте IBAN и/или КИН в ePay.</strong></p>
+            </div>
+        </div>
+
+        <div class="section" id="sec-zues">
+            <h2>🤖 ЗУЕС помощник</h2>
+            <div style="background: #f8fafc; padding: 20px; border-radius: var(--radius-md); border: 1px solid #e2e8f0; margin-bottom: 30px;">
+                <p>ЗУЕС помощникът е иновативен инструмент, който ви улеснява при навигацията в Закона за управление на етажната собственост (ЗУЕС).</p>
+                <ul class="feature-list" style="margin-top: 15px;">
+                    <li><strong>Интерактивна матрица</strong>: Бърз достъп до изискуемите мнозинства за различни видове решения на Общото събрание.</li>
+                    <li><strong>Свързаност на информацията</strong>: Лесно намиране на свързани членове, права и задължения според закона.</li>
+                </ul>
+            </div>
+
+            <div class="video-container">
+                <iframe src="https://drive.google.com/file/d/1cMVWIEqJMPYCD0aIYKxjyy_46N8ot1Ix/preview" width="100%" height="480" allow="autoplay"></iframe>
+            </div>
+            <div class="video-caption">🎬 Видео демонстрация на ЗУЕС помощник</div>
+        </div>
+
+        <a href="index.html" class="back-link">← Обратно към началната страница</a>
+    </div>
+
+    <footer style="text-align: center; padding: 40px; color: var(--text-muted); font-size: 0.9rem;">
+        &copy; 2026 Платформа за Управление на Етажна Собственост
+    </footer>
+
+    <script>
+        // Floating nav scroll spy
+        (function () {
+            var sections = [
+                { id: 'sec-sobstvenici', navId: 'nav-sobstvenici' },
+                { id: 'sec-domoupraviteli', navId: 'nav-domoupraviteli' },
+                { id: 'sec-zues', navId: 'nav-zues' }
+            ];
+            var navLinks = sections.map(function (s) { return document.getElementById(s.navId); });
+
+            function onScroll() {
+                var scrollY = window.scrollY + window.innerHeight / 3;
+                var active = -1;
+                sections.forEach(function (s, i) {
+                    var el = document.getElementById(s.id);
+                    if (el && el.offsetTop <= scrollY) {
+                        active = i;
+                    }
+                });
+                navLinks.forEach(function (link, i) {
+                    if (link) {
+                        link.classList.toggle('active', i === active);
+                    }
+                });
+            }
+
+            window.addEventListener('scroll', onScroll, { passive: true });
+            onScroll();
+        })();
+    </script>
+</body>
+
+</html>

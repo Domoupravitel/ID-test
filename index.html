@@ -1,0 +1,1991 @@
+<!DOCTYPE html>
+<html lang="bg">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+    <title>Онлайн Домоуправител | Управление на етажна собственост</title>
+
+    <!-- Търсачки (Google) -->
+    <meta name="description"
+        content="Онлайн домоуправител за управление на етажна собственост. Автоматизирайте месечни такси, разходи, плащания и фонд ремонт по изискванията на ЗУЕС. Бързо, лесно, прозрачно.">
+    <meta name="keywords"
+        content="онлайн домоуправител, етажна собственост, управление на етажна собственост, месечни такси, такси вход, фонд ремонт, ЗУЕС, домоуправител онлайн, блок">
+    <meta name="author" content="Онлайн Домоуправител">
+    <meta name="robots" content="index, follow">
+    <link rel="canonical" href="https://domoupravitel.github.io/ID-test/">
+
+    <!-- Open Graph (За търговски вид във Facebook, Viber, Messenger, LinkedIn) -->
+    <meta property="og:locale" content="bg_BG">
+    <meta property="og:title" content="Онлайн Домоуправител | Управление на етажна собственост">
+    <meta property="og:description"
+        content="Онлайн домоуправител за управление на етажна собственост. Автоматизирайте месечни такси, разходи, плащания и фонд ремонт по изискванията на ЗУЕС. Бързо, лесно, прозрачно.">
+    <meta property="og:image" content="https://domoupravitel.github.io/ID-test/og-image.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="Онлайн Домоуправител - Табло за управление на етажна собственост">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://domoupravitel.github.io/ID-test/">
+    <meta property="og:site_name" content="Онлайн Домоуправител">
+
+    <!-- Twitter / X -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Онлайн Домоуправител | Управление на етажна собственост">
+    <meta name="twitter:description" content="Онлайн домоуправител за управление на етажна собственост. Автоматизирайте месечни такси, разходи, плащания и фонд ремонт по изискванията на ЗУЕС.">
+    <meta name="twitter:image" content="https://domoupravitel.github.io/ID-test/og-image.png">
+
+    <!-- Modern Typography: Inter & Outfit -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;600;800&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+        <script src="firestore-client.js"></script>
+        <script src="app.js?v=1780585496892" defer></script>
+        <script src="recurring-expenses.js" defer></script>
+        <script src="fin01-payment.js" defer></script>
+        <script src="maintenance-ledger.js" defer></script>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getFirestore, collection, getDocs, doc, getDoc, setDoc, query, where, deleteDoc, addDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+        const firebaseConfig = {
+  "apiKey": "AIzaSyCa-f7O_BPKjAqhj5ePdSwL5bx6qU8qthc",
+  "authDomain": "domoupravitel-test.firebaseapp.com",
+  "projectId": "domoupravitel-test",
+  "storageBucket": "domoupravitel-test.firebasestorage.app",
+  "messagingSenderId": "919319085139",
+  "appId": "1:919319085139:web:5ad19d8f281348cfbd86a6"
+};
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        window.db = db;
+        window.fb = installFirestoreClient(
+            { collection, getDocs, doc, getDoc, setDoc, query, where, deleteDoc, addDoc, updateDoc },
+            { firestoreInstance: db, projectId: firebaseConfig.projectId, databaseId: "(default)" }
+        );
+    </script>
+
+<style>.value-red { color: #d32f2f; font-weight: bold; } .value-green { color: #2e7d32; font-weight: bold; }
+.admin-input.expense-note { font-size: 0.8rem; padding: 7px 10px; margin-top: -6px; }
+#chargesFeedback { font-size: 0.85rem; line-height: 1.5; white-space: pre-line; }
+</style>
+
+    <!-- Тема и цветова схема -->
+    <meta name="theme-color" content="#3b6edc">
+    <meta name="color-scheme" content="light">
+
+    <!-- Web App Manifest -->
+    <link rel="manifest" href="manifest.json">
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="favicon-192x192.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+
+    <!-- DNS Prefetch (допълнително към съществуващия preconnect) -->
+    <link rel="dns-prefetch" href="https://fonts.googleapis.com">
+    <link rel="dns-prefetch" href="https://fonts.gstatic.com">
+    <link rel="dns-prefetch" href="https://www.gstatic.com">
+    <link rel="dns-prefetch" href="https://firestore.googleapis.com">
+
+    <!-- Schema.org: SoftwareApplication -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "Онлайн Домоуправител",
+      "applicationCategory": "BusinessApplication",
+      "operatingSystem": "Web, Android, iOS",
+      "description": "Онлайн домоуправител за управление на етажна собственост. Автоматизирайте месечни такси, разходи, плащания и фонд ремонт по изискванията на ЗУЕС.",
+      "url": "https://domoupravitel.github.io/ID-test/",
+      "image": "https://raw.githubusercontent.com/Domoupravitel/ID-test/main/logo.png",
+      "inLanguage": "bg",
+      "offers": {
+        "@type": "Offer",
+        "description": "Абонаментен план за управление на вход",
+        "priceCurrency": "BGN",
+        "category": "Subscription"
+      },
+      "author": {
+        "@type": "Organization",
+        "name": "Онлайн Домоуправител",
+        "url": "https://domoupravitel.github.io/ID-test/"
+      }
+    }
+    </script>
+
+    <!-- Schema.org: Organization -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      "name": "Онлайн Домоуправител",
+      "url": "https://domoupravitel.github.io/ID-test/",
+      "logo": {
+        "@type": "ImageObject",
+        "url": "https://raw.githubusercontent.com/Domoupravitel/ID-test/main/logo.png"
+      },
+      "sameAs": [
+        "https://github.com/Domoupravitel"
+      ]
+    }
+    </script>
+
+    <!-- Schema.org: WebSite -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      "name": "Онлайн Домоуправител",
+      "url": "https://domoupravitel.github.io/ID-test/",
+      "inLanguage": "bg"
+    }
+    </script>
+
+    <!-- Schema.org: FAQPage -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "Трябва ли да инсталирам приложение?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Не. Онлайн Домоуправител работи директно в браузъра — на компютър, таблет или телефон, без инсталация."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Как влизам без парола?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Всеки вход получава уникален ID код или линк за достъп, а всеки апартамент — свой код за собствения профил в таблото."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Как се разпределят разходите между апартаментите?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Според зададена от домоуправителя логика — поравно между апартаментите, по брой обитатели или по идеални части, в зависимост от вида разход."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Мога ли да видя история на плащанията си?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Да, всеки апартамент вижда пълна история на начисленията и плащанията си по периоди назад във времето."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Съответства ли платформата на ЗУЕС?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Да, модулите за книга на етажната собственост, общо събрание, кворум и месечен отчет са изградени според изискванията на закона."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Как да получа достъп като домоуправител на вход?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "През административния панел на входа — оттам управлявате начисления, приходи, съобщения и настройки на цялата етажна собственост."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Какво се случва, ако абонаментът на входа изтече?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Живущите продължават да виждат основна информация, но пълният достъп до всички данни се възобновява след подновяване на абонамента от домоуправителя."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Може ли да се ползва от няколко входа в един блок едновременно?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Да, всеки вход има собствен ID и собствено табло, независимо от останалите входове в сградата, така че данните на отделните входове не се смесват. Важно: за коректно автоматично разпознаване на плащания през ePay е нужен отделен имейл адрес за всеки вход — споделен имейл между няколко входа може да доведе до объркване при автоматичното разпределяне на плащания без ID в основанието за превод."
+          }
+        }
+      ]
+    }
+    </script>
+
+    <!-- Тема и цветова схема -->
+    <meta name="theme-color" content="#3b6edc">
+    <meta name="color-scheme" content="light">
+
+    <!-- Web App Manifest -->
+    <link rel="manifest" href="manifest.json">
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="favicon-192x192.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+
+    <!-- DNS Prefetch (допълнително към съществуващия preconnect) -->
+    <link rel="dns-prefetch" href="https://fonts.googleapis.com">
+    <link rel="dns-prefetch" href="https://fonts.gstatic.com">
+    <link rel="dns-prefetch" href="https://www.gstatic.com">
+    <link rel="dns-prefetch" href="https://firestore.googleapis.com">
+
+    <!-- Schema.org: SoftwareApplication -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "Онлайн Домоуправител",
+      "applicationCategory": "BusinessApplication",
+      "operatingSystem": "Web, Android, iOS",
+      "description": "Онлайн домоуправител за управление на етажна собственост. Автоматизирайте месечни такси, разходи, плащания и фонд ремонт по изискванията на ЗУЕС.",
+      "url": "https://domoupravitel.github.io/ID-test/",
+      "image": "https://raw.githubusercontent.com/Domoupravitel/ID-test/main/logo.png",
+      "inLanguage": "bg",
+      "offers": {
+        "@type": "Offer",
+        "description": "Абонаментен план за управление на вход",
+        "priceCurrency": "BGN",
+        "category": "Subscription"
+      },
+      "author": {
+        "@type": "Organization",
+        "name": "Онлайн Домоуправител",
+        "url": "https://domoupravitel.github.io/ID-test/"
+      }
+    }
+    </script>
+
+    <!-- Schema.org: Organization -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      "name": "Онлайн Домоуправител",
+      "url": "https://domoupravitel.github.io/ID-test/",
+      "logo": {
+        "@type": "ImageObject",
+        "url": "https://raw.githubusercontent.com/Domoupravitel/ID-test/main/logo.png"
+      },
+      "sameAs": [
+        "https://github.com/Domoupravitel"
+      ]
+    }
+    </script>
+
+    <!-- Schema.org: WebSite -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      "name": "Онлайн Домоуправител",
+      "url": "https://domoupravitel.github.io/ID-test/",
+      "inLanguage": "bg"
+    }
+    </script>
+
+    <!-- Schema.org: FAQPage -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "Трябва ли да инсталирам приложение?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Не. Онлайн Домоуправител работи директно в браузъра — на компютър, таблет или телефон, без инсталация."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Как влизам без парола?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Всеки вход получава уникален ID код или линк за достъп, а всеки апартамент — свой код за собствения профил в таблото."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Как се разпределят разходите между апартаментите?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Според зададена от домоуправителя логика — поравно между апартаментите, по брой обитатели или по идеални части, в зависимост от вида разход."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Мога ли да видя история на плащанията си?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Да, всеки апартамент вижда пълна история на начисленията и плащанията си по периоди назад във времето."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Съответства ли платформата на ЗУЕС?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Да, модулите за книга на етажната собственост, общо събрание, кворум и месечен отчет са изградени според изискванията на закона."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Как да получа достъп като домоуправител на вход?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "През административния панел на входа — оттам управлявате начисления, приходи, съобщения и настройки на цялата етажна собственост."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Какво се случва, ако абонаментът на входа изтече?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Живущите продължават да виждат основна информация, но пълният достъп до всички данни се възобновява след подновяване на абонамента от домоуправителя."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Може ли да се ползва от няколко входа в един блок едновременно?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Да, всеки вход има собствен ID и собствено табло, независимо от останалите входове в сградата, така че данните на отделните входове не се смесват. Важно: за коректно автоматично разпознаване на плащания през ePay е нужен отделен имейл адрес за всеки вход — споделен имейл между няколко входа може да доведе до объркване при автоматичното разпределяне на плащания без ID в основанието за превод."
+          }
+        }
+      ]
+    }
+    </script>
+
+</head>
+
+<body class="light-theme">
+    <div class="version-tag">v0.1.6</div>
+
+    <!-- LOADING OVERLAY REMOVED FOR SPEED -->
+
+    <!-- ADMIN OVERLAY -->
+    <div id="adminOverlay" class="admin-overlay" onclick="if(event.target===this)closeAdmin()">
+
+        <!-- Login Screen (PIN & Email) -->
+        <div class="admin-card" id="loginCard">
+            <button class="admin-close" onclick="closeAdmin()">✕</button>
+            <div class="admin-icon">🔐</div>
+            <div class="admin-title">Админ панел</div>
+            <div class="admin-subtitle">Въведете вашия имейл и парола</div>
+
+            <input type="email" id="adminEmailInput" class="admin-input" placeholder="Имейл адрес"
+                style="margin-bottom: 12px;">
+            <input type="password" id="pinInput" class="admin-input" placeholder="Парола (PIN)" maxlength="10"
+                onkeydown="if(event.key==='Enter')verifyPin()">
+
+            <div id="pinError" class="admin-error"></div>
+            <button class="admin-btn primary" onclick="verifyPin()">Вход</button>
+        </div>
+
+        <!-- Admin Content (hidden until login ok) -->
+        <div class="admin-card" id="adminCard" style="display:none">
+            <button class="admin-close" onclick="closeAdmin()">✕</button>
+            <div class="admin-title">⚙️ Админ панел
+                <a href="admin_guide.html" target="_blank" onclick="sessionStorage.setItem('shouldOpenAdmin', 'true'); sessionStorage.setItem('originalHash', window.location.hash);"
+                    style="font-size: 13px; font-weight: normal; color: var(--primary); text-decoration: none; margin-left: 15px; background: #eefbff; padding: 4px 10px; border-radius: 6px; border: 1px solid #bdeaff;">📘
+                    Ръководство</a>
+            </div>
+
+            <!-- V2 Admin Navigation -->
+            <div id="v2-admin-nav" style="display: none; margin-bottom: 20px; text-align: center; background: #f8fafc; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <button id="nav-admin-settings" class="btn secondary" onclick="switchAdminTab('settings')" style="padding: 10px; border-radius: 8px; font-weight: bold; background: #64748b; color: white; border: none;">⚙️ Настройки</button>
+                    <button id="nav-admin-distribution" class="btn secondary" onclick="switchAdminTab('distribution')" style="padding: 10px; border-radius: 8px; font-weight: bold; background: #3b82f6; color: white; border: none;">💸 Разпределяне</button>
+                    <button id="nav-admin-incomes" class="btn secondary" onclick="switchAdminTab('incomes')" style="padding: 10px; border-radius: 8px; font-weight: bold; background: #10b981; color: white; border: none;">💰 Приходи</button>
+                    <button id="nav-admin-expenses" class="btn btn-primary" onclick="switchAdminTab('expenses')" style="padding: 10px; border-radius: 8px; font-weight: bold; background: #ef4444; color: white; border: none;">📊 Разходи</button>
+                </div>
+            </div>
+
+            
+            <div id="admin-view-distribution" style="display: none;">
+                <div class="admin-section">
+                    <h3 style="color: #3b82f6;">💸 Разпределяне на приходи</h3>
+                    <p class="subtitle" style="font-size: 12px; margin-bottom: 15px;">Разпределение на приходи от външни източници към апартаментите (по идеални части).</p>
+                    
+                    <label class="admin-label">Апартаменти за разпределение</label>
+                    <div style="margin-bottom: 15px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px;">
+                        <div style="margin-bottom: 10px; display: flex; gap: 10px;">
+                            <button onclick="v2DistSelectAll(true)" style="background: none; border: 1px solid #3b82f6; color: #3b82f6; border-radius: 4px; padding: 4px 8px; cursor: pointer; font-size: 12px;">Всички</button>
+                            <button onclick="v2DistSelectAll(false)" style="background: none; border: 1px solid #94a3b8; color: #64748b; border-radius: 4px; padding: 4px 8px; cursor: pointer; font-size: 12px;">Никой</button>
+                        </div>
+                        <div id="v2DistApts" style="display: flex; flex-wrap: wrap; gap: 8px; max-height: 120px; overflow-y: auto;">
+                            <!-- Checkboxes will be populated here -->
+                        </div>
+                    </div>
+
+                    <label class="admin-label">Начин на разпределение</label>
+                    <div style="display: flex; gap: 15px; margin-bottom: 15px; padding: 10px; border: 1px solid #e2e8f0; border-radius: 6px;">
+                        <label id="v2DistTypeCashLabel" style="cursor: pointer; display: flex; align-items: center; gap: 5px;">
+                            <input type="radio" name="v2DistType" value="cash" checked> На каса
+                        </label>
+                        <label id="v2DistTypeBalanceLabel" style="cursor: pointer; display: flex; align-items: center; gap: 5px;">
+                            <input type="radio" name="v2DistType" value="balance"> На салдо
+                        </label>
+                    </div>
+                    <p id="v2DistCreditNote" style="display:none; font-size: 11px; color: #b45309; margin: -10px 0 15px;">ℹ️ За "Кредит" разпределянето е само "На каса" — сумата вече е начислена по апартаментите като кредитно задължение.</p>
+
+                    <label class="admin-label">Период (MM.YYYY)</label>
+                    <select id="v2DistPeriod" class="admin-input">
+                        <option value="">Избери...</option>
+                    </select>
+
+                    <label class="admin-label">Категория по ЗУЕС (Източник)</label>
+                    <select id="v2DistCategory" class="admin-input" onchange="updateV2DistAvailableSum()">
+                        <option value="">Избери...</option>
+                        <option value="Наем на общи части">2. Наем на общи части</option>
+                        <option value="Средства от бюджетни институции">3. Средства от бюджетни институции</option>
+                        <option value="Кредит">4. Кредит</option>
+                        <option value="ВЕИ на ЕС">5. ВЕИ на ЕС</option>
+                        <option value="Дарения">6. Дарения</option>
+                        <option value="Други">7. Други</option>
+                        <option value="Фонд ремонт">8. Фонд ремонт</option>
+                        <option value="maintenance">9. Поддръжка</option>
+                    </select>
+
+                    <label class="admin-label" id="lbl-v2DistAmount">Сума за разпределяне</label>
+                    <input type="number" id="v2DistAmount" class="admin-input" placeholder="0.00" step="0.01">
+
+                    <label class="admin-label">Основание / Бележка</label>
+                    <textarea id="v2DistNote" class="admin-input" placeholder="Кратко описание..." style="min-height: 60px;"></textarea>
+
+                    <button class="admin-btn" id="v2SubmitDistBtn" style="background: #3b82f6; color: white;" onclick="submitDistributionV2()">🧮 Разпредели сумата</button>
+                </div>
+
+                <div class="admin-section" style="margin-top: 20px;">
+                    <h3 style="color: #1e3a8a;">📋 Регистър Разпределения</h3>
+                    <div class="table-responsive" style="margin-top: 15px; max-height: 400px; overflow-y: auto;">
+                        <table class="status-table" style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                            <thead style="position: sticky; top: 0; background: #f8fafc; z-index: 1;">
+                                <tr>
+                                    <th style="padding: 8px; border-bottom: 2px solid #e2e8f0; text-align: left;">Дата</th>
+                                    <th style="padding: 8px; border-bottom: 2px solid #e2e8f0; text-align: left;">Категория</th>
+                                    <th style="padding: 8px; border-bottom: 2px solid #e2e8f0; text-align: left;">Тип</th>
+                                    <th style="padding: 8px; border-bottom: 2px solid #e2e8f0; text-align: right;">Общо</th>
+                                    <th style="padding: 8px; border-bottom: 2px solid #e2e8f0; text-align: center;">Бележка</th>
+                                </tr>
+                            </thead>
+                            <tbody id="v2DistTableBody">
+                                <tr><td colspan="5" style="text-align: center; padding: 15px; color: #666;">Няма въведени разпределения.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+<div id="admin-view-incomes" style="display: none;">
+                <div class="admin-section">
+                    <h3 style="color: #16a34a;">💰 Добавяне на Приход (V2)</h3>
+                    <p class="subtitle" style="font-size: 12px; margin-bottom: 15px;">Регистрирайте сума, получена от апартамент или външен източник за текущия период. <span style="color: #d32f2f;">Може да се добавя или изважда (със знак -).</span></p>
+                    
+                    <input type="hidden" id="v2IncomeEditId" value="">
+                    <input type="hidden" id="v2IncomePeriod" value="">
+
+                    <label class="admin-label">Апартамент / Платец</label>
+                    <select id="v2IncomeApt" class="admin-input" onchange="v2HandleAptChange()">
+                        <option value="">Избери...</option>
+                        <option value="EXTERNAL">Външен източник</option>
+                        <!-- options will be populated by JS -->
+                    </select>
+
+                    <label class="admin-label">Категория по ЗУЕС</label>
+                    <select id="v2IncomeCategory" class="admin-input" onchange="v2LoadPaymentDue()">
+                        <option value="Управление и поддръжка">1. Управление и поддръжка</option>
+                        <option value="Наем на общи части">2. Наем на общи части</option>
+                        <option value="Средства от бюджетни институции">3. Средства от бюджетни институции</option>
+                        <option value="Кредит">4. Кредит</option>
+                        <option value="ВЕИ на ЕС">5. ВЕИ на ЕС</option>
+                        <option value="Дарения">6. Дарения</option>
+                        <option value="Други">7. Други</option>
+                    </select>
+
+                    <label class="admin-label">Сума <span id="v2IncomeCurrentBal" class="charge-current" style="font-size: 11px; margin-left: 10px;"></span></label>
+                    <input type="number" id="v2IncomeAmount" class="admin-input" placeholder="0.00" step="0.01">
+
+                    <label class="admin-label">Номер на документ (Опционално)</label>
+                    <input type="text" id="v2IncomeDoc" class="admin-input" placeholder="напр. Разписка №123">
+
+                    <label class="admin-label">Основание / Бележка</label>
+                    <textarea id="v2IncomeNote" class="admin-input" placeholder="Въведете кратко описание..." style="min-height: 60px;"></textarea>
+
+                    <!-- BEGIN FIN01 PAYMENT UX -->
+                    <div id="fin01PaymentControls" hidden>
+                        <h4>Разпределяне на плащането</h4>
+                        <label class="admin-label" for="fin01Basis">Основание за разпределяне (по желание)</label>
+                        <input id="fin01Basis" class="admin-input" placeholder="ID на апартамент; единствен специален маркер: КРЕДИТ">
+                        <p>Изричните суми са по желание. Остатъкът погасява Управление и поддръжка, Фонд ремонт, после Кредит. При КРЕДИТ заемното задължение е първо.</p>
+                        <label class="admin-label" for="fin01Management">Изрично към Управление и поддръжка</label>
+                        <input id="fin01Management" class="admin-input" inputmode="decimal" placeholder="Сума по желание">
+                        <label class="admin-label" for="fin01RepairFund">Изрично към Фонд ремонт</label>
+                        <input id="fin01RepairFund" class="admin-input" inputmode="decimal" placeholder="Сума по желание">
+                        <label class="admin-label" for="fin01Loan">Изрично към Кредит (заемно задължение)</label>
+                        <input id="fin01Loan" class="admin-input" inputmode="decimal" placeholder="Сума по желание">
+                        <p id="fin01PaymentFeedback" role="status"></p>
+                    </div>
+                    <dialog id="fin01PaymentDialog">
+                        <p id="fin01PaymentDialogText"></p>
+                        <p>Затварянето отменя този запис. Няма да се създаде частично плащане или авансов кредит.</p>
+                        <button type="button" onclick="cancelRejectedFin01Payment()">Разбрах — отмени записа</button>
+                    </dialog>
+                    <!-- END FIN01 PAYMENT UX -->
+
+                    <div style="display: flex; gap: 10px;">
+                        <button class="admin-btn" id="v2SubmitBtn" style="background: #16a34a; color: white; flex: 1;" onclick="submitIncomeV2()">➕ Добави приход</button>
+                        <button class="admin-btn" id="v2CancelEditBtn" style="background: #94a3b8; color: white; flex: 0.5; display: none;" onclick="v2CancelEdit()">Отказ</button>
+                    </div>
+                </div>
+
+                <div class="admin-section" style="margin-top: 20px;">
+                    <h3 style="color: #1e3a8a;">👥 Регистър Външни платци</h3>
+                    <p class="subtitle" style="font-size: 12px; margin-bottom: 15px;">Дефинирайте съответствие между името на Наредителя в ePay имейлите и съответния Вид платец.</p>
+                    
+                    <label class="admin-label">Вид платец (Категория по ЗУЕС)</label>
+                    <select id="v2PayerType" class="admin-input">
+                        <option value="Наем на общи части">2. Наем на общи части</option>
+                        <option value="Средства от бюджетни институции">3. Средства от бюджетни институции</option>
+                        <option value="Кредит">4. Кредит</option>
+                        <option value="ВЕИ на ЕС">5. ВЕИ на ЕС</option>
+                        <option value="Дарения">6. Дарения</option>
+                        <option value="Други">7. Други</option>
+                    </select>
+                    
+                    <label class="admin-label">Наименование на платеца</label>
+                    <input type="text" id="v2PayerName" class="admin-input" placeholder="напр. Иван Иванов или ФИРМА ООД">
+                    
+                    <label class="admin-label">Пояснение (Опционално)</label>
+                    <input type="text" id="v2PayerNote" class="admin-input" placeholder="напр. Наемател ателие 1">
+                    
+                    <button class="admin-btn" id="v2SavePayerBtn" style="background: #1e3a8a; color: white; width: 100%; margin-top: 10px;" onclick="saveExternalPayer()">💾 Запиши</button>
+                    
+                    <div class="table-responsive" style="margin-top: 20px; max-height: 250px; overflow-y: auto;">
+                        <table class="status-table" style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                            <thead style="position: sticky; top: 0; background: #f8fafc; z-index: 1;">
+                                <tr>
+                                    <th style="padding: 8px; border-bottom: 2px solid #e2e8f0; text-align: left;">Дата</th>
+                                    <th style="padding: 8px; border-bottom: 2px solid #e2e8f0; text-align: left;">Вид платец</th>
+                                    <th style="padding: 8px; border-bottom: 2px solid #e2e8f0; text-align: left;">Наименование</th>
+                                    <th style="padding: 8px; border-bottom: 2px solid #e2e8f0; text-align: left;">Пояснение</th>
+                                    <th style="padding: 8px; border-bottom: 2px solid #e2e8f0; text-align: center;">Действие</th>
+                                </tr>
+                            </thead>
+                            <tbody id="v2PayersTableBody">
+                                <tr><td colspan="5" style="text-align: center; padding: 15px; color: #666;">Няма въведени външни платци.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="admin-section" style="margin-top: 20px;">
+                    <h3 style="color: #1e3a8a;">📋 Регистър Приходи</h3>
+                    <div class="table-responsive" style="margin-top: 15px; max-height: 400px; overflow-y: auto;">
+                        <table class="status-table" style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                            <thead style="position: sticky; top: 0; background: #f8fafc; z-index: 1;">
+                                <tr>
+                                    <th style="padding: 8px; border-bottom: 2px solid #e2e8f0; text-align: left;">Дата</th>
+                                    <th style="padding: 8px; border-bottom: 2px solid #e2e8f0; text-align: left;">Платец</th>
+                                    <th style="padding: 8px; border-bottom: 2px solid #e2e8f0; text-align: left;">Категория</th>
+                                    <th style="padding: 8px; border-bottom: 2px solid #e2e8f0; text-align: right;">Сума</th>
+                                    <th style="padding: 8px; border-bottom: 2px solid #e2e8f0; text-align: left;">Бележка / Документ</th>
+                                </tr>
+                            </thead>
+                            <tbody id="v2IncomesTableBody">
+                                <!-- JS will populate this -->
+                                <tr><td colspan="5" style="text-align: center; padding: 15px; color: #666;">Няма въведени приходи.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="admin-section" style="margin-top: 20px;">
+                    <h3 style="color: #b45309;">📋 Регистър Кредитни задължения</h3>
+                    <p class="subtitle" style="font-size: 12px; margin-bottom: 10px;">Проследява отделно кой апартамент колко дължи по взет кредит — не засяга оперативното Салдо.</p>
+                    <div class="table-responsive" style="margin-top: 10px; max-height: 300px; overflow-y: auto;">
+                        <table class="status-table" style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                            <thead style="position: sticky; top: 0; background: #f8fafc; z-index: 1;">
+                                <tr>
+                                    <th style="padding: 8px; border-bottom: 2px solid #e2e8f0; text-align: left;">Апартамент</th>
+                                    <th style="padding: 8px; border-bottom: 2px solid #e2e8f0; text-align: right;">Начален дял</th>
+                                    <th style="padding: 8px; border-bottom: 2px solid #e2e8f0; text-align: right;">Погасено</th>
+                                    <th style="padding: 8px; border-bottom: 2px solid #e2e8f0; text-align: right;">Остатък</th>
+                                </tr>
+                            </thead>
+                            <tbody id="creditLiabilitiesTableBody">
+                                <tr><td colspan="4" style="text-align: center; padding: 15px; color: #666;">Няма кредитни задължения.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div id="admin-view-expenses">
+            <!-- Floating Quick Nav -->
+            <div class="admin-quick-nav">
+                <a href="javascript:void(0)" class="quick-nav-btn" onclick="document.getElementById('admin-section-charges')?.scrollIntoView({behavior:'smooth',block:'start'})">Начисления</a>
+                <a href="javascript:void(0)" class="quick-nav-btn" onclick="document.getElementById('admin-section-email')?.scrollIntoView({behavior:'smooth',block:'start'})">Имейл</a>
+                <a href="javascript:void(0)" class="quick-nav-btn" onclick="document.getElementById('admin-section-master')?.scrollIntoView({behavior:'smooth',block:'start'})">Настройки</a>
+            </div>
+
+            <!-- Global News Banner -->
+            <div id="adminGlobalNews"
+                style="display:none; background: #fff9db; border: 1px solid #fab005; color: #856404; padding: 12px; border-radius: 8px; margin-bottom: 20px; font-size: 13px; position: relative; animation: slideIn 0.3s ease-out;">
+                <span style="font-size: 18px; margin-right: 8px;">📢</span>
+                <span id="adminGlobalNewsText"></span>
+            </div>
+
+            <!-- Payment Section -->
+            <div class="admin-section" data-tab="payment">
+                <h3 id="admin-section-payment">💰 Добавяне на плащане</h3>
+                <p class="subtitle" style="font-size: 12px; margin-bottom: 15px;">Регистрирайте сума, получена от апартамент за избран период. <span style="color: #d32f2f;">Може да се добавя или изважда (със знак -) сума за период.</span></p>
+                <label class="admin-label">Апартамент</label>
+                <select id="adminApt" class="admin-input" onchange="loadPaymentDue()"></select>
+                <label class="admin-label">Период (MM.YYYY)</label>
+                <select id="adminPeriod" class="admin-input" onchange="loadPaymentDue()"></select>
+                <label class="admin-label">Сума <span class="charge-current" id="lbl-paymentDue"></span></label>
+                <input type="number" id="adminAmount" class="admin-input" placeholder="0.00" step="0.01">
+                <button class="admin-btn primary" id="payBtn" onclick="submitPayment()">Добави плащане</button>
+            </div>
+
+            <!-- Charges Section -->
+            <div class="admin-section" data-tab="expenses">
+                <h3 id="admin-section-charges">📋 Начисления</h3>
+                <!-- BEGIN EPAY EXPENSE HELP -->
+                <p class="subtitle">Без надежден идентификатор на събитието от доставчика известието остава за ръчна обработка.</p>
+                <p class="subtitle" id="epayExpenseHelp">ePay: променливи разходи за Асансьор, Осветление / Ток и ВиК при точно разпознато описание („асансьор“, „осветление“/„етажно“, „ВиК ЕС“). Неизвестни или двусмислени описания се обработват ръчно. Отделно „Повтори“ се настройва и записва от администратора за Абонамент, Охрана, Почистване, Поддръжка и Абонамент Платформа.</p>
+                <!-- END EPAY EXPENSE HELP -->
+                <p class="subtitle" style="font-size: 12px; margin-bottom: 15px;">Въведете суми само за желаните категории. Празно поле не се записва; 0 се записва. За отрицателна сума е нужна бележка. Десетичен знак: точка.</p>
+                <label class="admin-label">Период (MM.YYYY)</label>
+                <select id="chargesPeriod" class="admin-input" onchange="loadCurrentCharges()"></select>
+                <label class="admin-label" id="lbl-chargesElevator" for="chargesElevator">Асансьор <span class="charge-current"></span></label>
+                <input type="text" inputmode="decimal" id="chargesElevator" class="admin-input" placeholder="+/- сума или 0" oninput="updateManualExpenseDraft('elevator')">
+                <input type="text" id="chargesElevatorNote" class="admin-input expense-note" aria-label="Асансьор — Основание / Бележка" placeholder="Основание / Бележка (по желание)" oninput="updateManualExpenseDraft('elevator')">
+                <label class="admin-label" id="lbl-chargesSubscription" for="chargesSubscription">Абонамент <span class="charge-current"></span></label>
+                <input type="text" inputmode="decimal" id="chargesSubscription" class="admin-input" placeholder="+/- сума или 0" oninput="updateManualExpenseDraft('subscription')">
+                <input type="text" id="chargesSubscriptionNote" class="admin-input expense-note" aria-label="Абонамент — Основание / Бележка" placeholder="Основание / Бележка (по желание)" oninput="updateManualExpenseDraft('subscription')">
+                <label class="admin-label" id="lbl-chargesLight" for="chargesLight">Ток <span class="charge-current"></span></label>
+                <input type="text" inputmode="decimal" id="chargesLight" class="admin-input" placeholder="+/- сума или 0" oninput="updateManualExpenseDraft('light')">
+                <input type="text" id="chargesLightNote" class="admin-input expense-note" aria-label="Ток — Основание / Бележка" placeholder="Основание / Бележка (по желание)" oninput="updateManualExpenseDraft('light')">
+                <label class="admin-label" id="lbl-chargesSecurity" for="chargesSecurity">Охрана <span class="charge-current"></span></label>
+                <input type="text" inputmode="decimal" id="chargesSecurity" class="admin-input" placeholder="+/- сума или 0" oninput="updateManualExpenseDraft('security')">
+                <input type="text" id="chargesSecurityNote" class="admin-input expense-note" aria-label="Охрана — Основание / Бележка" placeholder="Основание / Бележка (по желание)" oninput="updateManualExpenseDraft('security')">
+                <label class="admin-label" id="lbl-chargesCleaning" for="chargesCleaning">Почистване <span class="charge-current"></span></label>
+                <input type="text" inputmode="decimal" id="chargesCleaning" class="admin-input" placeholder="+/- сума или 0" oninput="updateManualExpenseDraft('cleaning')">
+                <input type="text" id="chargesCleaningNote" class="admin-input expense-note" aria-label="Почистване — Основание / Бележка" placeholder="Основание / Бележка (по желание)" oninput="updateManualExpenseDraft('cleaning')">
+                <label class="admin-label" id="lbl-chargesPodrajka" for="chargesPodrajka">Поддръжка <span class="charge-current"></span></label>
+                <input type="text" inputmode="decimal" id="chargesPodrajka" class="admin-input" placeholder="+/- сума или 0" oninput="updateManualExpenseDraft('maintenance')">
+                <input type="text" id="chargesPodrajkaNote" class="admin-input expense-note" aria-label="Поддръжка — Основание / Бележка" placeholder="Основание / Бележка (по желание)" oninput="updateManualExpenseDraft('maintenance')">
+                <label class="admin-label" id="lbl-chargesRemont" for="chargesRemont">Ремонтен фонд <span class="charge-current"></span></label>
+                <input type="text" inputmode="decimal" id="chargesRemont" class="admin-input" placeholder="+/- сума или 0" oninput="updateManualExpenseDraft('repairFund')">
+                <input type="text" id="chargesRemontNote" class="admin-input expense-note" aria-label="Ремонтен фонд — Основание / Бележка" placeholder="Основание / Бележка (по желание)" oninput="updateManualExpenseDraft('repairFund')">
+                <div id="remontWarning" style="color: #ff9800; font-size: 0.75rem; margin-top: 4px; display:none;">
+                    ⚠️ За начисления към фонд ремонт първо въведете Ид. част (%) за всеки апартамент в MASTER.
+                </div>
+                <label class="admin-label" id="lbl-chargesWater" for="chargesWater">ВиК <span class="charge-current"></span></label>
+                <input type="text" inputmode="decimal" id="chargesWater" class="admin-input" placeholder="+/- сума или 0" oninput="updateManualExpenseDraft('water')">
+                <input type="text" id="chargesWaterNote" class="admin-input expense-note" aria-label="ВиК — Основание / Бележка" placeholder="Основание / Бележка (по желание)" oninput="updateManualExpenseDraft('water')">
+                <label class="admin-label" id="lbl-chargesPlatformSubscription" for="chargesPlatformSubscription">Абонамент Платформа <span class="charge-current"></span></label>
+                <input type="text" inputmode="decimal" id="chargesPlatformSubscription" class="admin-input" placeholder="+/- сума или 0" oninput="updateManualExpenseDraft('platformSubscription')">
+                <input type="text" id="chargesPlatformSubscriptionNote" class="admin-input expense-note" aria-label="Абонамент Платформа — Основание / Бележка" placeholder="Основание / Бележка (по желание)" oninput="updateManualExpenseDraft('platformSubscription')">
+                <p id="chargesFeedback" role="status" aria-live="polite" hidden></p>
+                <button class="admin-btn orange" id="chargesBtn" onclick="submitCharges()">Запиши начисление (+/-)</button>
+                <!-- BEGIN SLICE5 RECURRING_UI -->
+                <h4>Повтарящи се месечни разходи</h4>
+                <p class="subtitle">Тук „Запази“ записва само правилото. Начисляването е след края на месеца. Ръчните корекции се записват отделно чрез полетата по-горе.</p>
+                <div id="recurringExpenseControls" aria-live="polite"></div>
+                <dialog id="recurringRepeatDialog" aria-labelledby="recurringRepeatTitle" oncancel="cancelRecurringRepeatDialog()" onclose="cancelRecurringRepeatDialog()">
+                    <h3 id="recurringRepeatTitle"></h3>
+                    <p id="recurringRepeatExplanation" style="white-space:pre-line"></p>
+                    <button type="button" class="admin-btn primary" onclick="acknowledgeRecurringRepeatDialog()">Разбрах</button>
+                    <button type="button" class="admin-btn" onclick="cancelRecurringRepeatDialog()">Отказ</button>
+                </dialog>
+                <!-- END SLICE5 RECURRING_UI -->
+            </div>
+
+            <div class="admin-section" data-tab="expenses" style="margin-top: 20px;">
+                <h3 style="color: #b45309;">📋 Регистър Разходи</h3>
+                <div class="table-responsive" style="margin-top: 15px; max-height: 400px; overflow-y: auto;">
+                    <table class="status-table" style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                        <thead style="position: sticky; top: 0; background: #f8fafc; z-index: 1;">
+                            <tr>
+                                <th style="padding: 8px; border-bottom: 2px solid #e2e8f0; text-align: left;">Дата</th>
+                                <th style="padding: 8px; border-bottom: 2px solid #e2e8f0; text-align: left;">Период</th>
+                                <th style="padding: 8px; border-bottom: 2px solid #e2e8f0; text-align: left;">Категория</th>
+                                <th style="padding: 8px; border-bottom: 2px solid #e2e8f0; text-align: right;">Сума</th>
+                            </tr>
+                        </thead>
+                        <tbody id="chargesV2TableBody">
+                            <tr><td colspan="4" style="text-align: center; padding: 15px; color: #666;">Няма въведени начисления.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Email Section -->
+            <div class="admin-section" data-tab="settings">
+                <h3>📊 Справка от период до период (целия вход)</h3>
+                <p class="subtitle" style="font-size: 12px; margin-bottom: 15px;">Подробна справка (по образеца на месечния отчет) за избран диапазон от периоди — изпраща се по имейл на домоуправителя, не се показва тук.</p>
+                <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                    <select id="adminRangeFrom" class="admin-input" style="flex:1; min-width:110px;"></select>
+                    <span style="font-size:12px; color:#888;">до</span>
+                    <select id="adminRangeTo" class="admin-input" style="flex:1; min-width:110px;"></select>
+                    <button id="adminRangeReportBtn" class="admin-btn" style="white-space:nowrap;" onclick="calcEntranceRangeReport()">Изпрати по имейл</button>
+                </div>
+                <div id="adminRangeReportResult" style="margin-top: 12px; font-size: 13px;"></div>
+            </div>
+
+            <div class="admin-section" data-tab="settings">
+                <h3 id="admin-section-email">✉️ Имейл на апартамент</h3>
+                <p class="subtitle" style="font-size: 12px; margin-bottom: 15px;">Задайте имейл за получаване на
+                    автоматични месечни отчети.</p>
+                <label class="admin-label">Апартамент</label>
+                <select id="adminEmailApt" class="admin-input" onchange="loadCurrentEmail()"></select>
+                <div id="currentEmailBox" style="display:none; background: linear-gradient(135deg, #e8f4fd, #d1ecf9); border: 1px solid #91cef4; border-radius: 8px; padding: 10px 14px; margin-top: 8px; margin-bottom: 12px;">
+                    <span style="font-size: 13px; color: #555;">📧 Текущ имейл:</span>
+                    <span id="currentEmail" style="display: block; font-weight: 700; font-size: 15px; color: #1a6dab; margin-top: 3px; word-break: break-all;">—</span>
+                </div>
+                <label class="admin-label">Нов имейл</label>
+                <input type="email" id="adminEmail" class="admin-input" placeholder="email@example.com">
+                <button class="admin-btn secondary" id="emailBtn" onclick="submitEmail()">Запази имейл</button>
+            </div>
+
+            <div class="admin-section" data-tab="settings">
+                <h3>👤 Имейл на Домоуправителя</h3>
+                <p class="subtitle" style="font-size: 12px; margin-bottom: 15px;">
+                    Задайте нов имейл на домоуправителя на този вход.
+                    <strong style="color: #d32f2f;"> Имайте предвид, че смяната ще спре автоматичното разпознаване на разходи и приходи, ако текущият имейл е настроен за автоматизация към платформата. За да продължи автоматизацията, трябва да повторите настройката на препращане към новия имейл.</strong>
+                </p>
+                <label class="admin-label">Нов имейл</label>
+                <input type="email" id="newAdminEmailInput" class="admin-input" placeholder="email@example.com">
+                <button class="admin-btn secondary" id="adminEmailBtn" onclick="submitAdminEmail()">Запази имейл</button>
+            </div>
+
+            <!-- MASTER Section -->
+            <div class="admin-section" data-tab="settings">
+                <h3 id="admin-section-master">📊 MASTER – Настройки</h3>
+                <p class="subtitle" style="font-size: 12px; margin-bottom: 15px;">Управлявайте статусите (Логика,
+                    Обитатели, Чипове) за дълги периоди.</p>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;margin:10px 0 14px;">
+                    <button class="master-tab active" onclick="switchMasterTab('logika',this)">📐 Логика</button>
+                    <button class="master-tab" onclick="switchMasterTab('uchastie',this)">🛗 Уч. Асансьор</button>
+                    <button class="master-tab" onclick="switchMasterTab('obitatel',this)">👥 Обитатели</button>
+                    <button class="master-tab" onclick="switchMasterTab('chipove',this)">🔑 Чипове</button>
+                    <button class="master-tab" onclick="switchMasterTab('idealni',this)">📊 Идеални Ч.</button>
+                    <button class="master-tab" onclick="switchMasterTab('info',this)">🏠 Инфо апарт.</button>
+                    <button class="master-tab" onclick="switchMasterTab('payment',this)">💳 Плащ.инфо</button>
+                    <button class="master-tab" onclick="switchMasterTab('notice',this)">📢 Съобщения</button>
+                    <button class="master-tab" onclick="switchMasterTab('imeil',this)">✉️ Имейл до апт.</button>
+                    <button class="master-tab" onclick="switchMasterTab('zues',this)">⚖️ ЗУЕС Мениджър</button>
+                </div>
+                <!-- Logic Tab Content -->
+                <!-- BEGIN ART51 UI -->
+                <details id="art51Settings">
+                    <summary onclick="openArt51Settings()">Общ. достъп по чл. 51, ал. 5 ЗУЕС</summary>
+                    <p class="subtitle">Прилага се въз основа на въведено мотивирано решение на ОС за дейност с достъп на външни лица. Чл. 51, ал. 6 урежда отделно обектите със самостоятелен вход — не активирайте тук, когато изключението е приложимо. Платформата не установява правните факти или валидността на решението.</p>
+                    <label>Апартамент <select id="art51Apartment" onchange="art51ContextChanged();loadArt51Settings()"></select></label>
+                    <label>От период (MM.YYYY) <input id="art51Period" placeholder="11.2026" maxlength="7" oninput="art51ContextChanged()"></label>
+                    <p class="subtitle">Решението се записва от текущ или бъдещ календарен месец. Затворени минали месеци не се променят.</p>
+                    <button type="button" onclick="loadArt51Settings()">Покажи приложимото решение</button>
+                    <label>Общ. достъп <select id="art51Active"><option value="false">Не</option><option value="true">Да</option></select></label>
+                    <label>Множител (3–5) <input type="number" min="3" max="5" step="any" id="art51Multiplier"></label>
+                    <label>Решение на ОС — дата <input type="date" id="art51DecisionDate"></label>
+                    <label>Протокол / основание <input id="art51Reference" maxlength="256"></label>
+                    <label><input type="checkbox" id="art51Confirmed"> Потвърждавам, че е налице мотивирано решение на Общото събрание за прилагане на чл. 51, ал. 5 ЗУЕС.</label>
+                    <button type="button" onclick="saveArt51Settings()">Запази решение</button>
+                    <button type="button" onclick="retryArt51Settings()">Повтори непотвърдения запис</button>
+                    <p id="art51Status" role="status"></p>
+                    <pre id="art51History"></pre>
+                </details>
+                <!-- END ART51 UI -->
+                <div id="master-tab-logika" class="master-panel">
+                    <label class="admin-label">Логика</label>
+                    <select id="masterLogikaVal" class="admin-input">
+                        <option value="Равно">Равно</option>
+                        <option value="Обитатели">Обитатели</option>
+                        <option value="Идеални части">Идеални части</option>
+                    </select>
+                    <label class="admin-label">От период (MM.YYYY)</label>
+                    <select id="masterLogikaFrom" class="admin-input"></select>
+                    <button class="admin-btn primary" onclick="submitMaster('Логика')">Запиши за напред</button>
+                </div>
+
+                <!-- Uchasite Tab Content -->
+                <div id="master-tab-uchastie" class="master-panel" style="display:none;">
+                    <label class="admin-label">Апартамент</label>
+                    <select id="masterUchApt" class="admin-input"></select>
+                    <label class="admin-label">Участва (Да/Не)</label>
+                    <select id="masterUchVal" class="admin-input">
+                        <option value="Да">Да</option>
+                        <option value="Не">Не</option>
+                    </select>
+                    <label class="admin-label">От период (MM.YYYY)</label>
+                    <select id="masterUchFrom" class="admin-input"></select>
+                    <button class="admin-btn primary" onclick="submitMaster('УЧАСТИЕ_АСАНСЬОР')">Запиши за напред</button>
+                </div>
+
+                <!-- Obitateli Tab Content -->
+                <div id="master-tab-obitatel" class="master-panel" style="display:none;">
+                    <label class="admin-label">Апартамент</label>
+                    <select id="masterObApt" class="admin-input"></select>
+                    <label class="admin-label">Брой обитатели</label>
+                    <input type="number" id="masterObVal" class="admin-input" placeholder="Напр. 2" min="1" step="1">
+                    <label class="admin-label">От период (MM.YYYY)</label>
+                    <select id="masterObFrom" class="admin-input"></select>
+                    <p style="font-size: 11px; color: #888; margin-top: 5px; margin-bottom: 12px; line-height: 1.4;">
+                        Записването променя стойността от избрания период <b>напред</b>. Историята се пази за коректни начисления за минали месеци.
+                    </p>
+                    <button class="admin-btn primary" onclick="submitMaster('ОБИТАТЕЛИ')">Запиши за напред</button>
+                </div>
+
+                <!-- Chipove Tab Content -->
+                <div id="master-tab-chipove" class="master-panel" style="display:none;">
+                    <label class="admin-label">Апартамент</label>
+                    <select id="masterChApt" class="admin-input"></select>
+                    <label class="admin-label">Брой чипове</label>
+                    <input type="number" id="masterChVal" class="admin-input" placeholder="Напр. 3" min="0" step="1">
+                    <label class="admin-label">От период (MM.YYYY)</label>
+                    <select id="masterChFrom" class="admin-input"></select>
+                    <button class="admin-btn primary" onclick="submitMaster('ЧИПОВЕ')">Запиши за напред</button>
+                </div>
+
+                <!-- Idealni Chasti Tab Content -->
+                <div id="master-tab-idealni" class="master-panel" style="display:none;">
+                    <label class="admin-label">Апартамент</label>
+                    <select id="masterIdApt" class="admin-input"></select>
+                    <label class="admin-label">Идеални части (%)</label>
+                    <input type="number" id="masterIdVal" class="admin-input" placeholder="пр. 2.45" min="0" step="0.01">
+                    
+                    <div style="display:none;">
+                        <select id="masterIdFrom" class="admin-input"></select>
+                    </div>
+                    <p style="font-size: 11px; color: #888; margin-top: 5px; margin-bottom: 12px; line-height: 1.4;">
+                        Записването обновява <b>текущата</b> стойност на идеалните части. Тя се прилага автоматично за всички месеци за избрания апартамент.
+                    </p>
+                    
+                    <button class="admin-btn primary" onclick="submitMaster('ИДЕАЛНИ_ЧАСТИ')">Запиши стойност</button>
+                </div>
+
+                <!-- Apartment Info Tab -->
+                <div id="master-tab-info" class="master-panel" style="display:none;">
+                    <label class="admin-label">Изберете апартамент за справка</label>
+                    <select id="masterInfoApt" class="admin-input" onchange="loadApartmentMasterSummary()"></select>
+                    <div id="aptMasterSummary" style="margin-top:20px; font-size: 14px; line-height: 1.8;">
+                        <p style="color:#666; font-style:italic;">Изберете апартамент, за да видите текущите му
+                            настройки в MASTER регистрите.</p>
+                    </div>
+                    <hr style="margin: 20px 0; border: none; border-top: 1px solid #eee;">
+                    <div id="aptNoticeEditor" style="display:none;">
+                        <label class="admin-label">📝 Лично съобщение до този апартамент</label>
+                        <textarea id="masterAptNoticeVal" class="admin-input" style="min-height: 80px;"
+                            placeholder="пр. Моля, свържете се с касиера за проверка на стария баланс..."></textarea>
+                        <button class="admin-btn primary small" onclick="submitAptNotice()">Запази съобщението</button>
+                    </div>
+                </div>
+
+                <!-- Notice Tab Content -->
+                <div id="master-tab-notice" class="master-panel" style="display:none;">
+                    <h3 class="admin-subtitle">📢 Съобщение до живущите</h3>
+                    <p class="subtitle" style="margin-bottom: 20px; font-size: 13px;">Това съобщение ще се вижда от
+                        всички апартаменти при влизане в платформата <strong>и ще се изпрати по имейл</strong> до всички
+                        с регистриран имейл адрес.</p>
+
+                    <div class="form-group">
+                        <label class="admin-label">Текст на съобщението</label>
+                        <textarea id="masterEntranceNotice" class="admin-input" style="min-height: 120px;"
+                            placeholder="Пример: Общо събрание на 15.03 от 19:00ч. пред входа..."></textarea>
+                    </div>
+
+                    <button class="admin-btn primary" onclick="submitMasterNotice()">Запази и изпрати до всички</button>
+
+                    <div
+                        style="margin-top: 20px; padding: 10px; background: rgba(0,0,0,0.02); border-radius: 8px; font-size: 12px; color: #666;">
+                        ℹ️ Можете да използвате това за важни съобщения, ремонти или обяви. За да го премахнете, просто
+                        изтрийте текста и запазете.
+                    </div>
+                </div>
+
+                <!-- Individual Apartment Email Tab -->
+                <div id="master-tab-imeil" class="master-panel" style="display:none;">
+                    <h3 class="admin-subtitle">✉️ Индивидуален имейл до апартамент</h3>
+                    <p class="subtitle" style="margin-bottom: 15px; font-size: 13px;">Изпратете персонализирано
+                        съобщение по имейл до конкретен апартамент (само ако е регистриран имейл).</p>
+
+                    <label class="admin-label">Апартамент</label>
+                    <select id="emailAptTarget" class="admin-input"></select>
+
+                    <label class="admin-label" style="margin-top: 12px;">Тема на имейла</label>
+                    <input type="text" id="emailAptSubject" class="admin-input"
+                        placeholder="пр. Важна информация за Вашия апартамент...">
+
+                    <label class="admin-label" style="margin-top: 12px;">Текст на съобщението</label>
+                    <textarea id="emailAptBody" class="admin-input" style="min-height: 120px;"
+                        placeholder="Въведете текста на вашето съобщение тук..."></textarea>
+
+                    <button class="admin-btn primary" style="margin-top: 12px;" onclick="sendAptEmail()">📤 Изпрати
+                        имейл</button>
+
+                    <div
+                        style="margin-top: 15px; padding: 10px; background: rgba(0,0,0,0.02); border-radius: 8px; font-size: 12px; color: #666;">
+                        ℹ️ Имейлът ще бъде изпратен само ако апартаментът има регистриран имейл адрес. Можете да
+                        проверите и регистрирате имейли в секцията "✉️ Имейл на апартамент".
+                    </div>
+                </div>
+
+                <!-- ⚖️ ЗУЕС Мениджър Section -->
+                <div id="master-tab-zues" class="master-panel" style="display: none;">
+                    <div
+                        style="display:flex;gap:6px;flex-wrap:wrap;margin:0 0 15px; border-bottom: 1px solid #eee; padding-bottom: 10px;">
+                        <button class="admin-btn secondary small" style="padding: 6px 10px; font-size: 11px;"
+                            onclick="switchZuesSubTab('z-book')">📖 Книга на ЕС</button>
+                        <button class="admin-btn secondary small" style="padding: 6px 10px; font-size: 11px;"
+                            onclick="switchZuesSubTab('z-fullbook')">📋 Цяла книга</button>
+                        <button class="admin-btn secondary small" style="padding: 6px 10px; font-size: 11px;"
+                            onclick="switchZuesSubTab('z-meeting')">🤝 Общо събрание</button>
+                        <button class="admin-btn secondary small" style="padding: 6px 10px; font-size: 11px;"
+                            onclick="switchZuesSubTab('z-docs')">📄 Декларации</button>
+                    </div>
+
+                    <!-- Sub-Tab: Book -->
+                    <div id="zub-z-book" class="zues-sub-panel">
+                        <h4 class="admin-subtitle">Книга на етажната собственост (Чл. 7)</h4>
+                        <div
+                            style="background: rgba(0,0,0,0.02); padding: 15px; border-radius: 12px; border: 1px solid rgba(0,0,0,0.05);">
+                            <label class="admin-label">Изберете Апартамент</label>
+                            <select id="masterBookApt" class="admin-input" onchange="loadBookData()"></select>
+
+                            <div id="book-fields-container" style="margin-top: 15px;">
+                                <label class="admin-label">Собственик / Собственици</label>
+                                <textarea id="book-Owner" class="admin-input" style="min-height:60px;"
+                                    placeholder="Един: Иван Иванов Иванов&#10;Няколко: Иван Иванов, Мария Иванова"></textarea>
+                                <p style="font-size:11px; color:#888; margin:-6px 0 10px; padding-left:2px;">ℹ️ При
+                                    няколко собственици — въведете имената разделени с запетая.</p>
+                                <label class="admin-label">Имейл</label>
+                                <input type="email" id="book-Email" class="admin-input">
+                                <label class="admin-label">Обитатели</label>
+                                <textarea id="book-Occupants" class="admin-input"
+                                    placeholder="Имена на всички обитатели, разделени с запетая"></textarea>
+                                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+                                    <div>
+                                        <label class="admin-label">Дата вписване</label>
+                                        <input type="date" id="book-EntryDate" class="admin-input">
+                                    </div>
+                                    <div>
+                                        <label class="admin-label">Предназначение</label>
+                                        <select id="book-Purpose" class="admin-input">
+                                            <option value="Жилищно">Жилищно</option>
+                                            <option value="Офис">Офис</option>
+                                            <option value="Търговско">Търговско</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <label class="admin-label">Домашни любимци</label>
+                                <input type="text" id="book-Pets" class="admin-input" placeholder="пр. куче, котка...">
+                            </div>
+                            <button id="book-save-btn" class="admin-btn primary" style="width:100%; margin-top:20px;"
+                                onclick="submitBookData()">Запиши Промените</button>
+                        </div>
+                    </div>
+
+                    <!-- Sub-Tab: Full Book View -->
+                    <div id="zub-z-fullbook" class="zues-sub-panel" style="display:none;">
+                        <div
+                            style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
+                            <h4 class="admin-subtitle" style="margin:0;">📋 Домова книга — всички апартаменти</h4>
+                            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                                <input type="text" id="bookSearchInput" class="admin-input"
+                                    style="max-width:180px; padding:7px 12px; font-size:13px;" placeholder="🔍 Търси..."
+                                    oninput="filterBookTable()">
+                                <button class="admin-btn small"
+                                    style="background:#3b6edc; color:white; padding:7px 12px; font-size:12px; margin-top:0;"
+                                    onclick="loadFullBook()">↺ Обнови</button>
+                                <button class="admin-btn small"
+                                    style="background:#2e9e4f; color:white; padding:7px 12px; font-size:12px; margin-top:0;"
+                                    onclick="printFullBook()">🖨️ Печат</button>
+                            </div>
+                        </div>
+
+                        <div id="fullBookStatus" style="font-size:13px; color:#888; margin-bottom:8px;"></div>
+
+                        <div style="overflow-x:auto; border-radius:8px; border:1px solid #eee;">
+                            <table id="fullBookTable"
+                                style="width:100%; border-collapse:collapse; font-size:13px; min-width:700px;">
+                                <thead>
+                                    <tr style="background:#f4f5f9; text-align:left;">
+                                        <th
+                                            style="padding:10px 12px; font-weight:700; color:#444; border-bottom:2px solid #e0e4ec;">
+                                            Апт.</th>
+                                        <th
+                                            style="padding:10px 12px; font-weight:700; color:#444; border-bottom:2px solid #e0e4ec;">
+                                            Собственик/ци</th>
+                                        <th
+                                            style="padding:10px 12px; font-weight:700; color:#444; border-bottom:2px solid #e0e4ec;">
+                                            Имейл</th>
+                                        <th
+                                            style="padding:10px 12px; font-weight:700; color:#444; border-bottom:2px solid #e0e4ec;">
+                                            Обитатели</th>
+                                        <th
+                                            style="padding:10px 12px; font-weight:700; color:#444; border-bottom:2px solid #e0e4ec;">
+                                            Предназн.</th>
+                                        <th
+                                            style="padding:10px 12px; font-weight:700; color:#444; border-bottom:2px solid #e0e4ec;">
+                                            Дата вписв.</th>
+                                        <th
+                                            style="padding:10px 12px; font-weight:700; color:#444; border-bottom:2px solid #e0e4ec;">
+                                            Домашни</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="fullBookBody">
+                                    <tr>
+                                        <td colspan="7" style="padding:20px; text-align:center; color:#aaa;">Натиснете
+                                            „↺ Обнови" за зареждане</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <p style="font-size:11px; color:#aaa; margin-top:10px; text-align:right;">
+                            Данните отразяват текущото състояние на лист „КНИГА_ОБИТАТЕЛИ" в MASTER таблицата.
+                        </p>
+                    </div>
+
+                    <!-- Sub-Tab: Meeting -->
+                    <div id="zub-z-meeting" class="zues-sub-panel" style="display:none;">
+                        <h4 class="admin-subtitle">🤝 Общо събрание</h4>
+                        <div style="background: #fdfdfd; padding: 12px; border: 1px solid #eee; border-radius: 8px;">
+                            <label class="admin-label">Вид на решението (определя кворума)</label>
+                            <select id="meetingDecisionType" class="admin-input" onchange="calculateQuorum()" style="margin-bottom: 10px;">
+                                <option value="100">Надстрояване, пристрояване, промяна предназначението (100%)</option>
+                                <option value="75_violator">Изваждане на собственик за срок до 3 години (75% без нарушителя)</option>
+                                <option value="75">Кредити, полезни разходи, опрощаване на дългове (75%)</option>
+                                <option value="67">Учредяване на Сдружение на собствениците (67%)</option>
+                                <option value="51">Основен ремонт, обновяване, еврофондове (51%)</option>
+                                <option value="50_plus" selected>Избор на органи, разходи за управление, вътрешен ред (>50%)</option>
+                            </select>
+
+                            <label class="admin-label">Дневен ред (кратко)</label>
+                            <textarea id="meetingAgenda" class="admin-input"
+                                placeholder="1. Приемане на отчет; 2. Избор на домоуправител..."></textarea>
+
+                            <div id="quorum-box"
+                                style="margin-top:10px; padding:10px; background: #eefbff; border-radius:6px; border: 1px solid #bdeaff;">
+                                <div
+                                    style="display:flex; justify-content: space-between; font-weight: 600; font-size: 13px;">
+                                    <span>Представени ид.части:</span>
+                                    <span id="quorum-percent">0.00%</span>
+                                </div>
+                                <div id="quorum-status" style="font-size: 12px; margin: 8px 0 0; color: #666; font-weight: 500; line-height: 1.4;"></div>
+                            </div>
+
+                            <div
+                                style="margin-top:15px; max-height: 250px; overflow-y: auto; border: 1px solid #eee; border-radius: 6px;">
+                                <table style="width:100%; font-size: 12px; border-collapse: collapse;">
+                                    <thead style="background:#f5f5f5; position:sticky; top:0;">
+                                        <tr>
+                                            <th style="padding:6px; text-align:left;">Апт.</th>
+                                            <th style="padding:6px; text-align:center;">Присъства</th>
+                                            <th style="padding:6px; text-align:right;">Ид.ч. %</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="meeting-attendance-list">
+                                        <!-- Попълва се динамично -->
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-top:15px;">
+                                <button class="admin-btn secondary" onclick="printAttendanceList()"
+                                    style="font-size: 11px;">🖨️ Списък за подписи</button>
+                                <button class="admin-btn primary" onclick="generateMeetingMinutes()"
+                                    style="font-size: 11px;">📋 Чернова на Протокол</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Sub-Tab: Declarations -->
+                    <div id="zub-z-docs" class="zues-sub-panel" style="display:none;">
+                        <h4 class="admin-subtitle">📄 Генериране на документи</h4>
+                        <div style="padding:10px; background: rgba(0,0,0,0.02); border-radius:8px;">
+                            <p style="font-size: 12px; color: #666; margin-bottom: 10px;">Изберете апартамент за
+                                декларация за вписване (Чл. 7, ал. 3).</p>
+                            <select id="docAptSelect" class="admin-input"></select>
+                            <button class="admin-btn blue" style="width:100%; margin-top:10px;"
+                                onclick="printOwnerDeclaration()">🖨️ Генерирай Декларация</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Payment Info Tab Content -->
+                <div id="master-tab-payment" class="master-panel" style="display:none;">
+                    <label class="admin-label">Инструкции за плащане към ЕС</label>
+                    <textarea id="masterPaymentText" class="admin-input" style="min-height: 120px; font-size: 14px;"
+                        placeholder="Въведете ePay КИН, IBAN, REVTAG или друг способ за получаване на плащания към ЕС"></textarea>
+
+
+
+                    <div style="margin-top: 15px; padding: 12px; background: rgba(0,0,0,0.03); border-radius: 8px;">
+                        <label class="admin-label" style="color: var(--primary);">📂 Външни документи
+                            (Линкове)</label>
+                        <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 8px;">
+                            Поставете линкове към Google Drive папка или друго хранилище, за да могат живущите да
+                            виждат
+                            фактурите.
+                        </p>
+
+                        <label class="admin-label" style="font-size: 12px;">Линк за "Фактури/Документи"</label>
+                        <input type="url" id="masterLinkElectric" class="admin-input"
+                            placeholder="https://drive.google.com/...">
+                    </div>
+
+                    <button class="admin-btn primary" style="margin-top: 15px;"
+                        onclick="submitMaster('PAYMENT_INFO')">Запази глобалните данни</button>
+                </div>
+
+                <div class="admin-divider" style="margin-top: 20px;"></div>
+
+                <!-- Platform Subscription Section for Domoupraviteli -->
+                <div class="admin-section" data-tab="settings"
+                    style="background: rgba(0, 122, 255, 0.05); padding: 15px; border-radius: 8px; border: 1px solid rgba(0,122,255,0.2); margin-top: 15px;">
+                    <h3 id="admin-section-subscription" style="color: var(--primary); margin-bottom: 8px;">⭐ Абонамент към Платформата</h3>
+                    <p style="font-size: 13px; color: var(--text-muted); line-height: 1.4; margin-bottom: 12px;">
+                        За да удължите автоматично вашия абонамент за тази система, направете банков/ePay превод към
+                        Супер
+                        Админа. Системата ще отчете плащането ви автоматично, стига да посочите точния код за вашия
+                        вход:
+                    </p>
+
+                    <div style="display: flex; gap: 10px; margin-bottom: 12px;">
+                        <div
+                            style="flex:1; background: #fff; padding: 10px; border-radius: 6px; border: 1px solid rgba(0,122,255,0.1); text-align: center;">
+                            <p
+                                style="font-size: 11px; font-weight: 600; text-transform: uppercase; margin: 0 0 5px 0; color: #555;">
+                                Месечна Такса <br><span style="font-size: 9px; opacity: 0.7">(за целия вход)</span></p>
+                            <div id="subMonthlyPrice" style="font-size: 16px; font-weight: 700; color: #333;">...</div>
+                        </div>
+                        <div
+                            style="flex:1; background: #fff; padding: 10px; border-radius: 6px; border: 1px solid rgba(0,122,255,0.1); text-align: center;">
+                            <p
+                                style="font-size: 11px; font-weight: 600; text-transform: uppercase; margin: 0 0 5px 0; color: #555;">
+                                Безсрочно <br><span style="font-size: 9px; opacity: 0.7">(Lifetime Оферта)</span></p>
+                            <div id="subLifetimePrice" style="font-size: 16px; font-weight: 700; color: #333;">...</div>
+                        </div>
+                    </div>
+
+                    <div
+                        style="background: #fff; padding: 10px; border-radius: 6px; border: 1px dashed var(--primary); text-align: center;">
+                        <p style="font-size: 11px; font-weight: 600; text-transform: uppercase; margin: 0 0 5px 0;">
+                            Основание за превод (Вашият ID код):</p>
+                        <div id="subscriptionCodeDisplay"
+                            style="font-size: 18px; font-weight: 700; color: var(--primary); font-family: monospace;">
+                            Зарежда се...</div>
+                    </div>
+
+                    <div id="platformPaymentInfoBox" style="display:none; margin-top: 12px; background: #fff; padding: 12px; border-radius: 6px; border: 1px solid rgba(0,122,255,0.15); text-align: left;">
+                        <p style="font-size: 11px; font-weight: 700; text-transform: uppercase; margin: 0 0 6px 0; color: var(--primary);">💳 Начини на плащане към Супер Админа:</p>
+                        <div id="platformPaymentInfoText" style="font-size: 13px; white-space: pre-line; line-height: 1.6; color: #333;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+</div> <!-- end admin-view-expenses -->
+
+    <!-- SUPER ADMIN FULL OVERLAY -->
+    <div id="superAdminOverlay" class="admin-overlay" style="display:none; z-index:2000;"
+        onclick="if(event.target===this)closeSuperAdmin()">
+        <div class="admin-card" id="superAdminLoginCard">
+            <button class="admin-close" onclick="closeSuperAdmin()">✕</button>
+            <div class="admin-icon">👑</div>
+            <div class="admin-title">Супер Админ Панел</div>
+            <div class="admin-subtitle">Вход за Главен Администратор</div>
+            <input type="password" id="superPinInput" class="admin-input" placeholder="Парола..."
+                onkeydown="if(event.key==='Enter')loginSuperAdmin()">
+            <div id="superPinError" class="admin-error"></div>
+            <button class="admin-btn primary" onclick="loginSuperAdmin()">Вход</button>
+        </div>
+
+        <div class="admin-card" id="superAdminDashboard" style="display:none; max-width: 500px;">
+            <button class="admin-close" onclick="closeSuperAdmin()">✕</button>
+
+            <!-- Section 1: Create Client -->
+            <div class="admin-section">
+                <h3>👑 Създаване на нов Вход/Клиент</h3>
+                <p class="subtitle" style="margin-bottom: 20px; font-size: 13px;">Генерира копия на шаблонните
+                    таблици и
+                    задава достъп автоматично.</p>
+
+                <div class="form-group">
+                    <label class="admin-label">Град (пр. Sofia)</label>
+                    <input type="text" id="newCity" class="admin-input" placeholder="Sofia">
+                </div>
+                <div class="form-group" style="margin-top: 10px;">
+                    <label class="admin-label">Блок (пр. 32)</label>
+                    <input type="text" id="newBlock" class="admin-input" placeholder="32">
+                </div>
+                <div class="form-group" style="margin-top: 10px;">
+                    <label class="admin-label">Вход (пр. A)</label>
+                    <input type="text" id="newEntrance" class="admin-input" placeholder="A">
+                </div>
+                <div class="form-group" style="margin-top: 10px;">
+                    <label class="admin-label">Имейл на домоуправителя</label>
+                    <input type="email" id="newAdminEmail" class="admin-input" placeholder="admin@example.com">
+                </div>
+                <div class="form-group" style="margin-top: 10px;">
+                    <label class="admin-label">Брой апартаменти</label>
+                    <input type="number" id="newAptCount" class="admin-input" placeholder="Напр. 24" min="1" step="1">
+                </div>
+                <button class="admin-btn primary" id="createClientBtn" onclick="submitNewClient()">Създай
+                    Клиент</button>
+            </div>
+
+            <!-- Section 2: Pricing -->
+            <div class="admin-section">
+                <h3>⚙️ Настройки на Абонаментите</h3>
+                <p class="subtitle" style="margin-bottom: 10px; font-size: 13px;">Инструкции и цени за абонамент.</p>
+                <div class="form-group">
+                    <label class="admin-label">Инструкции за плащане на абонамент</label>
+                    <textarea id="superPaymentOptions" class="admin-input" style="min-height: 60px;"
+                        placeholder="Въведете IBAN, Revolut или ePay номер..."></textarea>
+                </div>
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-top: 10px;">
+                    <div>
+                        <label class="admin-label">София-Варна-Пловдив (EUR/апт.)</label>
+                        <input type="number" id="priceBigCities" class="admin-input" placeholder="пр. 0.75">
+                    </div>
+                    <div>
+                        <label class="admin-label">Всички останали (EUR/апт.)</label>
+                        <input type="number" id="priceOtherCities" class="admin-input" placeholder="пр. 0.50">
+                    </div>
+                    <div style="grid-column: span 2;">
+                        <label class="admin-label">Цена за "Безсрочен Абонамент" (EUR еднократно)</label>
+                        <input type="number" id="priceLifetime" class="admin-input" placeholder="пр. 150.00">
+                    </div>
+                </div>
+                <div style="margin-top: 15px; border-top: 1px dashed #ccc; padding-top: 15px;">
+                    <label class="admin-label">Показвай бутон "Регистрирай се"</label>
+                    <select id="superShowRegForm" class="admin-input">
+                        <option value="true">Да (Видимо)</option>
+                        <option value="false">Не (Скрито)</option>
+                    </select>
+                    <label class="admin-label" style="margin-top: 8px;">Текст на бутона за регистрация</label>
+                    <input type="text" id="superRegFormText" class="admin-input" placeholder="Инфо / Регистрация">
+                </div>
+                <button class="admin-btn primary" style="margin-top: 15px;" id="saveSuperSettingsBtn" onclick="saveSuperSettings()">Запази настройките</button>
+            </div>
+
+            <!-- Section 3: Global Broadcast (Broadcast to all managers) -->
+            <div class="admin-section"
+                style="background: #fff9db; border: 1px solid #fab005; border-radius: 8px; padding: 15px;">
+                <h3 style="color: #e67700; display: flex; align-items: center; gap: 8px;">📢 Съобщение до всички</h3>
+                <p class="subtitle" style="margin-bottom: 10px; font-size: 12px;">Съобщението ще се вижда от всички
+                    домоуправители при влизане в панела им.</p>
+                <textarea id="superGlobalMessage" class="admin-input" style="min-height: 80px; border-color: #fab005;"
+                    placeholder="Въведете съобщение..."></textarea>
+                <button id="saveGlobalMessageBtn" class="admin-btn primary"
+                    style="background: #e67700; margin-top: 10px;" onclick="saveGlobalMessage()">Изпрати
+                    съобщение</button>
+            </div>
+
+            <!-- Section 4: Access Control -->
+            <div class="admin-section">
+                <h3>🔒 Управление на достъпа</h3>
+                <div style="overflow-x: auto; max-height: 250px;">
+                    <table
+                        style="width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; text-align: left;">
+                        <thead>
+                            <tr style="border-bottom: 1px solid rgba(0,0,0,0.1); background:#f9f9f9;">
+                                <th style="padding: 10px 8px;">Вход</th>
+                                <th style="padding: 10px 8px;">ID Ключ</th>
+                                <th style="padding: 10px 8px;">Валиден до</th>
+                                <th style="padding: 10px 8px;">Състояние</th>
+                                <th style="padding: 10px 8px;">Действие</th>
+                            </tr>
+                        </thead>
+                        <tbody id="superAdminEntrancesList"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Section 5: Individual Pricing & Grants -->
+            <div class="admin-section">
+                <h3>💎 Индивидуални цени / Грантове</h3>
+                <p class="subtitle" style="margin-bottom: 15px; font-size: 12px;">Специфична цена или безплатно ползване
+                    за вход.</p>
+
+                <div
+                    style="background: rgba(0,0,0,0.02); padding: 12px; border-radius: 8px; border: 1px solid #eee; margin-bottom: 15px;">
+                    <label class="admin-label">Избери Вход</label>
+                    <select id="superExceptionRegistry" class="admin-input"></select>
+
+                    <label class="admin-label">Цена (EUR/мес)</label>
+                    <input type="number" id="superExceptionPrice" class="admin-input" step="0.01"
+                        placeholder="0.00">
+
+                    <label class="admin-label">Валидно до</label>
+                    <input type="date" id="superExceptionDate" class="admin-input">
+
+                    <button class="admin-btn primary" style="margin-top: 12px; width: 100%;"
+                        onclick="addSuperException()">Добави изключение</button>
+                </div>
+
+                <div style="overflow-x: auto; max-height: 200px;">
+                    <table style="width: 100%; border-collapse: collapse; font-size: 11px; text-align: left;">
+                        <thead>
+                            <tr style="border-bottom: 1px solid rgba(0,0,0,0.1); background:#f2f2f2;">
+                                <th style="padding: 6px;">ID</th>
+                                <th style="padding: 6px;">Цена</th>
+                                <th style="padding: 6px;">До кога</th>
+                                <th style="padding: 6px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="superAdminExceptionsList"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Section 6: Backup -->
+            <div class="admin-section" style="background: rgba(0,0,0,0.02); margin-top: 20px;">
+                <h3>🛡️ Архив на Системата</h3>
+                <button class="admin-btn secondary" id="runBackupBtn" onclick="runSystemBackup()">📦 Създай Ръчен
+                    Архив</button>
+                <div id="backupStatus" style="margin-top: 10px; font-size: 12px; display:none;"></div>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- TOAST NOTIFICATIONS -->
+    <div id="toast" class="toast"></div>
+
+    <div class="app-container">
+
+        <!-- ============================================== -->
+        <!-- VIEW: 1. ЗАГЛАВЕН ИНТЕРФЕЙС / СЕЛЕКТОР           -->
+        <!-- ============================================== -->
+        <div id="view-selector" class="view-panel active">
+            <!-- Entrance Notice Banner -->
+            <div id="userEntranceNotice"
+                style="display:none; max-width: 500px; margin: 20px auto 0; background: #e7f5ff; border: 1px solid #74c0fc; color: #1971c2; padding: 15px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); position: relative; z-index: 10; animation: fadeInDown 0.5s ease;">
+                <div style="display: flex; align-items: flex-start; gap: 12px;">
+                    <span style="font-size: 24px;">📢</span>
+                    <div>
+                        <strong style="display: block; margin-bottom: 4px; font-size: 14px;">Съобщение от Домоуправителя:</strong>
+                        <div id="userEntranceNoticeText" style="font-size: 14px; line-height: 1.5; white-space: pre-wrap;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Landing Page Container -->
+            <div class="landing-page">
+                <!-- HEADER -->
+                <header class="landing-header">
+                    <div class="landing-logo-container">
+                        <img src="logo.png" alt="Лого" class="landing-logo" onclick="openSuperAdmin()" title="Вход за създатели" onerror="this.onerror=null; this.outerHTML='<div class=\'brand-logo\' onclick=\'openSuperAdmin()\' style=\'width:40px; height:40px; border-radius:8px; display:flex; align-items:center; justify-content:center; background:linear-gradient(135deg, #2563eb, #8B5CF6); font-family:var(--font-head); font-weight:800; font-size:1.4rem; color:white; cursor:pointer;\' title=\'Вход за създатели\'>Е</div>'">
+                        <span class="landing-brand-name">Онлайн <span class="landing-brand-highlight">Домоуправител</span></span>
+                    </div>
+                    
+                    <nav class="landing-nav">
+                        <a href="description.html" target="_blank" class="landing-nav-link">Възможности</a>
+                        <a href="#pricing" class="landing-nav-link" onclick="toggleRegistrationForm(); return false;">Абонамент на символични цени. Изчисли сам...</a>
+                        <a href="#register" class="landing-nav-link" onclick="toggleRegistrationForm(); return false;">Регистрация</a>
+                        <a href="#contact" class="landing-nav-link" onclick="toggleContactForm(); return false;">Контакт</a>
+                    </nav>
+                    
+                    <button class="landing-login-btn" onclick="openLoginPrompt()">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3"/></svg>
+                        Вход
+                    </button>
+                    
+                    <!-- Mobile Menu Toggle -->
+                    <button class="landing-mobile-toggle" onclick="toggleMobileMenu()">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+                    </button>
+                </header>
+                
+                <!-- Mobile Dropdown Menu -->
+                <div id="landing-mobile-menu" class="landing-mobile-menu hidden">
+                    <a href="description.html" target="_blank" class="landing-mobile-link" onclick="toggleMobileMenu()">Възможности</a>
+                    <a href="#pricing" class="landing-mobile-link" onclick="toggleMobileMenu(); toggleRegistrationForm(); return false;">Абонамент на символични цени. Изчисли сам...</a>
+                    <a href="#register" class="landing-mobile-link" onclick="toggleMobileMenu(); toggleRegistrationForm(); return false;">Регистрация</a>
+                    <a href="#contact" class="landing-mobile-link" onclick="toggleMobileMenu(); toggleContactForm(); return false;">Контакт</a>
+                    <button class="landing-login-btn-mobile" onclick="toggleMobileMenu(); openLoginPrompt();">Вход</button>
+                </div>
+
+                <!-- HERO SECTION -->
+                <section class="landing-hero">
+                    <div class="landing-hero-content">
+                        <h1 class="landing-hero-title">Онлайн <span class="text-blue">Домоуправител</span></h1>
+                        <p class="landing-hero-subtitle"><strong class="hero-key-sentence">Минималистичен дигитален домоуправител.</strong><br>
+                            Забравете за скъпите професионални домоуправители. Автоматизирайте и управлявайте сами разходите и приходите в етажната си собственост. Всичко в един поглед, един клик. <a href="#registration-section" onclick="toggleRegistrationForm(); return false;" class="hero-registration-link">Регистрирайте вход — 30 дни безплатно</a>.</p>
+                        
+                        <div class="landing-hero-actions">
+                            <div class="hero-scroll-track">
+                                <button class="landing-btn-outline hero-mobile-only-btn" onclick="toggleRegistrationForm()">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:8px;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                                    Регистрация
+                                </button>
+                                <button class="landing-btn-outline" onclick="document.getElementById('learn-more').scrollIntoView({behavior:'smooth'})">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:6px;"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+                                    Научи повече
+                                </button>
+                                <span class="scroll-hint" aria-hidden="true">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="6 9 12 15 18 9"/></svg>
+                                </span>
+                            </div>
+                            <button class="landing-btn-outline" onclick="document.getElementById('faq').scrollIntoView({behavior:'smooth'})">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:6px;"><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/><circle cx="12" cy="12" r="10"/></svg>
+                                Чести въпроси
+                            </button>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- FEATURES SECTION -->
+                <section id="features" class="landing-features">
+                    <h2 class="section-title">Всичко необходимо на едно място</h2>
+                    
+                    <div class="features-grid">
+                        <a href="https://domoupravitel.github.io/ID-test/guide/" target="_blank" class="feature-card feature-card-link">
+                            <span class="feature-card-badge">Отвори <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M7 17L17 7M17 7H8M17 7V16"/></svg></span>
+                            <div class="feature-icon bg-gold">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+                            </div>
+                            <h3 class="pulse-link-text">ЗУЕС Помощник <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align:middle;"><path d="M7 17L17 7M17 7H8M17 7V16"/></svg></h3>
+                            <p>Справочник за лесно ориентиране в разпоредбите на ЗУЕС.</p>
+                        </a>
+
+                        <div class="feature-card">
+                            <div class="feature-icon bg-blue">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+                            </div>
+                            <h3>Разходи</h3>
+                            <p>Автоматизирано начисляване и разпределяне на разходите. Следете общите разходи, исторически и в реално време.</p>
+                        </div>
+                        
+                        <div class="feature-card">
+                            <div class="feature-icon bg-green">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect><line x1="1" y1="10" x2="23" y2="10"></line></svg>
+                            </div>
+                            <h3>Плащания</h3>
+                            <p>Външни и вътрешни платци към ЕС. Възможност за автоматизиране.</p>
+                        </div>
+                        
+                        <div class="feature-card">
+                            <div class="feature-icon bg-orange">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+                            </div>
+                            <h3>Известия</h3>
+                            <p>Имейли за задължения, плащания, месечни отчети и важни съобщения от ЕС.</p>
+                        </div>
+                        
+                        <div class="feature-card">
+                            <div class="feature-icon bg-blue2">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                            </div>
+                            <h3>Събрания</h3>
+                            <p>Калкулатор за кворум за провеждане и взимане на решения по ЗУЕС.</p>
+                        </div>
+
+                        <div class="feature-card">
+                            <div class="feature-icon bg-purple">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                            </div>
+                            <h3>Документи</h3>
+                            <p>Достъп до важни документи и протоколи по всяко време.</p>
+                        </div>
+                    </div>
+                    
+                    <!-- ZUES BANNER -->
+                    <div class="zues-banner">
+                        <div class="zues-logo">
+                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                        </div>
+                        <div class="zues-content">
+                            <h4>Съобразено със ЗУЕС</h4>
+                            <p>Приложението е съобразено със Закона за управление на етажната собственост (ЗУЕС) и гарантира прозрачност, сигурност и ефективност в управлението.</p>
+                        </div>
+                    </div>
+
+                    <!-- LEARN MORE / SEO CONTENT -->
+                    <div id="learn-more" class="learn-more-section">
+
+                        <h3>Какво представлява Онлайн Домоуправител</h3>
+                        <p>Онлайн Домоуправител е дигитална платформа за управление на етажна собственост, която замества хартиените тетрадки, разпръснатите Excel таблици и разговорите по телефон или в групи във Viber. Всеки вход получава собствено дигитално табло, в което се виждат история на плащанията, текущи задължения, месечни финансови отчети и съобщения от домоуправителя. Достъпът е без регистрация с парола — чрез уникален линк или ID код на входа, а всеки апартамент разполага и със собствен код за плащане, който системата разпознава автоматично при постъпване на сума.</p>
+                        <p>Основната идея зад платформата е прозрачност: собствениците виждат точно за какво плащат — асансьор, осветление, охрана, почистване, поддръжка, фонд „Ремонт“ — а домоуправителите пестят часове ръчна работа всеки месец, вместо да събират плащания и да смятат баланси на ръка. Данните се пазят на едно място, достъпни са по всяко време от телефон или компютър, и не зависят от паметта на един-единствен човек във входа.</p>
+
+                        <h3>За кого е платформата</h3>
+                        <ul>
+                            <li><strong>Домоуправители и управителни съвети</strong> — отговарят за месечните начисления, разпределянето на разходите между апартаментите и комуникацията с живущите.</li>
+                            <li><strong>Собственици и обитатели</strong> — искат бърз достъп до салдото си, историята на плащанията и важните съобщения от входа, без да чакат обяснения от съседи или касиер.</li>
+                            <li><strong>Етажна собственост от всякакъв мащаб</strong> — от малки входове с няколко апартамента до големи комплекси с десетки собственици.</li>
+                            <li><strong>Счетоводители и касиери на етажна собственост</strong> — водят регистри на приходите и разходите съгласно изискванията на ЗУЕС.</li>
+                        </ul>
+
+                        <h3>Предимства</h3>
+                        <ul>
+                            <li><strong>Прозрачност за всички</strong> — всеки собственик вижда точно колко дължи, за какво и какъв е общият баланс на входа в реално време.</li>
+                            <li><strong>По-малко ръчна работа</strong> — системата автоматично разпределя разходите по апартаменти според зададена логика: поравно, по брой обитатели или по идеални части.</li>
+                            <li><strong>Автоматично разпознаване на плащания</strong> — чрез имейл известия от ePay или банка системата може сама да отчете постъпилите суми и да обнови баланса.</li>
+                            <li><strong>Достъп без парола</strong> — вход чрез уникален линк или ID код, вместо регистрация с имейл и парола за всеки живущ.</li>
+                            <li><strong>Пълна история</strong> — на всички плащания и начисления, достъпна по всяко време и за всеки период назад.</li>
+                            <li><strong>Готови месечни отчети</strong> — изготвени автоматично съгласно чл. 23 от ЗУЕС и подходящи за печат.</li>
+                            <li><strong>Директна комуникация</strong> — известия и съобщения до живущите, общи за входа или лични за конкретен апартамент.</li>
+                        </ul>
+
+                        <h3>Функции</h3>
+                        <p>Платформата съдържа отделни модули за всяка част от управлението на входа:</p>
+                        <ul>
+                            <li><strong>Начисления и разходи</strong> — асансьор (ток и абонамент), осветление, охрана, почистване, поддръжка, фонд „Ремонт“.</li>
+                            <li><strong>Плащания</strong> — регистриране на вноски от апартаменти, външни платци и приходи от други източници като наем на общи части, дарения или кредити.</li>
+                            <li><strong>Разпределяне на приходи</strong> — по идеални части, на каса или на салдо, според вида приход.</li>
+                            <li><strong>ЗУЕС Мениджър</strong> — електронна книга на етажната собственост с данни за обитатели, идеални части, чипове и участие в разходите за асансьор.</li>
+                            <li><strong>Общо събрание</strong> — калкулатор за необходимия кворум според вида решение, генериране на присъствен списък и чернова на протокол.</li>
+                            <li><strong>Декларации</strong> — автоматично попълване на декларация за вписване по чл. 7, ал. 3 за всеки апартамент.</li>
+                            <li><strong>Съобщения</strong> — обяви до целия вход или лична бележка до конкретен апартамент, с възможност за изпращане и по имейл.</li>
+                        </ul>
+
+                        <h3>Управление по ЗУЕС</h3>
+                        <p>Приложението е изградено така, че да подпомага домоуправителите в изпълнението на конкретни изисквания на Закона за управление на етажната собственост:</p>
+                        <ul>
+                            <li><strong>Чл. 7</strong> — поддържане на книга на етажната собственост с данни за собственици, обитатели и предназначение на имотите, вместо хартиена тетрадка.</li>
+                            <li><strong>Чл. 13–16</strong> — организация на общи събрания, включително изчисляване на необходимия кворум спрямо вида решение — обикновено мнозинство, 51%, 67%, 75% или 100%, в зависимост от точката от дневния ред.</li>
+                            <li><strong>Чл. 23</strong> — изготвяне на месечен финансов отчет за приходите и разходите, достъпен за всеки собственик по всяко време.</li>
+                            <li><strong>Чл. 47</strong> — прозрачност при управлението на средствата на етажната собственост.</li>
+                        </ul>
+                        <p>Вграденият модул „ЗУЕС Помощник“ допълва изброеното с бърз справочник за необходимите мнозинства и свързаните разпоредби, така че домоуправителят да не се налага да търси текста на закона всеки път, когато трябва да вземе решение.</p>
+
+                        <h3 id="faq">Често задавани въпроси</h3>
+                        <details class="faq-item">
+                            <summary>Трябва ли да инсталирам приложение?</summary>
+                            <p>Не. Онлайн Домоуправител работи директно в браузъра — на компютър, таблет или телефон, без инсталация.</p>
+                        </details>
+                        <details class="faq-item">
+                            <summary>Как влизам без парола?</summary>
+                            <p>Всеки вход получава уникален ID код или линк за достъп, а всеки апартамент — свой код за собствения профил в таблото.</p>
+                        </details>
+                        <details class="faq-item">
+                            <summary>Как се разпределят разходите между апартаментите?</summary>
+                            <p>Според зададена от домоуправителя логика — поравно между апартаментите, по брой обитатели или по идеални части, в зависимост от вида разход.</p>
+                        </details>
+                        <details class="faq-item">
+                            <summary>Мога ли да видя история на плащанията си?</summary>
+                            <p>Да, всеки апартамент вижда пълна история на начисленията и плащанията си по периоди назад във времето.</p>
+                        </details>
+                        <details class="faq-item">
+                            <summary>Съответства ли платформата на ЗУЕС?</summary>
+                            <p>Да, модулите за книга на етажната собственост, общо събрание, кворум и месечен отчет са изградени според изискванията на закона.</p>
+                        </details>
+                        <details class="faq-item">
+                            <summary>Как да получа достъп като домоуправител на вход?</summary>
+                            <p>През административния панел на входа — оттам управлявате начисления, приходи, съобщения и настройки на цялата етажна собственост.</p>
+                        </details>
+                        <details class="faq-item">
+                            <summary>Какво се случва, ако абонаментът на входа изтече?</summary>
+                            <p>Живущите продължават да виждат основна информация, но пълният достъп до всички данни се възобновява след подновяване на абонамента от домоуправителя.</p>
+                        </details>
+                        <details class="faq-item">
+                            <summary>Може ли да се ползва от няколко входа в един блок едновременно?</summary>
+                            <p>Да, всеки вход има собствен ID и собствено табло, независимо от останалите входове в сградата, така че данните на отделните входове не се смесват. Важно: за коректно автоматично разпознаване на плащания през ePay е нужен отделен имейл адрес за всеки вход — споделен имейл между няколко входа може да доведе до объркване при автоматичното разпределяне на плащания без ID в основанието за превод.</p>
+                        </details>
+                    </div>
+                </section>
+            </div>
+
+            <!-- Entrance ID Access Modal -->
+            <div id="accessIdModal" class="admin-overlay" style="display:none;" onclick="if(event.target===this)closeAccessIdModal()">
+                <div class="admin-card">
+                    <button class="admin-close" onclick="closeAccessIdModal()">✕</button>
+                    <div class="admin-icon" style="background:#eef2ff; color:#3b82f6; width:48px; height:48px; border-radius:50%; display:flex; align-items:center; justify-content:center; margin:0 auto 15px; font-size:20px;">🔑</div>
+                    <div class="admin-title" style="font-family:var(--font-head); font-size:1.3rem; font-weight:700; margin-bottom:5px;">Вход за живущи</div>
+                    <div class="admin-subtitle" style="font-size:0.85rem; color:#666; margin-bottom:20px; line-height:1.4;">Въведете кода на Вашия вход (ID), за да достъпите таблото</div>
+                    
+                    <input type="text" id="access-id" class="admin-input" placeholder="напр. 123456Град32А" onkeydown="if(event.key==='Enter')submitAccessIdModal()">
+                    <div id="accessIdError" class="admin-error" style="color:#d32f2f; font-size:12px; margin-top:5px; text-align:left;"></div>
+                    <button class="btn btn-primary" id="submitAccessIdBtn" style="background:#2563eb; color:white; width: 100%; margin-top: 15px; justify-content: center; padding: 12px; border-radius:8px; font-weight:bold;" onclick="submitAccessIdModal()">Влез</button>
+                </div>
+            </div>
+
+            <!-- Integrated Contact Section (Mobile Responsive) -->
+            <div id="contact-section" class="registration-container glass-panel hidden" style="margin: 30px auto; max-width: 700px; width: 95%;">
+                <div class="reg-header">
+                    <h3 style="font-family: var(--font-head); font-size: 0.8rem; margin: 0;">✉️ Форма за контакт</h3>
+                    <button class="btn-close" onclick="toggleContactForm()">✕</button>
+                </div>
+                <div class="iframe-wrapper">
+                    <iframe 
+                        id="contact-iframe"
+                        src="about:blank" 
+                        width="100%" 
+                        height="520" 
+                        frameborder="0" 
+                        marginheight="0" 
+                        marginwidth="0">
+                        Зареждане...
+                    </iframe>
+                </div>
+            </div>
+
+            <!-- Integrated Registration Section (Mobile Responsive) -->
+            <div id="registration-section" class="registration-container glass-panel hidden" style="margin: 30px auto; max-width: 700px; width: 95%;">
+                <div class="reg-header">
+                    <h3 style="font-family: var(--font-head); font-size: 0.8rem; margin: 0;">📝 Регистрация / Запитване</h3>
+                    <button class="btn-close" onclick="toggleRegistrationForm()">✕</button>
+                </div>
+                <div class="iframe-wrapper">
+                    <iframe 
+                        id="reg-iframe"
+                        src="https://forms.gle/hWGpG15iVSD81zZR8" 
+                        width="100%" 
+                        height="520" 
+                        frameborder="0" 
+                        marginheight="0" 
+                        marginwidth="0">
+                        Зареждане...
+                    </iframe>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================== -->
+        <!-- VIEW: HARD BLOCK — ДОСТЪПЪТ Е СПРЯН          -->
+        <!-- ============================================== -->
+        <div id="view-hard-blocked" class="view-panel hidden">
+            <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:60vh; padding:30px; text-align:center;">
+                <div style="font-size:64px; margin-bottom:20px;">🔒</div>
+                <h2 style="color:#e74c3c; margin-bottom:12px;">Достъпът до входа е спрян</h2>
+                <p style="color:#555; max-width:480px; line-height:1.6; margin-bottom:20px;">
+                    Абонаментът за този вход не е платен повече от <strong>3 месеца</strong>.<br>
+                    Достъпът до всички данни е напълно блокиран.
+                </p>
+                <div style="background:#fff3cd; border:1px solid #ffc107; border-radius:10px; padding:18px 24px; margin-bottom:24px; max-width:420px;">
+                    <div style="font-size:12px; color:#856404; text-transform:uppercase; letter-spacing:1px; margin-bottom:8px;">Основание за плащане (вашият ID):</div>
+                    <div id="hard-block-id" style="font-size:22px; font-weight:700; color:#d32f2f; letter-spacing:2px;">—</div>
+                </div>
+                <p style="color:#888; font-size:13px; max-width:420px; margin-bottom:24px;">
+                    За да възстановите достъпа, извършете плащане и посочете вашия ID код като основание.<br>
+                    Данните се пазят 6 месеца след пълно спиране.
+                </p>
+                <button onclick="exitEntrance()" style="background:#3b6edc; color:white; border:none; border-radius:8px; padding:12px 28px; font-size:15px; cursor:pointer;">← Към началото</button>
+            </div>
+        </div>
+
+        <!-- ============================================== -->
+        <!-- VIEW: 2. НАЧАЛНА СТРАНИЦА НА ИЗБРАНИЯ ВХОД     -->
+        <!-- ============================================== -->
+        <div id="view-entrance-home" class="view-panel hidden">
+            <!-- OLD APP HEADER -->
+            <div class="header-row">
+                <button class="header-icon-btn" onclick="exitEntrance()" title="Към началото" style="margin-right: 12px; font-size: 16px;">🏠</button>
+                <h2 id="entrance-title" style="flex-grow: 1;">Етажна собственост</h2>
+                <div class="header-icons">
+                    <button class="header-icon-btn" onclick="openMonthlyReport()" title="Месечен отчет">📄</button>
+                    <button class="header-icon-btn" onclick="openAdmin()" title="Админ панел">⚙️</button>
+                </div>
+            </div>
+            <!-- Entrance Notice Banner (Duplicate for Home view) -->
+            <div id="userEntranceNoticeHome"
+                style="display:none; margin: 15px; background: #e7f5ff; border: 1px solid #74c0fc; color: #1971c2; padding: 15px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); position: relative; animation: fadeInDown 0.5s ease;">
+                <div style="display: flex; align-items: flex-start; gap: 12px;">
+                    <span style="font-size: 24px;">📢</span>
+                    <div>
+                        <strong style="display: block; margin-bottom: 4px; font-size: 13px;">Съобщение от
+                            Домоуправителя:</strong>
+                        <div id="userEntranceNoticeTextHome"
+                            style="font-size: 13px; line-height: 1.5; white-space: pre-wrap;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- OLD APP CONTENT -->
+            <!-- BEGIN MAINTENANCE SUMMARY -->
+            <div class="glass-panel" style="padding:15px;margin:15px;">
+                <strong>Поддръжка — натрупан източник</strong>
+                <div id="maintenanceSourceSummary" role="status">Наличността не е потвърдена.</div>
+            </div>
+            <!-- END MAINTENANCE SUMMARY -->
+            <div class="content-area">
+                
+
+                
+                <div class="top-buttons">
+                    <a id="btn-electric-link" href="#" target="_blank" style="display: none;">
+                        <button class="btn blue">Фактури/Документи</button>
+                    </a>
+                    <a href="./guide/" target="_blank">
+                        <button class="btn" style="background: linear-gradient(135deg, #e67e22, #d35400); padding: 10px 15px; font-size: 0.85rem;">ЗУЕС 💡</button>
+                    </a>
+                </div>
+
+                <select id="apartmentSelect" class="apartment-select">
+                    <option value="">Избери апартамент</option>
+                </select>
+
+                <!-- Payment Details Card -->
+                <div id="payment-details-box" class="glass-panel"
+                    style="padding: 20px; margin-bottom: 24px; display: none; text-align: left;">
+                    <div style="display:flex; align-items: center; gap: 8px; margin-bottom: 12px;">
+                        <span style="font-size: 20px;">💳</span>
+                        <h4 style="margin:0; font-weight: 600; font-size: 16px;">Начини за плащане</h4>
+                    </div>
+                    <div id="payment-instructions"
+                        style="font-size: 14px; white-space: pre-line; line-height: 1.6; opacity: 0.9;"></div>
+
+                    <div id="payment-reference-box"
+                        style="margin-top: 15px; padding: 12px; background: #fff8f0; border-left: 4px solid #f6ad55; border-radius: 4px; display: none;">
+                        <span
+                            style="font-size: 12px; color: #c05621; font-weight: 600; display: block; margin-bottom: 4px;">📌
+                            Основание за автоматично плащане:</span>
+                        <div id="payment-reference-value"
+                            style="font-family: monospace; font-size: 16px; font-weight: 700; color: #d32f2f; letter-spacing: 0.5px;">
+                        </div>
+                        <span
+                            style="font-size: 11px; color: #a0522d; margin-top: 4px; display: block; opacity: 0.8;">Цитирайте
+                            този код точно както е изписан в основанието на Ваш превод.</span>
+                    </div>
+                </div>
+
+                <div class="card saldo-card" id="saldoCard">
+                    <div class="saldo">Текущо салдо: <span id="saldo">-</span></div>
+                </div>
+
+                <!-- Кредитно задължение (отделно от Салдото - виж paralleл регистър) -->
+                <div id="creditLiabilityBox" style="display:none; margin: 12px 0; background: #fffbeb; border: 1px solid #eab308; border-radius: 10px; padding: 12px 16px;">
+                    <div style="font-size: 13px; font-weight: 700; color: #b45309;">📌 Дължимо по кредит: <span id="creditLiabilityAmount">-</span></div>
+                    <div style="font-size: 11px; color: #92400e; margin-top: 2px;">Отделно от оперативния баланс — дял от взет кредит на входа, който предстои да се погаси.</div>
+                </div>
+
+                <!-- Справка от период до период -->
+                <div class="card" style="margin: 12px 0; padding: 14px 16px;">
+                    <div style="display:flex; align-items:center; justify-content:space-between; cursor:pointer;" onclick="document.getElementById('aptRangeReportBody').style.display = document.getElementById('aptRangeReportBody').style.display === 'none' ? 'block' : 'none';">
+                        <strong style="font-size: 14px;">📊 Справка от период до период</strong>
+                        <span style="font-size: 12px; color: #888;">разгъни ▾</span>
+                    </div>
+                    <div id="aptRangeReportBody" style="display:none; margin-top: 12px;">
+                        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                            <select id="aptRangeFrom" class="admin-input" style="flex:1; min-width:110px;"></select>
+                            <span style="font-size:12px; color:#888;">до</span>
+                            <select id="aptRangeTo" class="admin-input" style="flex:1; min-width:110px;"></select>
+                            <button class="admin-btn" style="white-space:nowrap;" onclick="calcApartmentRangeReport()">Изчисли</button>
+                        </div>
+                        <div id="aptRangeReportResult" style="margin-top: 10px; font-size: 13px;"></div>
+                    </div>
+                </div>
+
+                <!-- Individual Apartment Notice Banner -->
+                <div id="individualAptNotice"
+                    style="display:none; margin-bottom: 24px; background: #fff9db; border: 1px solid #fab005; color: #856404; padding: 15px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); animation: pulse 2s infinite ease-in-out;">
+                    <div style="display: flex; align-items: flex-start; gap: 12px;">
+                        <span style="font-size: 24px;">📝</span>
+                        <div>
+                            <strong style="display: block; margin-bottom: 4px; font-size: 13px;">Бележка за Вашия
+                                апартамент:</strong>
+                            <div id="individualAptNoticeText"
+                                style="font-size: 13px; line-height: 1.5; white-space: pre-wrap;"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="table-responsive">
+                        <table class="old-styled-table">
+                            <thead>
+                                <tr>
+                                    <th>Период</th>
+                                    <th>Асансьор ел.</th>
+                                    <th>Асансьор абон. и др.</th>
+                                    <th>Осв.</th>
+                                    <th>Охрана</th>
+                                    <th>Почистване</th>
+                                    <th>Поддръжка</th>
+                                    <th>Фонд Рем.</th>
+                                    <th>Дължимо</th>
+                                    <th>Платено</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tableBody">
+                                <!-- Populated dynamically -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="admin-divider" style="margin: 40px 0 20px;"></div>
+
+                <!-- ============================================== -->
+                <!-- GENERAL DASHBOARD INFO (Отдолу)                 -->
+                <!-- ============================================== -->
+                <div class="dashboard-section">
+                    <div class="page-header" style="margin-bottom: 20px;">
+                        <h2 style="font-family: var(--font-head); font-size: 1.5rem; color: var(--text-main-light);">
+                            Обща информация за входа</h2>
+                        <p class="subtitle" style="font-size: 0.9rem;">Обобщени данни и статуси за избрания вход.
+                        </p>
+                    </div>
+
+                    <div class="metrics-grid">
+                        <div class="metric-card glass-panel">
+                            <div class="metric-icon debt">
+                                <span style="font-size:24px;">⛔</span>
+                            </div>
+                            <div class="metric-info">
+                                <span class="label">Общи неплатени задължения</span>
+                                <h3 class="value" id="dash-debts">0.00 EUR</h3>
+                                <span class="trend" id="dash-debts-trend">Очаква данни</span>
+                            </div>
+                        </div>
+
+                        <div class="metric-card glass-panel highlight">
+                            <div class="metric-icon balance">
+                                <span style="font-size:24px;">🏦</span>
+                            </div>
+                            <div class="metric-info">
+                                <span class="label">Фонд ремонт</span>
+                                <h3 class="value" id="dash-balance">0.00 EUR</h3>
+                                <span class="trend" id="dash-balance-trend">Очаква данни</span>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Dashboard Warnings -->
+                    <div id="dashboard-warnings" style="display:none; margin: 15px 0; background: #fff5f5; border: 1px solid #ffc9c9; border-radius: 12px; padding: 15px; animation: fadeIn 0.5s ease;">
+                        <h4 style="margin: 0 0 10px; color: #fa5252; font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 8px;">
+                            ⚠️ Забележки
+                        </h4>
+                        <ul id="dashboard-warnings-list" style="margin: 0; padding-left: 20px; font-size: 13px; color: #c92a2a; line-height: 1.5;">
+                        </ul>
+                    </div>
+
+                    
+                </div>
+
+            </div>
+        </div>
+
+        <!-- ============================================== -->
+        <!-- VIEW: 3. МЕСЕЧЕН ФИНАНСОВ ОТЧЕТ (Чл. 23 ЗУЕС)   -->
+        <!-- ============================================== -->
+        <div id="view-monthly-report" class="view-panel hidden">
+            <div class="header-row">
+                <button class="header-icon-btn" onclick="switchPage('entrance-home')"
+                    style="background: none; box-shadow: none;">←</button>
+                <h2 style="font-size: 18px; margin: 0; flex-grow: 1; text-align: center;">Месечен финансов отчет
+                </h2>
+                <div style="width: 40px;"></div>
+            </div>
+
+            <div class="content-area">
+                <div class="glass-panel" style="padding: 20px; margin-bottom: 20px;">
+                    <label class="admin-label">Изберете период (ММ.ГГГГ):</label>
+                    <div style="display:flex; gap:10px; margin-bottom: 20px; margin-top: 8px;">
+                        <input type="text" id="reportPeriodInput" class="admin-input" placeholder="03.2026"
+                            style="margin:0;">
+                        <button class="btn btn-primary" onclick="generateReport()"
+                            style="padding: 0 20px; white-space: nowrap;">Покажи</button>
+                    </div>
+
+                    <div id="report-content" style="display:none;">
+                        <div id="report-print-area"
+                            style="background: white; color: black; padding: 25px; border-radius: 8px; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; box-shadow: 0 4px 20px rgba(0,0,0,0.08); border: 1px solid #ddd;">
+                            <div
+                                style="text-align: center; border-bottom: 2px solid #333; margin-bottom: 20px; padding-bottom: 10px;">
+                                <h2 style="margin:0; font-size: 18px; text-transform: uppercase; color: #000;">
+                                    Месечен
+                                    отчет за приходите и разходите</h2>
+                                <h3 id="report-title-period" style="margin:5px 0; font-size: 15px; font-weight: 500;">за
+                                    месец ...</h3>
+                                <p style="font-size: 11px; margin:0; font-style: italic; color: #555;">съгласно
+                                    изискванията на чл. 23, ал. 1, т. 3а от ЗУЕС</p>
+                            </div>
+
+                            <div style="margin-bottom: 20px;">
+                                <h4
+                                    style="border-bottom: 1px solid #eee; padding-bottom: 5px; font-size: 14px; text-transform: uppercase;">
+                                    I. Начислени разходи (Задължения към входа)</h4>
+                                <table
+                                    style="width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px;">
+                                    <tbody id="report-invoiced-rows">
+                                        <!-- Данните ще се попълват от JS -->
+                                    </tbody>
+                                    <tfoot>
+                                        <tr style="font-weight: bold; border-top: 1px solid #333;">
+                                            <td style="padding: 10px 0;">ОБЩО НАЧИСЛЕНИ РАЗХОДИ:</td>
+                                            <td id="report-total-invoiced" style="text-align: right; padding: 10px 0;">
+                                                0.00 EUR</td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+
+                            <div style="margin-bottom: 20px;">
+                                <h4
+                                    style="border-bottom: 1px solid #eee; padding-bottom: 5px; font-size: 14px; text-transform: uppercase;">
+                                    II. Приходи (Събрани суми)</h4>
+                                <table
+                                    style="width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px;">
+                                    <tbody id="report-collected-rows">
+                                        <!-- Populated via JS -->
+                                    </tbody>
+                                    <tfoot>
+                                        <tr style="font-weight: bold; border-top: 1px solid #333;">
+                                            <td style="padding: 10px 0;">ОБЩО СЪБРАНИ ПРИХОДИ:</td>
+                                            <td id="report-total-collected" style="text-align: right; padding: 10px 0; font-weight: bold;">
+                                                0.00 EUR</td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+
+                            <div style="margin-bottom: 20px;" id="report-distributions-section">
+                                <h4
+                                    style="border-bottom: 1px solid #eee; padding-bottom: 5px; font-size: 14px; text-transform: uppercase;">
+                                    III. Разпределени средства (Разпределения)</h4>
+                                <table
+                                    style="width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px;">
+                                    <tbody id="report-distribution-rows">
+                                        <!-- Populated via JS -->
+                                    </tbody>
+                                    <tfoot>
+                                        <tr style="font-weight: bold; border-top: 1px solid #333;">
+                                            <td style="padding: 10px 0;">ОБЩО РАЗПРЕДЕЛЕНИ СУМИ:</td>
+                                            <td id="report-total-distributed" style="text-align: right; padding: 10px 0; font-weight: bold;">
+                                                0.00 EUR</td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+
+                            <div id="report-signatures-area"
+                                style="margin-top: 50px; font-size: 12px; display: flex; justify-content: space-between;">
+                                <span>Дата на генериране: <span id="report-gen-date"></span></span>
+                                <div style="text-align: right;">
+                                    <p style="margin: 0;">Домоуправител: ..............................</p>
+                                    <p style="margin: 5px 0 0 0; font-size: 10px;">(подпис и печат)</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button class="btn blue" style="width:100%; margin-top:20px; gap: 8px;" onclick="printReport()">
+                            <span>🖨️</span> Принтирай Отчета
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+
+</html>
