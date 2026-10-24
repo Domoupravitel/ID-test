@@ -2058,7 +2058,7 @@ window.loadCurrentEmail = async function () {
         return;
     }
 
-    const result = await apiCall('getEmail', { apartment: apt });
+    const result = await apiCall('getEmail', { apartment: apt, pin: getStoredPin() });
     throwIfStaleRouteRequestContext(requestContext);
     if (result && typeof result.email !== 'undefined') {
         const span = document.getElementById("currentEmail");
