@@ -686,7 +686,7 @@
                 <label class="admin-label" id="lbl-chargesCleaning" for="chargesCleaning">Почистване <span class="charge-current"></span></label>
                 <input type="text" inputmode="decimal" id="chargesCleaning" class="admin-input" placeholder="+/- сума или 0" oninput="updateManualExpenseDraft('cleaning')">
                 <input type="text" id="chargesCleaningNote" class="admin-input expense-note" aria-label="Почистване — Основание / Бележка" placeholder="Основание / Бележка (по желание)" oninput="updateManualExpenseDraft('cleaning')">
-                <label class="admin-label" id="lbl-chargesPodrajka" for="chargesPodrajka">Поддръжка <span class="charge-current"></span></label>
+                <label class="admin-label" id="lbl-chargesPodrajka" for="chargesPodrajka" title="Натрупвани средства за бъдещи разходи по поддържането на общите части. Усвояват се чрез „Разпределяне“.">Фонд Поддръжка <span class="charge-current"></span></label>
                 <input type="text" inputmode="decimal" id="chargesPodrajka" class="admin-input" placeholder="+/- сума или 0" oninput="updateManualExpenseDraft('maintenance')">
                 <input type="text" id="chargesPodrajkaNote" class="admin-input expense-note" aria-label="Поддръжка — Основание / Бележка" placeholder="Основание / Бележка (по желание)" oninput="updateManualExpenseDraft('maintenance')">
                 <label class="admin-label" id="lbl-chargesRemont" for="chargesRemont">Ремонтен фонд <span class="charge-current"></span></label>
@@ -698,7 +698,7 @@
                 <label class="admin-label" id="lbl-chargesWater" for="chargesWater">ВиК <span class="charge-current"></span></label>
                 <input type="text" inputmode="decimal" id="chargesWater" class="admin-input" placeholder="+/- сума или 0" oninput="updateManualExpenseDraft('water')">
                 <input type="text" id="chargesWaterNote" class="admin-input expense-note" aria-label="ВиК — Основание / Бележка" placeholder="Основание / Бележка (по желание)" oninput="updateManualExpenseDraft('water')">
-                <label class="admin-label" id="lbl-chargesPlatformSubscription" for="chargesPlatformSubscription">Абонамент Платформа <span class="charge-current"></span></label>
+                <label class="admin-label" id="lbl-chargesPlatformSubscription" for="chargesPlatformSubscription" title="Разходи за софтуерни абонаменти, консумативни материали, свързани с управлението, възнаграждения на членовете на управителните и на контролните органи и на касиера.">Управление <span class="charge-current"></span></label>
                 <input type="text" inputmode="decimal" id="chargesPlatformSubscription" class="admin-input" placeholder="+/- сума или 0" oninput="updateManualExpenseDraft('platformSubscription')">
                 <input type="text" id="chargesPlatformSubscriptionNote" class="admin-input expense-note" aria-label="Абонамент Платформа — Основание / Бележка" placeholder="Основание / Бележка (по желание)" oninput="updateManualExpenseDraft('platformSubscription')">
                 <p id="chargesFeedback" role="status" aria-live="polite" hidden></p>
@@ -1807,12 +1807,14 @@
                                 <tr>
                                     <th>Период</th>
                                     <th>Асансьор ел.</th>
-                                    <th>Асансьор абон. и др.</th>
+                                    <th>Абонамент</th>
                                     <th>Осв.</th>
                                     <th>Охрана</th>
                                     <th>Почистване</th>
-                                    <th>Поддръжка</th>
+                                    <th>Фонд Поддръжка</th>
                                     <th>Фонд Рем.</th>
+                                    <th>ВиК</th>
+                                    <th>Управление</th>
                                     <th>Дължимо</th>
                                     <th>Платено</th>
                                 </tr>
@@ -1914,7 +1916,7 @@
                             <div style="margin-bottom: 20px;">
                                 <h4
                                     style="border-bottom: 1px solid #eee; padding-bottom: 5px; font-size: 14px; text-transform: uppercase;">
-                                    I. Начислени разходи (Задължения към входа)</h4>
+                                    I. Начислени суми по пера</h4>
                                 <table
                                     style="width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px;">
                                     <tbody id="report-invoiced-rows">
@@ -1922,7 +1924,11 @@
                                     </tbody>
                                     <tfoot>
                                         <tr style="font-weight: bold; border-top: 1px solid #333;">
-                                            <td style="padding: 10px 0;">ОБЩО НАЧИСЛЕНИ РАЗХОДИ:</td>
+                                            <td style="padding: 10px 0;">ОБЩО ПО ПЕРА:</td>
+                                            <td id="report-total-categories" style="text-align: right;"></td>
+                                        </tr>
+                                        <tr style="font-weight: bold;">
+                                            <td style="padding: 10px 0;">ОБЩО НАЧИСЛЕНО ПО АПАРТАМЕНТИ:</td>
                                             <td id="report-total-invoiced" style="text-align: right; padding: 10px 0;">
                                                 0.00 EUR</td>
                                         </tr>

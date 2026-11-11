@@ -1144,6 +1144,63 @@ async function loadDashboardData() {
     }
 }
 
+// Historical projections without an explicit individual breakdown are not proof
+// of category amounts. Preserve actual due/paid and display unknowns separately.
+function individualReportView_(record) {
+    const due = Number(record.totalDue ?? record.due ?? 0);
+    const categories = {};
+    const marked = record.breakdownStatus === 'COMPLETE' || record.breakdownStatus === 'INCOMPLETE';
+    chargeLabelsMap.forEach(category => {
+        const value = record.categories ? record.categories[category.key] : Object.hasOwn(record, category.key) ? record[category.key] : record[category.legacyKey];
+        categories[category.key] = marked && typeof value === 'number' && Number.isFinite(value) ? value : null;
+    });
+    const knownTotal = Object.values(categories).reduce((sum, value) => sum + (value === null ? 0 : value), 0);
+    const rounding = record.roundingAdjustment ?? 0;
+    const legacy = record.breakdownLayout === 'LEGACY_SEVEN';
+    const absent = key => legacy && (key === 'water' || key === 'platformSubscription');
+    const magnitude = Object.values(categories).reduce((total,value)=>total+Math.abs(value||0),0);
+    const complete = marked && record.breakdownStatus === 'COMPLETE' && typeof rounding === 'number' && Number.isFinite(rounding) &&
+        Math.abs(rounding)<0.01 && Object.entries(categories).every(([key,value]) => absent(key)?value===null:value!==null) &&
+        Math.abs(knownTotal + rounding - due) <= Math.min(1e-7,32*Number.EPSILON*Math.max(1,magnitude,Math.abs(due)));
+    const cents = value => Math.round(Number(value.toFixed(2))*100);
+    const displayCategoryCents = Object.fromEntries(Object.entries(categories).filter(([,value])=>value!==null).map(([key,value]) => {
+        const proposed = record.displayCategoryCents && record.displayCategoryCents[key];
+        return [key,complete && Number.isSafeInteger(proposed) && Math.abs(proposed/100-value)<=0.0050000001 ? proposed : cents(value)];
+    }));
+    return Object.assign({}, record, categories, {
+        period: record.periodId || record.period,
+        categories, podrajka:categories.maintenance, remont:categories.repairFund,
+        due, paid:Number(record.receivedPaid ?? record.totalPaid ?? record.paid ?? 0),
+        postedPaid:Number(record.postedPaid ?? record.totalPaid ?? record.paid ?? 0),
+        categoryTotal:knownTotal, unresolvedDue:complete ? 0 : due - knownTotal,
+        displayCategoryCents,
+        displayRoundingAdjustment:complete ? (cents(due)-Object.values(displayCategoryCents).reduce((sum,value)=>sum+value,0))/100 : null,
+        breakdownStatus:complete ? 'COMPLETE' : 'INCOMPLETE'
+    });
+}
+
+function individualCategoryCells_(record) {
+    const view = individualReportView_(record);
+    return chargeLabelsMap.map(({key}) => '<td>' + (view.categories[key] !== null ? (view.displayCategoryCents[key]/100).toFixed(2) :
+        view.breakdownLayout === 'LEGACY_SEVEN' && (key === 'water' || key === 'platformSubscription') ? 'Няма перо в този MASTER' : 'Неудостоверено') + '</td>').join('');
+}
+
+function individualBreakdownNotice_(record) {
+    const view = individualReportView_(record);
+    if (view.breakdownStatus === 'COMPLETE') return view.displayRoundingAdjustment ? 'Закръгляване: ' + view.displayRoundingAdjustment.toFixed(2) : '';
+    return 'Непълна индивидуална разбивка. Неудостоверена по пера част от начислението: ' + view.unresolvedDue.toFixed(2) + '. Това не е допълнително начисление.';
+}
+
+async function readIndividualReportSource_(rows, routeKey, apartmentId) {
+    // Pre-upgrade documents may contain the old estimated components. Use the
+    // existing public, route-bound reader as one coherent snapshot until sync.
+    const current = row => row.breakdownLayout === 'CANONICAL_NINE' || row.breakdownLayout === 'LEGACY_SEVEN';
+    if (rows.length && rows.every(current)) return null;
+    const fresh = await apiCall('apartment', {routeKey, apartment:apartmentId});
+    if (fresh && (fresh.isHardBlocked || fresh.showMessage)) return fresh;
+    return fresh && !fresh.error && Array.isArray(fresh.periods) && fresh.periods.length && fresh.periods.every(current) ? fresh : null;
+}
+
 let myChart = null;
 function initChart(data) {
     const ctx = document.getElementById('trendChart').getContext('2d');
@@ -1297,21 +1354,10 @@ async function loadApartmentFromFirebase(routeKey, apartmentId) {
     return dA - dB;
   });
 
-  result.periods = rawPeriods.map(p => {
-    const d = p.details || {};
-    return {
-      period: p.periodId || p.period,
-      elevator: Number(d["Асансьор"] || p.elevator || 0),
-      subscription: Number(d["Абонамент"] || p.subscription || 0),
-      light: Number(d["Ток"] || p.light || 0),
-      security: Number(d["Вход"] || p.security || 0),
-      cleaning: Number(d["Чистач"] || p.cleaning || 0),
-      podrajka: Number(d["Поддръжка"] || p.podrajka || 0),
-      remont: Number(d["Ремонт"] || p.remont || 0),
-      due: Number(p.totalDue || p.due || 0),
-      paid: Number(p.receivedPaid ?? p.totalPaid ?? p.paid ?? 0) // MAINTENANCE_RECEIPT_UI
-    };
-  });
+  const fresh = await readIndividualReportSource_(rawPeriods, routeKey, apartmentId);
+  if (fresh && fresh.error) return fresh;
+  if (fresh) return Object.assign(result, fresh, {periods:fresh.periods.map(individualReportView_)});
+  result.periods = rawPeriods.map(individualReportView_);
 
   return result;
 }
@@ -1337,7 +1383,7 @@ async function loadApartmentData(apartment) {
     if (isHardBlocked) {
         document.getElementById("saldo").textContent = "Спрян достъп";
         const tBody = document.getElementById("tableBody");
-        if (tBody) tBody.innerHTML = '<tr><td colspan="10" style="text-align:center; color:#e74c3c;">⚠️ Достъпът е напълно спрян поради неплатен абонамент.</td></tr>';
+        if (tBody) tBody.innerHTML = '<tr><td colspan="12" style="text-align:center; color:#e74c3c;">⚠️ Достъпът е напълно спрян поради неплатен абонамент.</td></tr>';
         showToast("Достъпът до входа е напълно спрян поради неплатен абонамент", "error");
         return;
     }
@@ -1347,7 +1393,7 @@ async function loadApartmentData(apartment) {
         document.getElementById("saldo").textContent = "Скрит";
         // Скриваме таблицата с периодите
         const tBody = document.getElementById("tableBody");
-        if (tBody) tBody.innerHTML = '<tr><td colspan="10" style="text-align:center; color:#e74c3c;">⚠️ Информацията е скрита поради неплатен абонамент.</td></tr>';
+        if (tBody) tBody.innerHTML = '<tr><td colspan="12" style="text-align:center; color:#e74c3c;">⚠️ Информацията е скрита поради неплатен абонамент.</td></tr>';
         showToast("Информацията за салдото Ви не се показва поради неплатен абонамент", "error");
         return;
     }
@@ -1396,20 +1442,19 @@ async function loadApartmentData(apartment) {
                 const tr = document.createElement("tr");
                 tr.innerHTML = `
                 <td>${r.period}</td>
-                <td>${Number(r.elevator || 0).toFixed(2)}</td>
-                <td>${Number(r.subscription || 0).toFixed(2)}</td>
-                <td>${Number(r.light || 0).toFixed(2)}</td>
-                <td>${Number(r.security || 0).toFixed(2)}</td>
-                <td>${Number(r.cleaning || 0).toFixed(2)}</td>
-                <td>${Number(r.podrajka || 0).toFixed(2)}</td>
-                <td>${Number(r.remont || 0).toFixed(2)}</td>
+                ${individualCategoryCells_(r)}
                 <td>${Number(r.due || 0).toFixed(2)}</td>
                 <td>${Number(r.paid || 0).toFixed(2)}</td>
             `;
                 tBody.appendChild(tr);
+                if (individualBreakdownNotice_(r)) {
+                    const notice = document.createElement("tr");
+                    const cell = document.createElement("td"); cell.colSpan = 12;
+                    cell.textContent = individualBreakdownNotice_(r); notice.appendChild(cell); tBody.appendChild(notice);
+                }
             });
         } else {
-            tBody.innerHTML = '<tr><td colspan="10" style="text-align:center;">Няма налични данни за избрания апартамент.</td></tr>';
+            tBody.innerHTML = '<tr><td colspan="12" style="text-align:center;">Няма налични данни за избрания апартамент.</td></tr>';
         }
 
         // --- ПЕРСОНАЛНО СЪОБЩЕНИЕ ЗА АПАРТАМЕНТА ---
@@ -1785,11 +1830,18 @@ const chargeLabelsMap = [
     { labelId: 'lbl-chargesLight',        name: 'Ток',         key: 'light' },
     { labelId: 'lbl-chargesSecurity',     name: 'Охрана',       key: 'security' },
     { labelId: 'lbl-chargesCleaning',     name: 'Почистване',   key: 'cleaning' },
-    { labelId: 'lbl-chargesPodrajka',     name: 'Поддръжка',    key: 'maintenance', legacyKey: 'podrajka' },
+    { labelId: 'lbl-chargesPodrajka',     name: 'Фонд Поддръжка', key: 'maintenance', legacyKey: 'podrajka' },
     { labelId: 'lbl-chargesRemont',       name: 'Ремонтен фонд', key: 'repairFund', legacyKey: 'remont' },
     { labelId: 'lbl-chargesWater',        name: 'ВиК',         key: 'water' },
-    { labelId: 'lbl-chargesPlatformSubscription', name: 'Абонамент Платформа', key: 'platformSubscription' }
+    { labelId: 'lbl-chargesPlatformSubscription', name: 'Управление', key: 'platformSubscription' }
 ];
+
+function reportChargeDisplayName_(key) {
+    const canonical = key === 'Поддръжка' ? 'maintenance' :
+        key === 'Абонамент Платформа' || key === 'Платформа' ? 'platformSubscription' : key;
+    const category = chargeLabelsMap.find(item => item.key === canonical || item.legacyKey === canonical);
+    return category ? category.name : key;
+}
 
 function updateChargeLabel(labelId, name, value) {
     const lbl = document.getElementById(labelId);
@@ -1842,24 +1894,10 @@ window.loadCurrentCharges = async function () {
     setChargeLabelsLoading();
 
     try {
-        // Четем директно от Firebase колекция buildingCharges — мигновено
-        const { routeDoc, getDoc } = window.fb;
-        const db = window.db;
-
-        // Опитваме да вземем конкретния документ по ID
-        const docId = currentRouteKey + "_" + period;
-        const docRef = routeDoc(db, "buildingCharges", docId, currentRouteKey);
-        const snap = await getDoc(docRef);
+        const data = await apiCall('getChargesForPeriod', {period, pin:getStoredPin()});
         throwIfStaleRouteRequestContext(requestContext);
-
-        if (snap.exists()) {
-            const data = snap.data();
-            chargeLabelsMap.forEach(c => updateChargeLabel(c.labelId, c.name,
-                Object.prototype.hasOwnProperty.call(data, c.key) ? data[c.key] : data[c.legacyKey]));
-        } else {
-            // Няма записани глобални начисления за този период
-            chargeLabelsMap.forEach(c => updateChargeLabel(c.labelId, c.name, null));
-        }
+        chargeLabelsMap.forEach(c => updateChargeLabel(c.labelId, c.name,
+            data?.success && !data.notFound ? data[c.key] ?? data[c.legacyKey] : null));
     } catch (e) {
         if (isStaleRouteRequestError(e)) return;
         console.error('loadCurrentCharges error:', e);
@@ -3265,6 +3303,21 @@ window.openMonthlyReport = function () {
     document.getElementById("report-content").style.display = "none";
 }
 
+async function loadReportChargeSummary_(fromPeriod, toPeriod) {
+    const result = await apiCall('getReportChargeSummary', {fromPeriod, toPeriod});
+    return result?.success && result.months > 0 ? result : null;
+}
+
+function reportCategoryTableRows_(summary, currency) {
+    if (!summary) return '<tr><td colspan="2">Сумите по пера не са потвърдени.</td></tr>';
+    return chargeLabelsMap.map(category => {
+        const value = summary.categories[category.key];
+        if (value === null || value === undefined) return '';
+        return '<tr><td>' + reportEscape_(category.name) + '</td><td style="text-align:right;">' +
+            value.toFixed(2) + ' ' + reportEscape_(currency) + '</td></tr>';
+    }).join('');
+}
+
 async function loadMonthlyReportFromFirebase(routeKey, period) {
   const { collection, getDocs, query, where } = window.fb;
   const db = window.db;
@@ -3275,40 +3328,20 @@ async function loadMonthlyReportFromFirebase(routeKey, period) {
     where("periodId", "==", period)
   );
 
-  const snapshot = await getDocs(q);
+  const [snapshot, chargeSummary] = await Promise.all([
+    getDocs(q),
+    loadReportChargeSummary_(period, period)
+  ]);
 
   let totalInvoiced = 0;
   let totalCollected = 0;
-
   const rows = [];
-  
-  let invoicedCounts = {
-      elevator: 0, subscription: 0, light: 0,
-      security: 0, cleaning: 0, podrajka: 0, remont: 0
-  };
-
   snapshot.forEach(doc => {
     const d = doc.data();
-
-    const due = Number(d.totalDue || d.due || 0);
-    const paid = Number(d.receivedPaid ?? d.totalPaid ?? d.paid ?? 0); // MAINTENANCE_RECEIPT_UI
-
-    totalInvoiced += due;
-    totalCollected += paid;
-
-    const det = d.details || {};
-    invoicedCounts.elevator += Number(det["Асансьор"] || d.elevator || 0);
-    invoicedCounts.subscription += Number(det["Абонамент"] || d.subscription || 0);
-    invoicedCounts.light += Number(det["Ток"] || d.light || 0);
-    invoicedCounts.security += Number(det["Вход"] || d.security || 0);
-    invoicedCounts.cleaning += Number(det["Чистач"] || d.cleaning || 0);
-    invoicedCounts.podrajka += Number(det["Поддръжка"] || d.podrajka || 0);
-    invoicedCounts.remont += Number(det["Ремонт"] || d.remont || 0);
-
+    totalInvoiced += Number(d.totalDue || d.due || 0);
+    totalCollected += Number(d.receivedPaid ?? d.totalPaid ?? d.paid ?? 0); // MAINTENANCE_RECEIPT_UI
     rows.push(d);
   });
-  
-  invoicedCounts.total = totalInvoiced;
 
   // Външни приходи (V2) за същия период
   let incomesV2 = [];
@@ -3352,7 +3385,8 @@ async function loadMonthlyReportFromFirebase(routeKey, period) {
   return {
     success: true,
     data: {
-      invoiced: invoicedCounts,
+      invoiced: {...chargeSummary?.categories, total:totalInvoiced},
+      chargeSummary: chargeSummary,
       collected: totalCollected,
       logic: rows[0] ? (rows[0].logic || 'Равно') : 'Равно', // Взимаме логиката от първия запис
       incomesV2: incomesV2,
@@ -3395,31 +3429,9 @@ window.generateReport = async function () {
             document.getElementById("report-gen-date").textContent = new Date().toLocaleDateString('bg-BG');
 
             const tableBody = document.getElementById("report-invoiced-rows");
-            tableBody.innerHTML = "";
-
-            const labels = {
-                elevator: "Разходи за Асансьор ел.",
-
-                subscription: "Асансьор абон. и др.",
-                light: "Електрическа енергия - общи части",
-                security: "Охрана / Консиерж",
-                cleaning: "Хигиена и почистване",
-                podrajka: "Поддръжка на общи части",
-                remont: 'Фонд \u201eРемонт и обновяване\u201c'
-            };
-
-            for (let key in labels) {
-                const val = d.invoiced[key] || 0;
-                if (val > 0) {
-                    const tr = document.createElement("tr");
-                    tr.innerHTML = `
-                        <td style="padding: 10px 0; border-bottom: 1px dashed #eee;">${labels[key]}</td>
-                        <td style="text-align: right; padding: 10px 0; border-bottom: 1px dashed #eee;">${val.toFixed(2)} EUR</td>
-                    `;
-                    tableBody.appendChild(tr);
-                }
-            }
-
+            tableBody.innerHTML = reportCategoryTableRows_(d.chargeSummary, "EUR");
+            document.getElementById("report-total-categories").textContent =
+                d.chargeSummary ? d.chargeSummary.total.toFixed(2) + " EUR" : "Няма потвърдени данни";
             document.getElementById("report-total-invoiced").textContent = d.invoiced.total.toFixed(2) + " EUR";
 
             // Populate V2 Incomes table in Section II
@@ -4110,31 +4122,51 @@ window.calcApartmentRangeReport = async function() {
         const { collection, getDocs, query, where } = window.fb;
         const db = window.db;
         const q = query(collection(db, "monthlyReports"), where("buildingId", "==", currentRouteKey), where("apartmentId", "==", apt));
-        const snap = await getDocs(q);
+        const [snap, chargeSummary] = await Promise.all([
+            getDocs(q),
+            loadReportChargeSummary_(fromPeriod, toPeriod)
+        ]);
         throwIfStaleRouteRequestContext(requestContext);
 
-        let totalDue = 0, totalPaid = 0, monthsCount = 0;
+        let totalDue = 0, totalPaid = 0, totalPostedPaid = 0, monthsCount = 0;
+        const individualRows = [];
         const fromN = periodToSortableClient(fromPeriod);
         const toN = periodToSortableClient(toPeriod);
-        snap.forEach(d => {
-            const r = d.data();
-            const pN = periodToSortableClient(r.periodId);
+        const cachedRows = [];
+        snap.forEach(d => cachedRows.push(d.data()));
+        const fresh = await readIndividualReportSource_(cachedRows, currentRouteKey, apt);
+        throwIfStaleRouteRequestContext(requestContext);
+        if (fresh && fresh.error) { resultEl.textContent = fresh.error; return; }
+        (fresh ? fresh.periods : cachedRows).forEach(r => {
+            const pN = periodToSortableClient(r.periodId || r.period);
             if (pN >= fromN && pN <= toN) {
-                totalDue += parseFloat(r.totalDue) || 0;
-                totalPaid += parseFloat(r.totalPaid) || 0;
+                const view = individualReportView_(r);
+                totalDue += view.due;
+                totalPaid += view.paid;
+                totalPostedPaid += view.postedPaid;
                 monthsCount++;
+                individualRows.push(view);
             }
         });
 
         const currency = sessionStorage.getItem("currency_" + currentRouteKey) || "EUR";
-        const diff = totalDue - totalPaid;
+        const diff = totalDue - totalPostedPaid;
         const diffColor = diff > 0.01 ? "value-red" : "value-green";
         resultEl.innerHTML = `
             <div style="display:flex; flex-direction:column; gap:4px;">
                 <div>Периоди в диапазона: <strong>${monthsCount}</strong></div>
                 <div>Общо начислено: <strong>${totalDue.toFixed(2)} ${currency}</strong></div>
                 <div>Общо платено: <strong class="value-green">${totalPaid.toFixed(2)} ${currency}</strong></div>
+                ${Math.abs(totalPostedPaid - totalPaid) >= 0.005 ? '<div>Други погасявания, отчетени в PAYMENTS: <strong>' + (totalPostedPaid - totalPaid).toFixed(2) + ' ' + reportEscape_(currency) + '</strong></div>' : ''}
                 <div>Разлика за диапазона: <strong class="${diffColor}">${diff.toFixed(2)} ${currency}</strong></div>
+            </div>
+            <div>
+                <strong>Индивидуална разбивка на апартамента</strong>
+                <table><thead><tr><th>Период</th>${chargeLabelsMap.map(category => '<th>' + reportEscape_(category.name) + '</th>').join('')}<th>Дължимо</th></tr></thead>
+                <tbody>${individualRows.sort((a,b) => periodToSortableClient(a.period)-periodToSortableClient(b.period)).map(record => '<tr><td>' + reportEscape_(record.period) + '</td>' + individualCategoryCells_(record) + '<td>' + record.due.toFixed(2) + '</td></tr>' + (individualBreakdownNotice_(record) ? '<tr><td colspan="11">' + reportEscape_(individualBreakdownNotice_(record)) + '</td></tr>' : '')).join('')}</tbody></table>
+                <strong>Начислени суми по пера за целия вход</strong>
+                <table><tbody>${reportCategoryTableRows_(chargeSummary, currency)}</tbody></table>
+                ${chargeSummary ? '<div>Общо по пера: <strong>' + chargeSummary.total.toFixed(2) + ' ' + reportEscape_(currency) + '</strong></div>' : ''}
             </div>
         `;
     } catch (e) {
@@ -4637,7 +4669,7 @@ window.loadChargesV2Register = async function() {
                 <tr>
                     <td style="padding: 8px; border-bottom: 1px solid #eee;">${formatRegisterDate(r.timestamp)}</td>
                     <td style="padding: 8px; border-bottom: 1px solid #eee;">${reportEscape_(r.period)}</td>
-                    <td style="padding: 8px; border-bottom: 1px solid #eee;">${reportEscape_((chargeLabelsMap.find(e => e.key === r.category) || {}).name || r.category)}${reportDetails_(r)}</td>
+                    <td style="padding: 8px; border-bottom: 1px solid #eee;">${reportEscape_(reportChargeDisplayName_(r.category))}${reportDetails_(r)}</td>
                     <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right; font-weight: bold; color: ${amountColor};">${amountStr}</td>
                 </tr>
             `;
