@@ -1,3 +1,42 @@
+.admin-card {
+  background: #fff;
+  border-radius: 14px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+  padding: 28px 24px;
+  width: 100%;
+  max-width: 400px;
+  max-height: 90vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative;
+  animation: fadeIn 0.3s ease-out;
+}
+
+.admin-close {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  background: none;
+  border: none;
+  font-size: 22px;
+  cursor: pointer;
+  color: #999;
+}
+
+.admin-icon {
+  font-size: 40px;
+  text-align: center;
+  margin-bottom: 8px;
+}
+
+.admin-title {
+  font-size: 22px;
+  font-weight: 700;
+  text-align: center;
+  margin-bottom: 6px;
+  padding-right: 36px;
+}
+
 /* Modern CSS Variables & Resets */
 :root {
   --primary: #3b6edc;
@@ -396,6 +435,7 @@ body {
   max-width: 400px;
   max-height: 90vh;
   overflow-y: auto;
+  overflow-x: hidden;
   position: relative;
   animation: fadeIn 0.3s ease-out;
 }
@@ -422,6 +462,7 @@ body {
   font-weight: 700;
   text-align: center;
   margin-bottom: 6px;
+  padding-right: 36px;
 }
 
 .admin-subtitle {
@@ -609,13 +650,9 @@ body {
     padding: 0;
   }
 
-  .admin-card {
-    max-width: 100%;
-    max-height: 100vh;
-    height: 100%;
-    width: 100%;
-    border-radius: 0;
-    padding: 20px 16px;
+  
+    overflow-x: hidden;
+    overflow-x: hidden;
   }
 
   .content-area {
