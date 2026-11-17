@@ -453,11 +453,11 @@
                         <option value="Дарения">6. Дарения</option>
                         <option value="Други">7. Други</option>
                         <option value="Фонд ремонт">8. Фонд ремонт</option>
-                        <option value="maintenance">9. Поддръжка</option>
+                        <option value="maintenance">9. Фонд Поддръжка</option>
                     </select>
 
                     <label class="admin-label" id="lbl-v2DistAmount">Сума за разпределяне</label>
-                    <input type="number" id="v2DistAmount" class="admin-input" placeholder="0.00" step="0.01">
+                    <input type="text" inputmode="decimal" id="v2DistAmount" class="admin-input" placeholder="0.00">
 
                     <label class="admin-label">Основание / Бележка</label>
                     <textarea id="v2DistNote" class="admin-input" placeholder="Кратко описание..." style="min-height: 60px;"></textarea>
@@ -513,7 +513,7 @@
                     </select>
 
                     <label class="admin-label">Сума <span id="v2IncomeCurrentBal" class="charge-current" style="font-size: 11px; margin-left: 10px;"></span></label>
-                    <input type="number" id="v2IncomeAmount" class="admin-input" placeholder="0.00" step="0.01">
+                    <input type="text" inputmode="decimal" id="v2IncomeAmount" class="admin-input" placeholder="0.00">
 
                     <label class="admin-label">Номер на документ (Опционално)</label>
                     <input type="text" id="v2IncomeDoc" class="admin-input" placeholder="напр. Разписка №123">
@@ -654,18 +654,14 @@
                 <label class="admin-label">Период (MM.YYYY)</label>
                 <select id="adminPeriod" class="admin-input" onchange="loadPaymentDue()"></select>
                 <label class="admin-label">Сума <span class="charge-current" id="lbl-paymentDue"></span></label>
-                <input type="number" id="adminAmount" class="admin-input" placeholder="0.00" step="0.01">
+                <input type="text" inputmode="decimal" id="adminAmount" class="admin-input" placeholder="0.00">
                 <button class="admin-btn primary" id="payBtn" onclick="submitPayment()">Добави плащане</button>
             </div>
 
             <!-- Charges Section -->
             <div class="admin-section" data-tab="expenses">
                 <h3 id="admin-section-charges">📋 Начисления</h3>
-                <!-- BEGIN EPAY EXPENSE HELP -->
-                <p class="subtitle">Без надежден идентификатор на събитието от доставчика известието остава за ръчна обработка.</p>
-                <p class="subtitle" id="epayExpenseHelp">ePay: променливи разходи за Асансьор, Осветление / Ток и ВиК при точно разпознато описание („асансьор“, „осветление“/„етажно“, „ВиК ЕС“). Неизвестни или двусмислени описания се обработват ръчно. Отделно „Повтори“ се настройва и записва от администратора за Абонамент, Охрана, Почистване, Поддръжка и Абонамент Платформа.</p>
-                <!-- END EPAY EXPENSE HELP -->
-                <p class="subtitle" style="font-size: 12px; margin-bottom: 15px;">Въведете суми само за желаните категории. Празно поле не се записва; 0 се записва. За отрицателна сума е нужна бележка. Десетичен знак: точка.</p>
+                <p class="subtitle" style="font-size: 12px; margin-bottom: 15px;">Регистрирайте сума за избран период и категория. <span style="color: #d32f2f;">Може да се добавя или изважда (със знак -) сума за период — сторно операция.</span></p>
                 <label class="admin-label">Период (MM.YYYY)</label>
                 <select id="chargesPeriod" class="admin-input" onchange="loadCurrentCharges()"></select>
                 <label class="admin-label" id="lbl-chargesElevator" for="chargesElevator">Асансьор <span class="charge-current"></span></label>
@@ -683,34 +679,45 @@
                 <label class="admin-label" id="lbl-chargesCleaning" for="chargesCleaning">Почистване <span class="charge-current"></span></label>
                 <input type="text" inputmode="decimal" id="chargesCleaning" class="admin-input" placeholder="+/- сума или 0" oninput="updateManualExpenseDraft('cleaning')">
                 <input type="text" id="chargesCleaningNote" class="admin-input expense-note" aria-label="Почистване — Основание / Бележка" placeholder="Основание / Бележка (по желание)" oninput="updateManualExpenseDraft('cleaning')">
-                <label class="admin-label" id="lbl-chargesPodrajka" for="chargesPodrajka">Поддръжка <span class="charge-current"></span></label>
+                <label class="admin-label" id="lbl-chargesPodrajka" for="chargesPodrajka">Фонд Поддръжка <span class="charge-current"></span></label>
                 <input type="text" inputmode="decimal" id="chargesPodrajka" class="admin-input" placeholder="+/- сума или 0" oninput="updateManualExpenseDraft('maintenance')">
-                <input type="text" id="chargesPodrajkaNote" class="admin-input expense-note" aria-label="Поддръжка — Основание / Бележка" placeholder="Основание / Бележка (по желание)" oninput="updateManualExpenseDraft('maintenance')">
-                <label class="admin-label" id="lbl-chargesRemont" for="chargesRemont">Ремонтен фонд <span class="charge-current"></span></label>
+                <input type="text" id="chargesPodrajkaNote" class="admin-input expense-note" aria-label="Фонд Поддръжка — Основание / Бележка" placeholder="Основание / Бележка (по желание)" oninput="updateManualExpenseDraft('maintenance')">
+                <label class="admin-label" id="lbl-chargesRemont" for="chargesRemont">Фонд ремонт <span class="charge-current"></span></label>
                 <input type="text" inputmode="decimal" id="chargesRemont" class="admin-input" placeholder="+/- сума или 0" oninput="updateManualExpenseDraft('repairFund')">
-                <input type="text" id="chargesRemontNote" class="admin-input expense-note" aria-label="Ремонтен фонд — Основание / Бележка" placeholder="Основание / Бележка (по желание)" oninput="updateManualExpenseDraft('repairFund')">
+                <input type="text" id="chargesRemontNote" class="admin-input expense-note" aria-label="Фонд ремонт — Основание / Бележка" placeholder="Основание / Бележка (по желание)" oninput="updateManualExpenseDraft('repairFund')">
                 <div id="remontWarning" style="color: #ff9800; font-size: 0.75rem; margin-top: 4px; display:none;">
                     ⚠️ За начисления към фонд ремонт първо въведете Ид. част (%) за всеки апартамент в MASTER.
                 </div>
                 <label class="admin-label" id="lbl-chargesWater" for="chargesWater">ВиК <span class="charge-current"></span></label>
                 <input type="text" inputmode="decimal" id="chargesWater" class="admin-input" placeholder="+/- сума или 0" oninput="updateManualExpenseDraft('water')">
                 <input type="text" id="chargesWaterNote" class="admin-input expense-note" aria-label="ВиК — Основание / Бележка" placeholder="Основание / Бележка (по желание)" oninput="updateManualExpenseDraft('water')">
-                <label class="admin-label" id="lbl-chargesPlatformSubscription" for="chargesPlatformSubscription">Абонамент Платформа <span class="charge-current"></span></label>
+                <label class="admin-label" id="lbl-chargesPlatformSubscription" for="chargesPlatformSubscription">Управление <span class="charge-current"></span></label>
                 <input type="text" inputmode="decimal" id="chargesPlatformSubscription" class="admin-input" placeholder="+/- сума или 0" oninput="updateManualExpenseDraft('platformSubscription')">
-                <input type="text" id="chargesPlatformSubscriptionNote" class="admin-input expense-note" aria-label="Абонамент Платформа — Основание / Бележка" placeholder="Основание / Бележка (по желание)" oninput="updateManualExpenseDraft('platformSubscription')">
+                <input type="text" id="chargesPlatformSubscriptionNote" class="admin-input expense-note" aria-label="Управление — Основание / Бележка" placeholder="Основание / Бележка (по желание)" oninput="updateManualExpenseDraft('platformSubscription')">
                 <p id="chargesFeedback" role="status" aria-live="polite" hidden></p>
                 <button class="admin-btn orange" id="chargesBtn" onclick="submitCharges()">Запиши начисление (+/-)</button>
-                <!-- BEGIN SLICE5 RECURRING_UI -->
-                <h4>Повтарящи се месечни разходи</h4>
-                <p class="subtitle">Тук „Запази“ записва само правилото. Начисляването е след края на месеца. Ръчните корекции се записват отделно чрез полетата по-горе.</p>
-                <div id="recurringExpenseControls" aria-live="polite"></div>
-                <dialog id="recurringRepeatDialog" aria-labelledby="recurringRepeatTitle" oncancel="cancelRecurringRepeatDialog()" onclose="cancelRecurringRepeatDialog()">
-                    <h3 id="recurringRepeatTitle"></h3>
-                    <p id="recurringRepeatExplanation" style="white-space:pre-line"></p>
-                    <button type="button" class="admin-btn primary" onclick="acknowledgeRecurringRepeatDialog()">Разбрах</button>
-                    <button type="button" class="admin-btn" onclick="cancelRecurringRepeatDialog()">Отказ</button>
+            </div>
+
+            <!-- Recurring Expenses Section -->
+            <div class="admin-section recurring-section" data-tab="expenses" id="admin-section-recurring">
+                <h3 id="admin-section-recurring-title">🔄 Повтарящи се месечни разходи</h3>
+                <p class="subtitle" style="font-size: 13px; color: #64748b; margin-bottom: 16px;">Повтарящите се начисления тук са независими от Ръчните корекции, чрез полетата по-горе.</p>
+                <div id="recurringExpenseControls" class="recurring-expense-grid" aria-live="polite"></div>
+                <dialog id="recurringRepeatDialog" class="recurring-dialog" aria-labelledby="recurringRepeatTitle" oncancel="cancelRecurringRepeatDialog()" onclose="cancelRecurringRepeatDialog()">
+                    <div class="recurring-dialog-content">
+                        <div class="recurring-dialog-header">
+                            <h3 id="recurringRepeatTitle" class="recurring-dialog-title"></h3>
+                            <button type="button" class="recurring-dialog-close" aria-label="Затвори" onclick="cancelRecurringRepeatDialog()">&times;</button>
+                        </div>
+                        <div class="recurring-dialog-body">
+                            <p id="recurringRepeatExplanation" class="recurring-dialog-text"></p>
+                        </div>
+                        <div class="recurring-dialog-footer">
+                            <button type="button" class="admin-btn primary recurring-dialog-confirm" onclick="acknowledgeRecurringRepeatDialog()">Разбрах</button>
+                            <button type="button" class="admin-btn secondary recurring-dialog-cancel" onclick="cancelRecurringRepeatDialog()">Отказ</button>
+                        </div>
+                    </div>
                 </dialog>
-                <!-- END SLICE5 RECURRING_UI -->
             </div>
 
             <div class="admin-section" data-tab="expenses" style="margin-top: 20px;">
@@ -866,7 +873,7 @@
                     <label class="admin-label">Апартамент</label>
                     <select id="masterIdApt" class="admin-input" onchange="handleMasterIdAptChange()"></select>
                     <label class="admin-label">Идеални части (%)</label>
-                    <input type="number" id="masterIdVal" class="admin-input" placeholder="пр. 2.45" min="0.01" step="0.01">
+                    <input type="text" inputmode="decimal" id="masterIdVal" class="admin-input" placeholder="пр. 2.45">
                     
                     <div style="display:none;">
                         <select id="masterIdFrom" class="admin-input"></select>
@@ -1753,7 +1760,7 @@
             <!-- OLD APP CONTENT -->
             <!-- BEGIN MAINTENANCE SUMMARY -->
             <div class="glass-panel" style="padding:15px;margin:15px;">
-                <strong>Поддръжка — натрупан източник</strong>
+                <strong>Фонд Поддръжка — натрупан източник</strong>
                 <div id="maintenanceSourceSummary" role="status">Наличността не е потвърдена.</div>
             </div>
             <!-- END MAINTENANCE SUMMARY -->
@@ -1850,8 +1857,8 @@
                                     <th>Осв.</th>
                                     <th>Охрана</th>
                                     <th>Почистване</th>
-                                    <th>Поддръжка</th>
-                                    <th>Фонд Рем.</th>
+                                    <th>Фонд Поддръжка</th>
+                                    <th>Фонд ремонт</th>
                                     <th>Дължимо</th>
                                     <th>Платено</th>
                                 </tr>

@@ -1200,7 +1200,7 @@ function initChart(data) {
                     pointHoverRadius: 6
                 },
                 {
-                    label: 'Поддръжка',
+                    label: 'Фонд Поддръжка',
                     data: data.map(i => i.podrajka),
                     borderColor: '#ff2d55',
                     backgroundColor: 'rgba(255, 45, 85, 0.1)',
@@ -1651,6 +1651,11 @@ window.submitPayment = async function () {
     const period = document.getElementById("adminPeriod").value.trim();
     const amount = document.getElementById("adminAmount").value.trim();
 
+    if (amount.includes(',')) {
+        showToast("Използвайте точка (.) за десетични стойности.", "error");
+        return;
+    }
+
     if (!apt || !period || !amount) {
         showToast("Попълнете всички полета за плащане!", "error");
         return;
@@ -1834,10 +1839,10 @@ const chargeLabelsMap = [
     { labelId: 'lbl-chargesLight',        name: 'Ток',         key: 'light' },
     { labelId: 'lbl-chargesSecurity',     name: 'Охрана',       key: 'security' },
     { labelId: 'lbl-chargesCleaning',     name: 'Почистване',   key: 'cleaning' },
-    { labelId: 'lbl-chargesPodrajka',     name: 'Поддръжка',    key: 'maintenance', legacyKey: 'podrajka' },
-    { labelId: 'lbl-chargesRemont',       name: 'Ремонтен фонд', key: 'repairFund', legacyKey: 'remont' },
+    { labelId: 'lbl-chargesPodrajka',     name: 'Фонд Поддръжка', key: 'maintenance', legacyKey: 'podrajka' },
+    { labelId: 'lbl-chargesRemont',       name: 'Фонд ремонт',  key: 'repairFund', legacyKey: 'remont' },
     { labelId: 'lbl-chargesWater',        name: 'ВиК',         key: 'water' },
-    { labelId: 'lbl-chargesPlatformSubscription', name: 'Абонамент Платформа', key: 'platformSubscription' }
+    { labelId: 'lbl-chargesPlatformSubscription', name: 'Управление', key: 'platformSubscription' }
 ];
 
 function updateChargeLabel(labelId, name, value) {
@@ -1936,7 +1941,13 @@ window.updateManualExpenseDraft = function (key) {
     if (!category) return;
     const state = manualExpenseState_(), controls = manualExpenseControls_(category);
     state.draft[key] = {amount: controls.amount.value, note: controls.note.value};
-    const amount = state.draft[key].amount.trim();
+    const rawVal = state.draft[key].amount;
+    if (rawVal.includes(',')) {
+        showToast('Използвайте точка (.) за десетични стойности.', 'error');
+        state.message = 'Използвайте точка (.) за десетични стойности.';
+        renderManualExpenseState_();
+    }
+    const amount = rawVal.trim();
     controls.note.required = amount !== '' && Number.isFinite(Number(amount)) && Number(amount) < 0;
     controls.note.placeholder = controls.note.required ? 'Основание / Бележка — задължителна при отрицателна сума' : 'Основание / Бележка (по желание)';
 };
@@ -1976,6 +1987,9 @@ function buildManualExpenseOperations_(draft, period) {
         if (typeof amount !== 'string' || typeof note !== 'string' || note.length > 4096) throw new Error('Проверете сумата и бележката за ' + c.name + '.');
         const text = amount.trim();
         if (text === '') return;
+        if (text.includes(',')) {
+            throw new Error('Използвайте точка (.) за десетични стойности.');
+        }
         if (!/^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?$/.test(text) || !Number.isFinite(Number(text))) {
             throw new Error('Въведете крайна числова сума за ' + c.name + ' (десетичен знак: точка).');
         }
@@ -2059,7 +2073,7 @@ window.submitCharges = async function () {
                 confirmedCategories: Object.freeze([]), uncertainHistory: false});
         } catch (error) {
             // Only our bounded validation messages enter the ordinary UI.
-            state.message = error instanceof Error && /^(Изберете|Проверете|Въведете|Добавете)/.test(error.message) ?
+            state.message = error instanceof Error && /^(Изберете|Проверете|Въведете|Добавете|Използвайте)/.test(error.message) ?
                 error.message : 'Не може да се подготви заявката. Проверете активния вход и поддръжката на защитен UUID в браузъра.';
             renderManualExpenseState_();
             return;
@@ -2217,7 +2231,8 @@ let _currentBulkIdealPreview = null;
 
 function parseStrictPositiveIdealPart_(raw) {
     if (raw === null || raw === undefined || typeof raw === 'boolean') return null;
-    const s = String(raw).trim().replace(',', '.');
+    const s = String(raw).trim();
+    if (s.includes(',')) return null;
     if (!s || !/^[+]?\d+(?:\.\d+)?$/.test(s)) return null;
     const n = Number(s);
     if (!Number.isFinite(n) || n <= 0 || n > 100) return null;
@@ -2642,6 +2657,10 @@ window.submitMaster = async function (sheetName) {
         val = document.getElementById('masterIdVal').value;
         fromP = document.getElementById('masterIdFrom').value.trim() || "01.2000";
         toP = "12.2050";
+        if (String(val).includes(',')) {
+            showToast("Използвайте точка (.) за десетични стойности.", "error");
+            return;
+        }
         const parsedIdealVal = parseStrictPositiveIdealPart_(val);
         if (parsedIdealVal === null) {
             showToast(`Невалидна стойност за идеални части за ${apt || 'апартамента'}. Въведете положително число между 0.01% и 100.00%.`, "error");
@@ -3876,13 +3895,13 @@ window.generateReport = async function () {
 
             const labels = {
                 elevator: "Разходи за Асансьор ел.",
-
                 subscription: "Асансьор абон. и др.",
                 light: "Електрическа енергия - общи части",
                 security: "Охрана / Консиерж",
                 cleaning: "Хигиена и почистване",
-                podrajka: "Поддръжка на общи части",
-                remont: 'Фонд \u201eРемонт и обновяване\u201c'
+                podrajka: "Фонд Поддръжка",
+                remont: "Фонд ремонт",
+                platformSubscription: "Управление"
             };
 
             for (let key in labels) {
@@ -4665,6 +4684,11 @@ window.submitIncomeV2 = async function() {
 
     if (!period || !apt || !category || !amountStr) {
         showToast("Моля, попълнете Период, Платец, Категория и Сума.", "error");
+        return;
+    }
+
+    if (typeof amountStr === 'string' && amountStr.includes(',')) {
+        showToast("Използвайте точка (.) за десетични стойности.", "error");
         return;
     }
 
@@ -5568,6 +5592,11 @@ window.submitDistributionV2 = async function() {
         return;
     }
 
+    if (typeof amountStr === 'string' && amountStr.includes(',')) {
+        showToast("Използвайте точка (.) за десетични стойности.", "error");
+        return;
+    }
+
     const amount = parseFloat(amountStr);
     if (!Number.isFinite(amount) || amount <= 0) {
         showToast("Невалидна сума.", "error");
@@ -5759,3 +5788,14 @@ window.submitDistributionV2 = async function() {
         btn.textContent = originalText;
     }
 };
+
+// Global validation for decimal inputs: block comma and prompt dot separator
+document.addEventListener('input', function (e) {
+    if (!e.target) return;
+    const target = e.target;
+    if (target.inputMode === 'decimal' || target.id === 'adminAmount' || target.id === 'masterIdVal' || target.id === 'v2IncomeAmount' || target.id === 'v2DistAmount' || target.id?.startsWith('charges') || target.id?.startsWith('recurringBase_') || target.id?.startsWith('fin01')) {
+        if (typeof target.value === 'string' && target.value.includes(',')) {
+            showToast('Използвайте точка (.) за десетични стойности.', 'error');
+        }
+    }
+}, true);

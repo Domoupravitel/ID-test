@@ -20,22 +20,95 @@ function renderRecurringExpenses_() {
     const view=recurringExpenseView_();box.replaceChildren();
     if(!view.loaded){box.textContent=view.message || 'Зареждане на запазените правила…';return;}
     view.rows.forEach((row,category)=>{
-        const group=document.createElement('div'),label=document.createElement('label'),amount=document.createElement('input');
-        const check=document.createElement('input'),save=document.createElement('button'),status=document.createElement('p');
-        const name=chargeLabelsMap.find(c=>c.key===category).name;
-        label.textContent=name+' — месечна база';amount.type='text';amount.inputMode='decimal';amount.className='admin-input';
-        amount.id='recurringBase_'+category;label.htmlFor=amount.id;amount.value=row.amount;amount.placeholder='Положителна сума за повторение';
-        amount.disabled=!!row.pending || row.inFlight;amount.oninput=()=>{row.amount=amount.value;};
-        check.type='checkbox';check.id='recurringRepeat_'+category;check.checked=row.localActive;check.disabled=!!row.pending || row.inFlight;
+        const card=document.createElement('div');
+        card.className='recurring-card';
+        card.id='recurring-card-'+category;
+
+        const header=document.createElement('div');
+        header.className='recurring-card-header';
+        const title=document.createElement('h4');
+        title.className='recurring-card-title';
+        const item=chargeLabelsMap.find(c=>c.key===category);
+        const name=item ? item.name : category;
+        title.textContent=name;
+        const badge=document.createElement('span');
+        badge.className=row.committed.active ? 'recurring-badge active' : 'recurring-badge inactive';
+        badge.textContent=row.committed.active ? 'Активно ('+row.committed.baseAmount.toFixed(2)+' EUR)' : 'Неактивно';
+        header.append(title, badge);
+
+        const body=document.createElement('div');
+        body.className='recurring-card-body';
+
+        const amountGroup=document.createElement('div');
+        amountGroup.className='recurring-input-group';
+        const label=document.createElement('label');
+        label.className='admin-label';
+        label.htmlFor='recurringBase_'+category;
+        label.textContent='Месечна база (EUR)';
+
+        const amount=document.createElement('input');
+        amount.type='text';
+        amount.inputMode='decimal';
+        amount.className='admin-input recurring-amount-input';
+        amount.id='recurringBase_'+category;
+        amount.value=row.amount;
+        amount.placeholder=row.committed.active ? row.committed.baseAmount.toFixed(2) : 'пр. 15.00';
+        amount.disabled=!!row.pending || row.inFlight;
+        amount.oninput=()=>{
+            row.amount=amount.value;
+            if (amount.value.includes(',')) {
+                row.message='Използвайте точка (.) за десетични стойности.';
+                renderRecurringExpenses_();
+            }
+        };
+        amountGroup.append(label, amount);
+
+        const checkGroup=document.createElement('div');
+        checkGroup.className='recurring-checkbox-group';
+        const check=document.createElement('input');
+        check.type='checkbox';
+        check.className='recurring-checkbox';
+        check.id='recurringRepeat_'+category;
+        check.checked=row.localActive;
+        check.disabled=!!row.pending || row.inFlight;
         check.onchange=()=>requestRecurringRepeatChange_(category,check);
-        const checkLabel=document.createElement('label');checkLabel.htmlFor=check.id;checkLabel.textContent='Повтори';
-        save.type='button';save.className='admin-btn';save.textContent=row.inFlight ? 'Записване…' : row.pending ? 'Повтори същата промяна' : 'Запази';
-        save.disabled=row.inFlight;save.onclick=()=>saveRecurringExpense_(category);
-        status.textContent=(row.committed.active ? 'Повтаря се ('+row.committed.baseAmount.toFixed(2)+' EUR)' : 'Повторението не е активно.')+
-            (row.message ? ' '+row.message : '');
-        group.append(label,amount,check,checkLabel,save,status);
-        if(row.conflict){const reload=document.createElement('button');reload.type='button';reload.textContent='Зареди текущото правило';reload.onclick=()=>loadRecurringExpenseState_(category);group.append(reload);}
-        box.append(group);
+
+        const checkLabel=document.createElement('label');
+        checkLabel.className='recurring-checkbox-label';
+        checkLabel.htmlFor=check.id;
+        checkLabel.textContent='Повтори всеки месец';
+        checkGroup.append(check, checkLabel);
+
+        body.append(amountGroup, checkGroup);
+
+        const actions=document.createElement('div');
+        actions.className='recurring-card-actions';
+
+        const save=document.createElement('button');
+        save.type='button';
+        save.className='admin-btn recurring-save-btn'+(row.inFlight ? ' in-flight' : '')+(row.pending ? ' pending' : '');
+        save.textContent=row.inFlight ? 'Записване…' : row.pending ? 'Повтори същата промяна' : 'Запази';
+        save.disabled=row.inFlight;
+        save.onclick=()=>saveRecurringExpense_(category);
+
+        const status=document.createElement('p');
+        const isErr = row.conflict || (row.message && row.message.includes('Използвайте точка'));
+        status.className='recurring-status-msg'+(isErr ? ' error' : (row.message ? ' info' : ''));
+        status.textContent=row.message || (row.committed.active ? 'Повтаря се автоматично в края на всеки месец.' : 'Няма активно правило за повторение.');
+
+        actions.append(save, status);
+
+        if(row.conflict){
+            const reload=document.createElement('button');
+            reload.type='button';
+            reload.className='admin-btn secondary recurring-reload-btn';
+            reload.textContent='Зареди текущото правило';
+            reload.onclick=()=>loadRecurringExpenseState_(category);
+            actions.append(reload);
+        }
+
+        card.append(header, body, actions);
+        box.append(card);
     });
 }
 function resetRecurringExpenseView_() {
@@ -48,13 +121,21 @@ function requestRecurringRepeatChange_(category, checkbox) {
     cancelRecurringRepeatDialog();
     recurringRepeatDialog_={row,category,desired,context:captureFinancialOperationContext()};
     const copy=desired ? recurringRepeatExplanations_.on : recurringRepeatExplanations_.off;
+    const dialog=document.getElementById('recurringRepeatDialog');
+    if(dialog && !dialog.dataset.clickBound) {
+        dialog.dataset.clickBound = 'true';
+        dialog.addEventListener('click', (e) => {
+            if (e.target === dialog) cancelRecurringRepeatDialog();
+        });
+    }
     document.getElementById('recurringRepeatTitle').textContent=copy.title;
     document.getElementById('recurringRepeatExplanation').textContent=copy.text;
-    document.getElementById('recurringRepeatDialog').showModal();
+    dialog.showModal();
 }
 function acknowledgeRecurringRepeatDialog() {
     const pending=recurringRepeatDialog_;recurringRepeatDialog_=null;
-    document.getElementById('recurringRepeatDialog').close();
+    const dialog=document.getElementById('recurringRepeatDialog');
+    if(dialog && dialog.open)dialog.close();
     if(!pending || !isFinancialOperationContextCurrent(pending.context) || pending.row.pending || pending.row.inFlight)return;
     pending.row.localActive=pending.desired;pending.row.message='Незапазена промяна. Натиснете „Запази“.';
     renderRecurringExpenses_();
@@ -85,7 +166,13 @@ async function saveRecurringExpense_(category) {
     if(!row.pending){
         const period=document.getElementById('chargesPeriod').value;
         if(!/^(0[1-9]|1[0-2])\.(20[0-4][0-9]|2050)$/.test(period)){row.message='Изберете валиден период.';renderRecurringExpenses_();return;}
-        const text=row.amount.trim(),amount=Number(text);
+        const text=row.amount.trim();
+        if (text.includes(',')) {
+            row.message='Използвайте точка (.) за десетични стойности.';
+            renderRecurringExpenses_();
+            return;
+        }
+        const amount=Number(text);
         if(row.localActive && (!/^[+]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?$/.test(text) || !Number.isFinite(amount) || amount<=0)){
             row.message='За „Повтори“ въведете положителна сума. Нула и отрицателни суми не създават правило.';renderRecurringExpenses_();return;}
         if(!row.localActive && !row.committed.active){row.message='Няма активно правило за спиране.';renderRecurringExpenses_();return;}

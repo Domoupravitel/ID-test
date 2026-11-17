@@ -56,6 +56,7 @@ async function submitMaintenanceDistributionIfSelected_() {
     try{
         if(!pending){
             const text=document.getElementById('v2DistAmount').value;
+            if(typeof text==='string'&&text.includes(','))throw Error('Използвайте точка (.) за десетични стойности.');
             if(typeof text!=='string'||!/^\d+(?:\.\d{1,2})?$/.test(text))throw Error('Въведете положителна сума с до два десетични знака.');
             const parts=text.split('.'),amountCents=Number(parts[0])*100+Number((parts[1]||'').padEnd(2,'0'));
             if(!Number.isSafeInteger(amountCents)||amountCents<=0)throw Error('Невалидна сума.');

@@ -1604,3 +1604,365 @@ body {
     margin-top: 30px;
   }
 }
+
+/* ==========================================================================
+   RECURRING EXPENSES STYLING, CARDS & RESPONSIVE DIALOG
+   ========================================================================== */
+.recurring-section {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 22px;
+  margin-top: 24px;
+  margin-bottom: 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.recurring-expense-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.recurring-card {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.recurring-card:hover {
+  border-color: #94a3b8;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.08);
+}
+
+.recurring-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #f1f5f9;
+  padding-bottom: 8px;
+}
+
+.recurring-card-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.recurring-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 12px;
+  white-space: nowrap;
+}
+
+.recurring-badge.active {
+  background: #dcfce7;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+}
+
+.recurring-badge.inactive {
+  background: #f1f5f9;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
+}
+
+.recurring-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.recurring-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.recurring-input-group .admin-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  margin: 0;
+}
+
+.recurring-amount-input {
+  margin: 0 !important;
+  padding: 8px 12px !important;
+  font-size: 14px !important;
+  border: 1px solid #cbd5e1 !important;
+  border-radius: 6px !important;
+  background: #f8fafc !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+.recurring-amount-input:focus {
+  border-color: #2563eb !important;
+  background: #ffffff !important;
+  outline: none !important;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2) !important;
+}
+
+.recurring-checkbox-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.recurring-checkbox {
+  width: 18px;
+  height: 18px;
+  accent-color: #2563eb;
+  cursor: pointer;
+  margin: 0;
+}
+
+.recurring-checkbox-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #1e293b;
+  cursor: pointer;
+  user-select: none;
+  margin: 0;
+}
+
+.recurring-card-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 8px;
+  border-top: 1px solid #f1f5f9;
+}
+
+/* Save Button - High contrast, explicit active/hover/focus/disabled states */
+.recurring-save-btn {
+  background: #2563eb !important;
+  color: #ffffff !important;
+  border: 1px solid #1d4ed8 !important;
+  padding: 10px 16px !important;
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  border-radius: 6px !important;
+  cursor: pointer !important;
+  margin-top: 0 !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  text-align: center !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08) !important;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.05s ease !important;
+  min-height: 40px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.recurring-save-btn:hover:not(:disabled) {
+  background: #1d4ed8 !important;
+  border-color: #1e40af !important;
+}
+
+.recurring-save-btn:active:not(:disabled) {
+  background: #1e40af !important;
+  transform: scale(0.99) !important;
+}
+
+.recurring-save-btn:focus-visible {
+  outline: 2px solid #60a5fa !important;
+  outline-offset: 2px !important;
+}
+
+.recurring-save-btn:disabled {
+  background: #94a3b8 !important;
+  border-color: #cbd5e1 !important;
+  color: #f8fafc !important;
+  cursor: not-allowed !important;
+  opacity: 0.7 !important;
+  box-shadow: none !important;
+}
+
+.recurring-save-btn.in-flight {
+  background: #d97706 !important;
+  border-color: #b45309 !important;
+  cursor: wait !important;
+}
+
+.recurring-save-btn.pending {
+  background: #d97706 !important;
+  border-color: #b45309 !important;
+}
+
+.recurring-reload-btn {
+  margin-top: 4px !important;
+  padding: 8px 12px !important;
+  font-size: 12px !important;
+  min-height: 36px !important;
+}
+
+.recurring-status-msg {
+  font-size: 12px;
+  line-height: 1.4;
+  color: #64748b;
+  margin: 0;
+  min-height: 18px;
+}
+
+.recurring-status-msg.info {
+  color: #0284c7;
+  font-weight: 500;
+}
+
+.recurring-status-msg.error {
+  color: #dc2626;
+  font-weight: 600;
+}
+
+/* Modal Dialog Responsiveness */
+#recurringRepeatDialog {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 12px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2), 0 10px 10px -5px rgba(0, 0, 0, 0.1);
+  background: #ffffff;
+  color: #1e293b;
+  width: 90vw;
+  max-width: 440px;
+  max-height: 85vh;
+  max-height: 85dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 10000;
+}
+
+#recurringRepeatDialog:not([open]) {
+  display: none;
+}
+
+#recurringRepeatDialog::backdrop {
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(2px);
+}
+
+.recurring-dialog-content {
+  display: flex;
+  flex-direction: column;
+  max-height: 85dvh;
+  height: 100%;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.recurring-dialog-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #f8fafc;
+  flex-shrink: 0;
+}
+
+.recurring-dialog-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.recurring-dialog-close {
+  background: transparent;
+  border: none;
+  font-size: 26px;
+  line-height: 1;
+  color: #64748b;
+  cursor: pointer;
+  padding: 2px 8px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 36px;
+  min-height: 36px;
+}
+
+.recurring-dialog-close:hover {
+  color: #0f172a;
+  background: #e2e8f0;
+}
+
+.recurring-dialog-body {
+  padding: 18px 20px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  flex: 1 1 auto;
+}
+
+.recurring-dialog-text {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: #334155;
+  white-space: pre-line;
+}
+
+.recurring-dialog-footer {
+  display: flex;
+  gap: 10px;
+  padding: 14px 20px;
+  border-top: 1px solid #e2e8f0;
+  background: #f8fafc;
+  flex-shrink: 0;
+}
+
+.recurring-dialog-footer .admin-btn {
+  margin-top: 0 !important;
+  min-height: 44px;
+  padding: 10px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  flex: 1;
+}
+
+@media (max-width: 480px) {
+  #recurringRepeatDialog {
+    width: 94vw;
+    max-width: 94vw;
+    border-radius: 10px;
+  }
+  .recurring-dialog-header {
+    padding: 12px 16px;
+  }
+  .recurring-dialog-body {
+    padding: 14px 16px;
+  }
+  .recurring-dialog-text {
+    font-size: 13px;
+  }
+  .recurring-dialog-footer {
+    padding: 12px 16px;
+    flex-direction: column-reverse;
+  }
+  .recurring-dialog-footer .admin-btn {
+    width: 100%;
+    min-height: 44px;
+  }
+}
+

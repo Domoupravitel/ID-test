@@ -24,6 +24,7 @@ async function fin01RefreshPaymentView_() {
     }catch(error){if(isFinancialOperationContextCurrent(context)){fin01PaymentView_().message='Режимът за плащане не може да бъде потвърден.';fin01RenderPayment_();}}
 }
 function fin01UiAmount_(text) {
+    if(typeof text==='string'&&text.includes(','))throw Error('Използвайте точка (.) за десетични стойности.');
     if(typeof text!=='string'||!/^\d+(?:\.\d{1,2})?$/.test(text.trim()))throw Error('Въведете положителна сума с до две цифри след десетичната точка.');
     const value=Number(text.trim());if(!Number.isFinite(value)||value<=0)throw Error('Въведете положителна сума.');return value;
 }
