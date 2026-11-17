@@ -2198,6 +2198,12 @@ window.switchMasterTab = function (tab, btn) {
     if (pane) pane.style.display = "block";
     btn.classList.add("active");
 
+    if (tab === 'idealni') {
+        if (typeof window.refreshIdealPartsTabState === 'function') {
+            window.refreshIdealPartsTabState();
+        }
+    }
+
     if (tab === 'zues') {
         // Синьо когато е активно
         btn.style.background = "var(--primary)";
@@ -2206,6 +2212,377 @@ window.switchMasterTab = function (tab, btn) {
         switchZuesSubTab('z-book');
     }
 }
+
+let _currentBulkIdealPreview = null;
+
+function parseStrictPositiveIdealPart_(raw) {
+    if (raw === null || raw === undefined || typeof raw === 'boolean') return null;
+    const s = String(raw).trim().replace(',', '.');
+    if (!s || !/^[+]?\d+(?:\.\d+)?$/.test(s)) return null;
+    const n = Number(s);
+    if (!Number.isFinite(n) || n <= 0 || n > 100) return null;
+    return Math.round(n * 10000) / 10000;
+}
+
+window.handleMasterIdAptChange = function () {
+    const aptSel = document.getElementById("masterIdApt");
+    const valInput = document.getElementById("masterIdVal");
+    if (!aptSel || !valInput) return;
+    const apt = normalizeAptName(aptSel.value);
+    const currentVal = _currentIdealParts && _currentIdealParts[apt] !== undefined
+        ? parseStrictPositiveIdealPart_(_currentIdealParts[apt])
+        : null;
+    valInput.value = currentVal !== null ? String(currentVal) : "";
+};
+
+window.refreshIdealPartsTabState = async function () {
+    const requestContext = captureRouteRequestContext();
+    const statusBox = document.getElementById("idealPartsCurrentStatus");
+    try {
+        const res = await apiCall('getBuildingIdealParts', { pin: getStoredPin() });
+        throwIfStaleRouteRequestContext(requestContext);
+        if (!res || !res.success) return;
+        _currentIdealParts = res.parts || {};
+
+        const aptSel = document.getElementById("masterIdApt");
+        const valInput = document.getElementById("masterIdVal");
+        if (aptSel && valInput && document.activeElement !== valInput) {
+            const selectedApt = normalizeAptName(aptSel.value);
+            const cur = parseStrictPositiveIdealPart_(_currentIdealParts[selectedApt]);
+            valInput.value = cur !== null ? String(cur) : "";
+        }
+
+        const apts = (Array.isArray(apartmentList) && apartmentList.length > 0)
+            ? apartmentList.map(a => normalizeAptName(a))
+            : Object.keys(_currentIdealParts);
+        const totalApts = apts.length;
+        let popCount = 0;
+        let scaledSum = 0;
+        apts.forEach(a => {
+            const v = parseStrictPositiveIdealPart_(_currentIdealParts[a]);
+            if (v !== null) {
+                popCount++;
+                scaledSum += Math.round(v * 10000);
+            }
+        });
+        const totalSum = Math.round(scaledSum) / 10000;
+        const deviation = Math.round(scaledSum - 1000000) / 10000;
+        const allPopulated = totalApts > 0 && popCount === totalApts;
+        const sumValid = allPopulated && Math.abs(deviation) <= 0.0001;
+        const devStr = (deviation > 0 ? "+" : "") + deviation.toFixed(2) + "%";
+
+        if (statusBox) {
+            statusBox.style.display = "block";
+            if (allPopulated && sumValid) {
+                statusBox.style.background = "rgba(46, 125, 50, 0.1)";
+                statusBox.style.borderLeft = "4px solid #2e7d32";
+                statusBox.style.color = "inherit";
+                statusBox.innerHTML = `✅ <b>Валидни идеални части:</b> Попълнени са всички <b>${totalApts}</b> апартамента. Общ сбор: <b>${totalSum.toFixed(2)}%</b> (отклонение: 0.00%).`;
+            } else if (allPopulated && !sumValid) {
+                statusBox.style.background = "rgba(211, 47, 47, 0.12)";
+                statusBox.style.borderLeft = "4px solid #d32f2f";
+                statusBox.style.color = "#c62828";
+                statusBox.innerHTML = `⚠️ <b>Отклонение в общия сбор:</b> Попълнени са ${popCount}/${totalApts} апартамента, но общият сбор е <b>${totalSum.toFixed(2)}%</b> (отклонение <b>${devStr}</b> спрямо 100.00%). Стойностите не се нормализират автоматично — коригирайте съответните апартаменти.`;
+            } else {
+                statusBox.style.background = "rgba(0, 122, 255, 0.06)";
+                statusBox.style.borderLeft = "4px solid var(--primary, #007aff)";
+                statusBox.style.color = "inherit";
+                statusBox.innerHTML = `ℹ️ <b>Статус на идеалните части:</b> Въведени са <b>${popCount}</b> от <b>${totalApts}</b> апартамента (текущ сбор: <b>${totalSum.toFixed(2)}%</b>).`;
+            }
+        }
+    } catch (e) {
+        if (!isStaleRouteRequestError(e)) console.warn("refreshIdealPartsTabState error", e);
+    }
+};
+
+window.toggleBulkIdealPartsSubmitBtn = function () {
+    const chk = document.getElementById("masterIdBulkConfirmCheck");
+    const btn = document.getElementById("masterIdBulkSaveBtn");
+    if (!btn) return;
+    const canSave = !!(_currentBulkIdealPreview && _currentBulkIdealPreview.canSave && chk && chk.checked);
+    btn.disabled = !canSave;
+};
+
+window.cancelBulkIdealPartsPreview = function () {
+    _currentBulkIdealPreview = null;
+    const container = document.getElementById("masterIdBulkPreviewContainer");
+    if (container) container.style.display = "none";
+    const chk = document.getElementById("masterIdBulkConfirmCheck");
+    if (chk) chk.checked = false;
+    window.toggleBulkIdealPartsSubmitBtn();
+};
+
+window.previewBulkIdealParts = async function () {
+    const requestContext = captureRouteRequestContext();
+    const perFloorInput = document.getElementById("masterIdPerFloor");
+    const container = document.getElementById("masterIdBulkPreviewContainer");
+    const summaryEl = document.getElementById("masterIdBulkSummary");
+    const warnEl = document.getElementById("masterIdBulkOverwriteWarning");
+    const errEl = document.getElementById("masterIdBulkError");
+    const tbody = document.getElementById("masterIdBulkPreviewTableBody");
+    const chk = document.getElementById("masterIdBulkConfirmCheck");
+    const confirmLabel = document.getElementById("masterIdBulkConfirmLabel");
+
+    _currentBulkIdealPreview = null;
+    if (chk) chk.checked = false;
+    window.toggleBulkIdealPartsSubmitBtn();
+
+    const apts = (Array.isArray(apartmentList) && apartmentList.length > 0)
+        ? apartmentList.map(a => normalizeAptName(a))
+        : [];
+    const totalApartments = apts.length;
+    if (totalApartments === 0) {
+        showToast("Списъкът с апартаменти не е зареден.", "error");
+        return;
+    }
+
+    const rawN = perFloorInput ? String(perFloorInput.value || "").trim() : "";
+    const perFloor = Number(rawN);
+    if (!rawN || !/^\d+$/.test(rawN) || !Number.isInteger(perFloor) || perFloor < 1 || perFloor > totalApartments) {
+        const msg = `Броят апартаменти на етаж трябва да бъде положително цяло число между 1 и ${totalApartments}.`;
+        showToast(msg, "error");
+        if (container && errEl && summaryEl && tbody && warnEl) {
+            container.style.display = "block";
+            summaryEl.innerHTML = "";
+            warnEl.style.display = "none";
+            errEl.style.display = "block";
+            errEl.textContent = "❌ " + msg;
+            tbody.innerHTML = "";
+            if (confirmLabel) confirmLabel.style.display = "none";
+        }
+        return;
+    }
+
+    try {
+        const idealRes = await apiCall('getBuildingIdealParts', { pin: getStoredPin() });
+        throwIfStaleRouteRequestContext(requestContext);
+        if (!idealRes || !idealRes.success) {
+            showToast(idealRes?.error || "Грешка при зареждане на идеалните части.", "error");
+            return;
+        }
+        _currentIdealParts = idealRes.parts || {};
+        const affectedHistoricalPeriods = Array.isArray(idealRes.affectedHistoricalPeriods)
+            ? idealRes.affectedHistoricalPeriods
+            : [];
+
+        const templateValues = [];
+        const invalidTemplateApts = [];
+        for (let k = 0; k < perFloor; k++) {
+            const aptName = apts[k];
+            const parsed = parseStrictPositiveIdealPart_(_currentIdealParts[aptName]);
+            if (parsed === null) {
+                invalidTemplateApts.push(aptName);
+            } else {
+                templateValues.push(parsed);
+            }
+        }
+
+        if (invalidTemplateApts.length > 0) {
+            const msg = `Първите ${perFloor} апартамента трябва да имат въведени валидни идеални части (> 0%). Липсват или са невалидни данни за: ${invalidTemplateApts.join(", ")}`;
+            showToast(msg, "error");
+            if (container && errEl && summaryEl && tbody && warnEl) {
+                container.style.display = "block";
+                summaryEl.innerHTML = "";
+                warnEl.style.display = "none";
+                errEl.style.display = "block";
+                errEl.textContent = "❌ " + msg;
+                tbody.innerHTML = "";
+                if (confirmLabel) confirmLabel.style.display = "none";
+            }
+            return;
+        }
+
+        const previewRows = [];
+        const generatedParts = {};
+        let changedCount = 0;
+        const overwrittenApartments = [];
+        let totalScaled = 0;
+
+        for (let i = 0; i < totalApartments; i++) {
+            const aptName = apts[i];
+            const templateIdx = i % perFloor;
+            const sourceApt = apts[templateIdx];
+            const newVal = templateValues[templateIdx];
+            const oldVal = parseStrictPositiveIdealPart_(_currentIdealParts[aptName]);
+
+            generatedParts[aptName] = newVal;
+            totalScaled += Math.round(newVal * 10000);
+
+            const isChanged = oldVal === null || Math.abs(oldVal - newVal) > 1e-6;
+            const isOverwritten = i >= perFloor && oldVal !== null && Math.abs(oldVal - newVal) > 1e-6;
+            if (isChanged) changedCount++;
+            if (isOverwritten) {
+                overwrittenApartments.push({ apartment: aptName, oldValue: oldVal, newValue: newVal });
+            }
+
+            previewRows.push({
+                apartment: aptName,
+                floor: Math.floor(i / perFloor) + 1,
+                sourceApartment: sourceApt,
+                isTemplateRow: i < perFloor,
+                oldValue: oldVal,
+                newValue: newVal,
+                changed: isChanged,
+                overwritten: isOverwritten
+            });
+        }
+
+        const totalSum = Math.round(totalScaled) / 10000;
+        const deviation = Math.round(totalScaled - 1000000) / 10000;
+        const sumValid = Math.abs(deviation) <= 0.0001;
+        const devStr = (deviation > 0 ? "+" : "") + deviation.toFixed(2) + "%";
+        const historyBlocked = affectedHistoricalPeriods.length > 0 && changedCount > 0;
+        const canSave = sumValid && !historyBlocked;
+
+        _currentBulkIdealPreview = {
+            apartmentsPerFloor: perFloor,
+            totalApartments: totalApartments,
+            changedCount: changedCount,
+            overwrittenCount: overwrittenApartments.length,
+            overwrittenApartments: overwrittenApartments,
+            totalSum: totalSum,
+            deviation: deviation,
+            sumValid: sumValid,
+            affectedHistoricalPeriods: affectedHistoricalPeriods,
+            canSave: canSave,
+            parts: generatedParts,
+            previewRows: previewRows
+        };
+
+        if (container) container.style.display = "block";
+        if (summaryEl) {
+            const tplDesc = templateValues.map((v, idx) => `${apts[idx]}: ${v.toFixed(2)}%`).join(", ");
+            summaryEl.innerHTML = `
+                <div><b>Общо апартаменти във входа:</b> ${totalApartments} | <b>Апартаменти на етаж:</b> ${perFloor}</div>
+                <div><b>Шаблон (Етаж 1):</b> ${tplDesc}</div>
+                <div><b>Променяни апартаменти:</b> ${changedCount} бр. | <b>Общ сбор на процентите:</b> <span style="font-weight:700; color:${sumValid ? '#2e7d32' : '#c62828'};">${totalSum.toFixed(2)}%</span> (отклонение: <b>${devStr}</b>)</div>
+            `;
+        }
+
+        if (warnEl) {
+            if (overwrittenApartments.length > 0) {
+                const sample = overwrittenApartments.slice(0, 12).map(x => `${x.apartment} (${x.oldValue.toFixed(2)}% → ${x.newValue.toFixed(2)}%)`).join(", ");
+                const more = overwrittenApartments.length > 12 ? ` и още ${overwrittenApartments.length - 12} ап.` : "";
+                warnEl.style.display = "block";
+                warnEl.innerHTML = `⚠️ <b>Предупреждение за презаписване:</b> Ще бъдат заменени вече въведени индивидуални стойности за <b>${overwrittenApartments.length}</b> апартамента: ${sample}${more}.`;
+            } else {
+                warnEl.style.display = "none";
+            }
+        }
+
+        if (errEl) {
+            const errors = [];
+            if (!sumValid) {
+                errors.push(`Отклонение от изисквания сбор (100.00%): ${devStr} (общ сбор: ${totalSum.toFixed(2)}%). Масовият запис е блокиран — не се извършва автоматична нормализация.`);
+            }
+            if (historyBlocked) {
+                errors.push(`Масовото попълване е блокирано, тъй като вече има начислени задължения, зависещи от идеалните части, в периоди: ${affectedHistoricalPeriods.join(", ")}.`);
+            }
+            if (errors.length > 0) {
+                errEl.style.display = "block";
+                errEl.innerHTML = "❌ " + errors.join("<br>❌ ");
+                showToast(errors[0], "error");
+            } else {
+                errEl.style.display = "none";
+            }
+        }
+
+        if (tbody) {
+            tbody.innerHTML = previewRows.map(r => {
+                const oldTxt = r.oldValue !== null ? r.oldValue.toFixed(2) + "%" : "—";
+                const newTxt = r.newValue.toFixed(2) + "%";
+                let statusBadge = "";
+                if (r.isTemplateRow) {
+                    statusBadge = '<span style="color:#1565c0; font-weight:600;">Шаблон (Етаж 1)</span>';
+                } else if (r.overwritten) {
+                    statusBadge = '<span style="color:#e65100; font-weight:600;">Презаписване</span>';
+                } else if (r.changed) {
+                    statusBadge = '<span style="color:#2e7d32; font-weight:600;">Ново попълване</span>';
+                } else {
+                    statusBadge = '<span style="color:#666;">Без промяна</span>';
+                }
+                return `<tr style="border-bottom: 1px solid rgba(128,128,128,0.12);">
+                    <td style="padding: 5px 8px; font-weight: 600;">${r.apartment}</td>
+                    <td style="padding: 5px 8px; color: #555;">Етаж ${r.floor} (= ${r.sourceApartment})</td>
+                    <td style="padding: 5px 8px; text-align: right;">${oldTxt}</td>
+                    <td style="padding: 5px 8px; text-align: right; font-weight: 600;">${newTxt}</td>
+                    <td style="padding: 5px 8px;">${statusBadge}</td>
+                </tr>`;
+            }).join("");
+        }
+
+        if (confirmLabel && chk) {
+            confirmLabel.style.display = canSave ? "flex" : "none";
+            chk.disabled = !canSave;
+            chk.checked = false;
+        }
+        window.toggleBulkIdealPartsSubmitBtn();
+    } catch (e) {
+        if (isStaleRouteRequestError(e)) return;
+        showToast("Сървърна грешка при генериране на прегледа.", "error");
+    }
+};
+
+window.submitBulkIdealParts = async function () {
+    const requestContext = captureRouteRequestContext();
+    const chk = document.getElementById("masterIdBulkConfirmCheck");
+    const saveBtn = document.getElementById("masterIdBulkSaveBtn");
+
+    if (!_currentBulkIdealPreview || !_currentBulkIdealPreview.canSave) {
+        showToast("Масовият запис не може да бъде изпълнен при невалидна конфигурация.", "error");
+        return;
+    }
+    if (!chk || !chk.checked) {
+        showToast("Моля, потвърдете изрично масовото попълване преди запис.", "error");
+        return;
+    }
+
+    const perFloor = _currentBulkIdealPreview.apartmentsPerFloor;
+    const origText = saveBtn ? saveBtn.textContent : "Потвърди и запиши масово";
+    if (saveBtn) {
+        saveBtn.disabled = true;
+        saveBtn.textContent = "Записване...";
+    }
+
+    try {
+        const result = await apiCall('updateMaster', {
+            pin: getStoredPin(),
+            sheet: 'ИДЕАЛНИ_ЧАСТИ',
+            apartment: 'BULK',
+            bulk: 'true',
+            apartmentsPerFloor: String(perFloor),
+            value: String(perFloor),
+            fromPeriod: '01.2000',
+            toPeriod: '12.2050',
+            confirmed: 'true',
+            overwriteConfirmed: 'true'
+        });
+        throwIfStaleRouteRequestContext(requestContext);
+
+        if (result && result.success) {
+            _creditIdealPartsOk = null;
+            if (result.parts) _currentIdealParts = result.parts;
+            showToast(result.message || "Успешно масово попълване на идеалните части!", "success");
+            window.cancelBulkIdealPartsPreview();
+            await window.refreshIdealPartsTabState();
+            if (typeof checkRemontEligibility === 'function') checkRemontEligibility();
+            bgApiCall('forceSync', { pin: getStoredPin() }).then(() => {
+                if (!isCurrentRouteRequestContext(requestContext)) return;
+                refreshCurrentView();
+            }).catch(error => { if (!isStaleRouteRequestError(error)) console.warn('forceSync failed', error); });
+        } else {
+            showToast(result?.error || "Възникна грешка при масовия запис", "error");
+        }
+    } catch (e) {
+        if (isStaleRouteRequestError(e)) return;
+        showToast("Сървърна грешка при масовия запис", "error");
+    } finally {
+        if (isCurrentRouteRequestContext(requestContext) && saveBtn) {
+            saveBtn.textContent = origText;
+            window.toggleBulkIdealPartsSubmitBtn();
+        }
+    }
+};
 
 window.submitMaster = async function (sheetName) {
     const requestContext = captureRouteRequestContext();
@@ -2263,8 +2640,14 @@ window.submitMaster = async function (sheetName) {
     } else if (sheetName === 'ИДЕАЛНИ_ЧАСТИ') {
         apt = document.getElementById('masterIdApt').value;
         val = document.getElementById('masterIdVal').value;
-        fromP = document.getElementById('masterIdFrom').value.trim();
+        fromP = document.getElementById('masterIdFrom').value.trim() || "01.2000";
         toP = "12.2050";
+        const parsedIdealVal = parseStrictPositiveIdealPart_(val);
+        if (parsedIdealVal === null) {
+            showToast(`Невалидна стойност за идеални части за ${apt || 'апартамента'}. Въведете положително число между 0.01% и 100.00%.`, "error");
+            return;
+        }
+        val = String(parsedIdealVal);
     }
 
     if (sheetName === 'PAYMENT_INFO') {
@@ -2319,6 +2702,12 @@ window.submitMaster = async function (sheetName) {
             }
             if (sheetName === 'ИДЕАЛНИ_ЧАСТИ') {
                 _creditIdealPartsOk = null; // инвалидираме кеша, за да прецени наново дали "Кредит" е достъпен
+                if (apt) _currentIdealParts[normalizeAptName(apt)] = parseFloat(val);
+                if (typeof window.refreshIdealPartsTabState === 'function') window.refreshIdealPartsTabState();
+                if (typeof checkRemontEligibility === 'function') checkRemontEligibility();
+                if (result.validationWarning) {
+                    showToast(result.validationWarning, "error");
+                }
             }
             if (sheetName === 'ОБИТАТЕЛИ') {
                 const valInput = document.getElementById('masterObVal');
