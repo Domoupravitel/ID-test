@@ -1572,13 +1572,62 @@ function populateAdminDropdowns() {
             apartmentList.forEach(a => sel.appendChild(new Option(a, a)));
         }
     });
-// ЗУЕС Валидация в реално време за обитатели
+// FIX-ART51-OCCUPANTS: Валидация в реално време за обитатели и избор на логика
     const obInput = document.getElementById("masterObVal");
     if (obInput) {
-        obInput.addEventListener("change", (e) => {
-            if (e.target.value !== "" && parseInt(e.target.value) < 1) {
-                showToast("⚠️ Минималният брой е 1. „За самостоятелен обект, в който се пребивава не повече от 30 дни в годината, разходите за управление и поддръжка се заплащат в размера, определен за един обитател.“ (Чл. 51, ал. 1 от ЗУЕС)", "error");
-                e.target.value = 1;
+        obInput.addEventListener("change", async (e) => {
+            const valNum = Number(e.target.value);
+            if (e.target.value === "" || isNaN(valNum) || !Number.isInteger(valNum) || valNum < 1) {
+                const fromP = (document.getElementById("masterObFrom")?.value || "").trim();
+                const apt = (document.getElementById("masterObApt")?.value || "").trim();
+                if (fromP) {
+                    try {
+                        const check = await apiCall('getPeriodOccupants', { period: fromP });
+                        if (check && check.currentMode === 'Обитатели') {
+                            showToast("При разпределение по обитатели за всеки апартамент трябва да бъде посочен поне 1 обитател. Коригирайте данните за: Ап. " + (apt || ""), "error");
+                            // Не променяме автоматично стойността на 1
+                        }
+                    } catch (err) {}
+                }
+            }
+        });
+    }
+
+    const logikaSelect = document.getElementById("masterLogikaVal");
+    const logikaFrom = document.getElementById("masterLogikaFrom");
+    if (logikaFrom) {
+        logikaFrom.addEventListener("change", async (e) => {
+            const p = e.target.value.trim();
+            if (p) {
+                try {
+                    const check = await apiCall('getPeriodOccupants', { period: p });
+                    if (logikaSelect && check && check.currentMode) {
+                        logikaSelect.value = check.currentMode;
+                        logikaSelect.dataset.prevVal = check.currentMode;
+                    }
+                } catch (err) {}
+            }
+        });
+    }
+    if (logikaSelect) {
+        if (!logikaSelect.dataset.prevVal) logikaSelect.dataset.prevVal = logikaSelect.value || "Равно";
+        logikaSelect.addEventListener("change", async (e) => {
+            const newVal = e.target.value;
+            const fromP = (logikaFrom?.value || "").trim();
+            if (newVal === 'Обитатели' && fromP) {
+                try {
+                    const check = await apiCall('getPeriodOccupants', { period: fromP });
+                    if (check && check.invalidApts && check.invalidApts.length > 0) {
+                        showToast("При разпределение по обитатели за всеки апартамент трябва да бъде посочен поне 1 обитател. Коригирайте данните за: Ап. " + check.invalidApts.join(', '), "error");
+                        e.target.value = logikaSelect.dataset.prevVal || "Равно";
+                        return;
+                    }
+                    logikaSelect.dataset.prevVal = newVal;
+                } catch (err) {
+                    e.target.value = logikaSelect.dataset.prevVal || "Равно";
+                }
+            } else {
+                logikaSelect.dataset.prevVal = newVal;
             }
         });
     }
@@ -1973,6 +2022,9 @@ function accumulateManualExpenseHistory_(pending, response, classification) {
     });
 }
 function manualExpenseFailureMessage_(response, pending, classification) {
+    if (response && typeof response.error === 'string' && response.error.indexOf("При разпределение по обитатели") === 0) {
+        return response.error;
+    }
     const request = pending.request, confirmed = new Set(pending.confirmedCategories);
     const label = key => chargeLabelsMap.find(c => c.key === key).name;
     let message = 'Резултатът е несигурен. Възможно е част от сумите вече да са записани. ';
@@ -2165,6 +2217,20 @@ window.submitMaster = async function (sheetName) {
         fromP = document.getElementById('masterLogikaFrom').value.trim();
         toP = "12.2050"; 
         apt = "";
+        if (val === 'Обитатели') {
+            try {
+                const check = await apiCall('getPeriodOccupants', { period: fromP });
+                throwIfStaleRouteRequestContext(requestContext);
+                if (check && check.invalidApts && check.invalidApts.length > 0) {
+                    showToast("При разпределение по обитатели за всеки апартамент трябва да бъде посочен поне 1 обитател. Коригирайте данните за: Ап. " + check.invalidApts.join(', '), "error");
+                    const logikaSelect = document.getElementById('masterLogikaVal');
+                    if (logikaSelect) logikaSelect.value = logikaSelect.dataset.prevVal || (check.currentMode || "Равно");
+                    return;
+                }
+            } catch (err) {
+                if (isStaleRouteRequestError(err)) return;
+            }
+        }
     } else if (sheetName === 'УЧАСТИЕ_АСАНСЬОР') {
         apt = document.getElementById('masterUchApt').value;
         val = document.getElementById('masterUchVal').value;
@@ -2175,9 +2241,19 @@ window.submitMaster = async function (sheetName) {
         val = document.getElementById('masterObVal').value;
         fromP = document.getElementById('masterObFrom').value.trim();
         toP = "12.2050";
-        if (val !== "" && parseInt(val) < 1) {
-            showToast("⚠️ Минималният брой е 1.", "error");
-            return;
+        const valNum = Number(val);
+        const isInvalid = val === "" || isNaN(valNum) || !Number.isInteger(valNum) || valNum < 1;
+        if (isInvalid) {
+            try {
+                const check = await apiCall('getPeriodOccupants', { period: fromP });
+                throwIfStaleRouteRequestContext(requestContext);
+                if (check && check.currentMode === 'Обитатели') {
+                    showToast("При разпределение по обитатели за всеки апартамент трябва да бъде посочен поне 1 обитател. Коригирайте данните за: Ап. " + apt, "error");
+                    return;
+                }
+            } catch (err) {
+                if (isStaleRouteRequestError(err)) return;
+            }
         }
     } else if (sheetName === 'ЧИПОВЕ') {
         apt = document.getElementById('masterChApt').value;
@@ -2237,6 +2313,10 @@ window.submitMaster = async function (sheetName) {
 
         if (result && result.success) {
             showToast(`Успешно обновен регистър: ${sheetName}. Данните се синхронизират...`, "success");
+            if (sheetName === 'Логика') {
+                const logikaSelect = document.getElementById('masterLogikaVal');
+                if (logikaSelect) logikaSelect.dataset.prevVal = val;
+            }
             if (sheetName === 'ИДЕАЛНИ_ЧАСТИ') {
                 _creditIdealPartsOk = null; // инвалидираме кеша, за да прецени наново дали "Кредит" е достъпен
             }
@@ -2254,10 +2334,18 @@ window.submitMaster = async function (sheetName) {
             }).catch(error => { if (!isStaleRouteRequestError(error)) console.warn('forceSync failed', error); });
         } else {
             showToast(result?.error || "Възникна грешка", "error");
+            if (sheetName === 'Логика') {
+                const logikaSelect = document.getElementById('masterLogikaVal');
+                if (logikaSelect) logikaSelect.value = logikaSelect.dataset.prevVal || "Равно";
+            }
         }
     } catch (e) {
         if (isStaleRouteRequestError(e)) return;
         showToast("Сървърна грешка при запис", "error");
+        if (sheetName === 'Логика') {
+            const logikaSelect = document.getElementById('masterLogikaVal');
+            if (logikaSelect) logikaSelect.value = logikaSelect.dataset.prevVal || "Равно";
+        }
     } finally {
         if (isCurrentRouteRequestContext(requestContext) && activeTabObj) {
             activeTabObj.disabled = false;
