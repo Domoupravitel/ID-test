@@ -616,10 +616,10 @@ function applyArt51Data_(apt, v) {
     const isDa = !!(v && v.active);
     if (badge) {
         if (isDa) {
-            badge.innerHTML = `${art51EscapeHtml_(apt)} (общ. достъп - <span class="art51-status-da">ДА</span>)`;
+            badge.innerHTML = `${art51EscapeHtml_(apt)} (общ. достъп -&nbsp;<span class="art51-status-da">ДА</span>)`;
             badge.className = 'art51-badge art51-badge-da';
         } else {
-            badge.innerHTML = `${art51EscapeHtml_(apt)} (общ. достъп - <span class="art51-status-ne">НЕ</span>)`;
+            badge.innerHTML = `${art51EscapeHtml_(apt)} (общ. достъп -&nbsp;<span class="art51-status-ne">НЕ</span>)`;
             badge.className = 'art51-badge art51-badge-ne';
         }
     }
@@ -860,10 +860,10 @@ window.saveArt51Settings = async function() {
             }
             if (badge) {
                 if (isCurrentDa) {
-                    badge.innerHTML = `${art51EscapeHtml_(apt)} (общ. достъп - <span class="art51-status-da">ДА</span>)`;
+                    badge.innerHTML = `${art51EscapeHtml_(apt)} (общ. достъп -&nbsp;<span class="art51-status-da">ДА</span>)`;
                     badge.className = 'art51-badge art51-badge-da';
                 } else {
-                    badge.innerHTML = `${art51EscapeHtml_(apt)} (общ. достъп - <span class="art51-status-ne">НЕ</span>)`;
+                    badge.innerHTML = `${art51EscapeHtml_(apt)} (общ. достъп -&nbsp;<span class="art51-status-ne">НЕ</span>)`;
                     badge.className = 'art51-badge art51-badge-ne';
                 }
             }

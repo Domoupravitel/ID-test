@@ -2070,6 +2070,8 @@ body {
   border-radius: 10px;
   padding: 14px 16px;
   background: #f8fafc;
+  box-sizing: border-box;
+  max-width: 100%;
 }
 
 .art51-summary {
@@ -2081,6 +2083,8 @@ body {
   user-select: none;
   padding: 4px 0;
   outline: none;
+  box-sizing: border-box;
+  max-width: 100%;
 }
 
 .art51-summary:hover {
@@ -2096,6 +2100,8 @@ body {
   padding: 10px 14px;
   border-radius: 6px;
   border-left: 4px solid #3b82f6;
+  box-sizing: border-box;
+  max-width: 100%;
 }
 
 .art51-card {
@@ -2105,6 +2111,8 @@ body {
   padding: 18px 16px;
   margin-bottom: 16px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  box-sizing: border-box;
+  max-width: 100%;
 }
 
 .art51-form-card {
@@ -2265,24 +2273,32 @@ body {
 
 @media (max-width: 480px) {
   .art51-card {
-    padding: 14px 12px;
+    padding: 14px 10px;
+    box-sizing: border-box;
+    max-width: 100%;
   }
   .art51-apartment-row {
     flex-direction: column;
     align-items: stretch;
+    width: 100%;
+    box-sizing: border-box;
   }
   .art51-apartment-row select {
     width: 100%;
     height: 42px;
     max-height: 42px;
+    box-sizing: border-box;
   }
   .art51-badge {
     justify-content: center;
     width: 100%;
     text-align: center;
-    padding: 8px 12px;
+    padding: 8px 8px;
     box-sizing: border-box;
     max-width: 100%;
+    font-size: 12.5px;
+    white-space: normal;
+    word-break: break-word;
   }
   .art51-table {
     font-size: 11.5px;
