@@ -585,67 +585,161 @@ window.openArt51Settings = function() {
     window.loadArt51Actions();
 };
 
+let art51RequestSeq = 0;
+let art51CurrentLoadedApt = null;
+window.art51Cache = (window.art51Cache instanceof Map) ? window.art51Cache : new Map();
+
+function art51EscapeHtml_(str) {
+    if (!str) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function clearArt51Fields_() {
+    const activeSel = document.getElementById('art51Active');
+    if (activeSel) activeSel.value = 'false';
+    const multInput = document.getElementById('art51Multiplier');
+    if (multInput) multInput.value = '';
+    const dateInput = document.getElementById('art51DecisionDate');
+    if (dateInput) dateInput.value = '';
+    const refInput = document.getElementById('art51Reference');
+    if (refInput) refInput.value = '';
+    window.art51ActiveChanged();
+}
+
+function applyArt51Data_(apt, v) {
+    const badge = document.getElementById('art51CurrentBadge');
+    const isDa = !!(v && v.active);
+    if (badge) {
+        if (isDa) {
+            badge.innerHTML = `${art51EscapeHtml_(apt)} (общ. достъп - <span class="art51-status-da">ДА</span>)`;
+            badge.className = 'art51-badge art51-badge-da';
+        } else {
+            badge.innerHTML = `${art51EscapeHtml_(apt)} (общ. достъп - <span class="art51-status-ne">НЕ</span>)`;
+            badge.className = 'art51-badge art51-badge-ne';
+        }
+    }
+    const activeSel = document.getElementById('art51Active');
+    if (activeSel) activeSel.value = isDa ? 'true' : 'false';
+    
+    const multInput = document.getElementById('art51Multiplier');
+    const dateInput = document.getElementById('art51DecisionDate');
+    const refInput = document.getElementById('art51Reference');
+    
+    if (isDa) {
+        if (multInput) multInput.value = v.multiplier || 3;
+        if (dateInput) dateInput.value = v.decisionDate || '';
+        if (refInput) refInput.value = v.decisionReference || '';
+    } else {
+        if (multInput) multInput.value = '';
+        if (dateInput) dateInput.value = '';
+        if (refInput) refInput.value = '';
+    }
+    window.art51ActiveChanged();
+}
+
+function handleArt51LoadError_(apt, err) {
+    art51CurrentLoadedApt = null;
+    const badge = document.getElementById('art51CurrentBadge');
+    const saveBtn = document.getElementById('art51SaveBtn');
+    const statusMsg = document.getElementById('art51Status');
+    if (badge) {
+        badge.innerHTML = `${art51EscapeHtml_(apt)} (Състоянието не е заредено)`;
+        badge.className = 'art51-badge art51-badge-error';
+    }
+    if (statusMsg) {
+        statusMsg.textContent = 'Състоянието не е заредено';
+    }
+    if (saveBtn) {
+        saveBtn.disabled = true;
+    }
+    clearArt51Fields_();
+}
+
 window.art51ApartmentChanged = async function() {
     const aptSelect = document.getElementById('art51Apartment');
     if (!aptSelect) return;
     const apt = aptSelect.value;
     const badge = document.getElementById('art51CurrentBadge');
+    const saveBtn = document.getElementById('art51SaveBtn');
     const statusMsg = document.getElementById('art51Status');
     if (statusMsg) statusMsg.textContent = '';
     
     if (!apt) {
+        art51CurrentLoadedApt = null;
         if (badge) { badge.innerHTML = ''; badge.className = 'art51-badge'; }
+        if (saveBtn) saveBtn.disabled = true;
+        clearArt51Fields_();
         return;
     }
     const currentPeriod = art51CurrentCalendarPeriod_();
     const periodInput = document.getElementById('art51Period');
     if (periodInput && !periodInput.value) periodInput.value = currentPeriod;
     
-    // Initial display
+    // Check cache first for immediate zero-latency feedback
+    if (window.art51Cache && window.art51Cache.has(apt)) {
+        const cached = window.art51Cache.get(apt);
+        if (cached && cached.success) {
+            art51RequestSeq++; // invalidate any previous pending fetch
+            art51CurrentLoadedApt = apt;
+            applyArt51Data_(apt, cached.version);
+            if (saveBtn) saveBtn.disabled = false;
+            if (Array.isArray(cached.actions)) {
+                renderArt51ActionsTable_(cached.actions);
+            }
+            return;
+        }
+    }
+    
+    // 1. Immediately hide old status
+    // 2. Show small animated indicator and "Проверява се състоянието…"
+    const requestSeq = ++art51RequestSeq;
+    const requestedApt = apt;
+    art51CurrentLoadedApt = null;
+    if (saveBtn) saveBtn.disabled = true;
+    clearArt51Fields_();
+    
     if (badge) {
-        badge.innerHTML = `${apt} (общ. достъп - <span class="art51-status-ne">НЕ</span>)`;
-        badge.className = 'art51-badge art51-badge-ne';
+        badge.innerHTML = `<span class="art51-spinner"></span> ${art51EscapeHtml_(apt)} (Проверява се състоянието…)`;
+        badge.className = 'art51-badge art51-badge-checking';
     }
     
     const owner = captureRouteRequestContext();
     try {
         const result = await apiCall('getArt51V1', { pin: getStoredPin(), request: JSON.stringify({ apartment: apt, period: currentPeriod }) });
         throwIfStaleRouteRequestContext(owner);
+        
+        // 4. Stale check: discard if newer request was started or dropdown changed
+        if (requestSeq !== art51RequestSeq || document.getElementById('art51Apartment')?.value !== requestedApt) {
+            return;
+        }
+        
         if (result && result.success) {
-            const v = result.version;
-            const isDa = !!(v && v.active);
-            if (badge) {
-                if (isDa) {
-                    badge.innerHTML = `${apt} (общ. достъп - <span class="art51-status-da">ДА</span>)`;
-                    badge.className = 'art51-badge art51-badge-da';
-                } else {
-                    badge.innerHTML = `${apt} (общ. достъп - <span class="art51-status-ne">НЕ</span>)`;
-                    badge.className = 'art51-badge art51-badge-ne';
-                }
+            // 5. Cache result
+            if (window.art51Cache) {
+                window.art51Cache.set(apt, result);
             }
-            
-            const activeSel = document.getElementById('art51Active');
-            if (activeSel) activeSel.value = isDa ? 'true' : 'false';
-            
-            const multInput = document.getElementById('art51Multiplier');
-            const dateInput = document.getElementById('art51DecisionDate');
-            const refInput = document.getElementById('art51Reference');
-            
-            if (isDa) {
-                if (multInput) multInput.value = v.multiplier || 3;
-                if (dateInput) dateInput.value = v.decisionDate || '';
-                if (refInput) refInput.value = v.decisionReference || '';
-            } else {
-                if (multInput) multInput.value = '';
-                if (dateInput) dateInput.value = '';
-                if (refInput) refInput.value = '';
-            }
-            window.art51ActiveChanged();
+            art51CurrentLoadedApt = apt;
+            // 3. Show actual status
+            applyArt51Data_(apt, result.version);
+            if (saveBtn) saveBtn.disabled = false;
             if (Array.isArray(result.actions)) {
                 renderArt51ActionsTable_(result.actions);
             }
+        } else {
+            // 6. On error, show "Състоянието не е заредено"
+            handleArt51LoadError_(apt, result ? result.error : 'Неуспешно зареждане');
         }
-    } catch(e) {}
+    } catch(e) {
+        if (requestSeq !== art51RequestSeq || document.getElementById('art51Apartment')?.value !== requestedApt) {
+            return;
+        }
+        handleArt51LoadError_(apt, e.message || e);
+    }
 };
 
 window.art51ActiveChanged = function() {
@@ -670,16 +764,17 @@ window.art51ActiveChanged = function() {
 window.saveArt51Settings = async function() {
     const statusMsg = document.getElementById('art51Status');
     const saveBtn = document.getElementById('art51SaveBtn');
-    const apt = document.getElementById('art51Apartment').value;
+    const apt = (document.getElementById('art51Apartment')?.value || '').trim();
     const active = document.getElementById('art51Active').value === 'true';
     const period = (document.getElementById('art51Period').value || '').trim();
     const multVal = document.getElementById('art51Multiplier').value;
     const dateVal = (document.getElementById('art51DecisionDate').value || '').trim();
     const refVal = (document.getElementById('art51Reference').value || '').trim();
     
-    if (!apt) {
-        showToast('Моля, изберете апартамент.', 'error');
-        if (statusMsg) statusMsg.textContent = 'Моля, изберете апартамент.';
+    // 7. Guard: prevent saving if data for chosen apartment is not ready
+    if (!apt || art51CurrentLoadedApt !== apt) {
+        showToast('Данните за избрания апартамент не са готови. Моля, изчакайте зареждането.', 'error');
+        if (statusMsg) statusMsg.textContent = 'Данните за избрания апартамент не са готови.';
         return;
     }
     if (!/^(0[1-9]|1[0-2])\.(20[0-4][0-9]|2050)$/.test(period)) {
@@ -756,7 +851,6 @@ window.saveArt51Settings = async function() {
             
             // Calculate applicable status for current period
             const badge = document.getElementById('art51CurrentBadge');
-            const aptSelect = document.getElementById('art51Apartment');
             let isCurrentDa = false;
             if (art51PeriodNumber_(period) <= art51PeriodNumber_(currentPeriod)) {
                 isCurrentDa = active;
@@ -766,12 +860,28 @@ window.saveArt51Settings = async function() {
             }
             if (badge) {
                 if (isCurrentDa) {
-                    badge.innerHTML = `${apt} (общ. достъп - <span class="art51-status-da">ДА</span>)`;
+                    badge.innerHTML = `${art51EscapeHtml_(apt)} (общ. достъп - <span class="art51-status-da">ДА</span>)`;
                     badge.className = 'art51-badge art51-badge-da';
                 } else {
-                    badge.innerHTML = `${apt} (общ. достъп - <span class="art51-status-ne">НЕ</span>)`;
+                    badge.innerHTML = `${art51EscapeHtml_(apt)} (общ. достъп - <span class="art51-status-ne">НЕ</span>)`;
                     badge.className = 'art51-badge art51-badge-ne';
                 }
+            }
+            
+            // 5. Update cache after successful save
+            if (window.art51Cache) {
+                window.art51Cache.set(apt, {
+                    success: true,
+                    version: {
+                        apartment: apt,
+                        active: isCurrentDa,
+                        multiplier: isCurrentDa ? multiplier : null,
+                        decisionDate: isCurrentDa ? decisionDate : null,
+                        decisionReference: isCurrentDa ? decisionReference : null,
+                        effectiveFromPeriod: period
+                    },
+                    actions: Array.isArray(result.actions) ? result.actions : (window.art51Cache.get(apt)?.actions || [])
+                });
             }
             
             if (Array.isArray(result.actions)) {
@@ -797,7 +907,7 @@ window.saveArt51Settings = async function() {
         if (statusMsg) statusMsg.textContent = errorMsg;
     } finally {
         if (saveBtn) {
-            saveBtn.disabled = false;
+            saveBtn.disabled = (art51CurrentLoadedApt !== apt);
             saveBtn.textContent = 'ЗАПАЗИ';
         }
     }
