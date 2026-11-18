@@ -1065,6 +1065,24 @@ async function loadDashboardFromFirebase(routeKey) {
     console.error("Error loading distributions for dashboard:", err);
   }
 
+  let totalCreditRemaining = 0;
+  let totalCreditOriginal = 0;
+  try {
+    const qCredit = query(
+      collection(db, "creditLiabilitiesV2"),
+      where("routeKey", "==", routeKey)
+    );
+    const snapCredit = await getDocs(qCredit);
+    snapCredit.forEach(d => {
+      const cData = d.data();
+      totalCreditRemaining += Number(cData.remaining || 0);
+      totalCreditOriginal += Number(cData.original || 0);
+    });
+  } catch (err) {
+    if (isStaleRouteRequestError(err)) throw err;
+    console.error("Error loading credit liabilities for dashboard:", err);
+  }
+
   return {
     success: true,
     dashboard: {
@@ -1072,6 +1090,8 @@ async function loadDashboardFromFirebase(routeKey) {
       totalBalance: totalBalance.toFixed(2),
       totalTargetFund: totalTargetFund.toFixed(2),
       totalSpent: totalSpent.toFixed(2),
+      totalCreditRemaining: totalCreditRemaining.toFixed(2),
+      totalCreditOriginal: totalCreditOriginal.toFixed(2),
       trendData: []
     }
   };
@@ -1085,8 +1105,12 @@ async function loadDashboardData() {
         if (sessionStorage.getItem("isHardBlocked_" + currentRouteKey) === "true") {
             document.getElementById('dash-debts').textContent = "—";
             document.getElementById('dash-balance').textContent = "—";
+            if (document.getElementById('dash-maintenance-balance')) document.getElementById('dash-maintenance-balance').textContent = "—";
+            if (document.getElementById('dash-credit-balance')) document.getElementById('dash-credit-balance').textContent = "—";
             if (document.getElementById('dash-debts-trend')) document.getElementById('dash-debts-trend').textContent = "Достъпът е спрян";
             if (document.getElementById('dash-balance-trend')) document.getElementById('dash-balance-trend').textContent = "Достъпът е спрян";
+            if (document.getElementById('maintenanceSourceSummary')) document.getElementById('maintenanceSourceSummary').textContent = "Достъпът е спрян";
+            if (document.getElementById('dash-credit-trend')) document.getElementById('dash-credit-trend').textContent = "Достъпът е спрян";
             return;
         }
         const result = await loadDashboardFromFirebase(currentRouteKey);
@@ -1122,6 +1146,21 @@ async function loadDashboardData() {
                 }
             }
 
+            const creditBalEl = document.getElementById('dash-credit-balance');
+            const creditTrendEl = document.getElementById('dash-credit-trend');
+            if (creditBalEl) {
+                const remainingNum = parseFloat(d.totalCreditRemaining) || 0;
+                creditBalEl.textContent = `${remainingNum.toFixed(2)} ${cur}`;
+                if (creditTrendEl) {
+                    if (remainingNum > 0) {
+                        const origNum = parseFloat(d.totalCreditOriginal) || 0;
+                        creditTrendEl.textContent = `Текущ остатък (от ${origNum.toFixed(2)} ${cur})`;
+                    } else {
+                        creditTrendEl.textContent = "Няма активен кредит";
+                    }
+                }
+            }
+
             if (d.trendData && d.trendData.length > 0) {
                 if (typeof Chart !== 'undefined') {
                     initChart(d.trendData);
@@ -1137,6 +1176,7 @@ async function loadDashboardData() {
             console.error("Dashboard data load failed:", errMsg);
             document.getElementById('dash-debts-trend').textContent = "Грешка при зареждане";
             document.getElementById('dash-balance-trend').textContent = "Грешка при зареждане";
+            if (document.getElementById('dash-credit-trend')) document.getElementById('dash-credit-trend').textContent = "Грешка при зареждане";
         }
     } catch (err) {
         if (isStaleRouteRequestError(err)) return;
@@ -1160,7 +1200,7 @@ function initChart(data) {
             labels: labels,
             datasets: [
                 {
-                    label: 'Асансьор',
+                    label: 'Асансьор ел.',
                     data: data.map(i => i.elevator),
                     borderColor: '#3b6edc',
                     backgroundColor: 'rgba(59, 110, 220, 0.1)',
@@ -1170,7 +1210,7 @@ function initChart(data) {
                     pointHoverRadius: 6
                 },
                 {
-                    label: 'Абонамент',
+                    label: 'Асансьор абон. и др.',
                     data: data.map(i => i.subscription),
                     borderColor: '#ff9500',
                     backgroundColor: 'rgba(255, 149, 0, 0.1)',
@@ -1180,7 +1220,7 @@ function initChart(data) {
                     pointHoverRadius: 6
                 },
                 {
-                    label: 'Осветление',
+                    label: 'Етажно ел.',
                     data: data.map(i => i.light),
                     borderColor: '#34c759',
                     backgroundColor: 'rgba(52, 199, 89, 0.1)',
@@ -1301,15 +1341,18 @@ async function loadApartmentFromFirebase(routeKey, apartmentId) {
     const d = p.details || {};
     return {
       period: p.periodId || p.period,
-      elevator: Number(d["Асансьор"] || p.elevator || 0),
-      subscription: Number(d["Абонамент"] || p.subscription || 0),
-      light: Number(d["Ток"] || p.light || 0),
-      security: Number(d["Вход"] || p.security || 0),
-      cleaning: Number(d["Чистач"] || p.cleaning || 0),
-      podrajka: Number(d["Поддръжка"] || p.podrajka || 0),
-      remont: Number(d["Ремонт"] || p.remont || 0),
+      elevator: Number(d["Асансьор ел."] || d["Асансьор"] || p.elevator || 0),
+      subscription: Number(d["Асансьор абон. и др."] || d["Абонамент"] || p.subscription || 0),
+      light: Number(d["Етажно ел."] || d["Ток"] || d["Осветление"] || p.light || 0),
+      security: Number(d["Охрана"] || d["Вход"] || p.security || 0),
+      cleaning: Number(d["Почистване"] || d["Чистач"] || p.cleaning || 0),
+      podrajka: Number(d["Фонд Поддръжка"] || d["Поддръжка"] || p.podrajka || 0),
+      remont: Number(d["Фонд ремонт"] || d["Ремонтен фонд"] || d["Ремонт"] || p.remont || 0),
+      water: Number(d["ВиК"] || d["ВиК ЕС"] || p.water || 0),
+      platformSubscription: Number(d["Управление"] || d["Абонамент Платформа"] || p.platformSubscription || 0),
       due: Number(p.totalDue || p.due || 0),
-      paid: Number(p.receivedPaid ?? p.totalPaid ?? p.paid ?? 0) // MAINTENANCE_RECEIPT_UI
+      paid: Number(p.receivedPaid ?? p.totalPaid ?? p.paid ?? 0),
+      credit: Number(d["Кредит"] || p.credit || 0)
     };
   });
 
@@ -1337,7 +1380,7 @@ async function loadApartmentData(apartment) {
     if (isHardBlocked) {
         document.getElementById("saldo").textContent = "Спрян достъп";
         const tBody = document.getElementById("tableBody");
-        if (tBody) tBody.innerHTML = '<tr><td colspan="10" style="text-align:center; color:#e74c3c;">⚠️ Достъпът е напълно спрян поради неплатен абонамент.</td></tr>';
+        if (tBody) tBody.innerHTML = '<tr><td colspan="14" style="text-align:center; color:#e74c3c;">⚠️ Достъпът е напълно спрян поради неплатен абонамент.</td></tr>';
         showToast("Достъпът до входа е напълно спрян поради неплатен абонамент", "error");
         return;
     }
@@ -1347,7 +1390,7 @@ async function loadApartmentData(apartment) {
         document.getElementById("saldo").textContent = "Скрит";
         // Скриваме таблицата с периодите
         const tBody = document.getElementById("tableBody");
-        if (tBody) tBody.innerHTML = '<tr><td colspan="10" style="text-align:center; color:#e74c3c;">⚠️ Информацията е скрита поради неплатен абонамент.</td></tr>';
+        if (tBody) tBody.innerHTML = '<tr><td colspan="14" style="text-align:center; color:#e74c3c;">⚠️ Информацията е скрита поради неплатен абонамент.</td></tr>';
         showToast("Информацията за салдото Ви не се показва поради неплатен абонамент", "error");
         return;
     }
@@ -1391,25 +1434,83 @@ async function loadApartmentData(apartment) {
         }
 
         const tBody = document.getElementById("tableBody");
-        if (result.periods && Array.isArray(result.periods)) {
-            (result.periods || []).forEach((r, idx) => {
+        if (result.periods && Array.isArray(result.periods) && result.periods.length > 0) {
+            let sumElevator = 0, sumSub = 0, sumLight = 0, sumSec = 0, sumClean = 0;
+            let sumPodr = 0, sumRemont = 0, sumWater = 0, sumPlat = 0;
+            let sumDue = 0, sumPaid = 0, sumSaldo = 0, sumCredit = 0;
+
+            (result.periods || []).forEach((r) => {
                 const tr = document.createElement("tr");
+                const rowElevator = Number(r.elevator || 0);
+                const rowSub = Number(r.subscription || 0);
+                const rowLight = Number(r.light || 0);
+                const rowSec = Number(r.security || 0);
+                const rowClean = Number(r.cleaning || 0);
+                const rowPodr = Number(r.podrajka || 0);
+                const rowRemont = Number(r.remont || 0);
+                const rowWater = Number(r.water || 0);
+                const rowPlat = Number(r.platformSubscription || 0);
+                const rowDue = Number(r.due || 0);
+                const rowPaid = Number(r.paid || 0);
+                const rowSaldo = rowDue - rowPaid;
+                const rowCredit = Number(r.credit || 0);
+
+                sumElevator += rowElevator;
+                sumSub += rowSub;
+                sumLight += rowLight;
+                sumSec += rowSec;
+                sumClean += rowClean;
+                sumPodr += rowPodr;
+                sumRemont += rowRemont;
+                sumWater += rowWater;
+                sumPlat += rowPlat;
+                sumDue += rowDue;
+                sumPaid += rowPaid;
+                sumSaldo += rowSaldo;
+                sumCredit += rowCredit;
+
                 tr.innerHTML = `
                 <td>${r.period}</td>
-                <td>${Number(r.elevator || 0).toFixed(2)}</td>
-                <td>${Number(r.subscription || 0).toFixed(2)}</td>
-                <td>${Number(r.light || 0).toFixed(2)}</td>
-                <td>${Number(r.security || 0).toFixed(2)}</td>
-                <td>${Number(r.cleaning || 0).toFixed(2)}</td>
-                <td>${Number(r.podrajka || 0).toFixed(2)}</td>
-                <td>${Number(r.remont || 0).toFixed(2)}</td>
-                <td>${Number(r.due || 0).toFixed(2)}</td>
-                <td>${Number(r.paid || 0).toFixed(2)}</td>
+                <td>${rowElevator.toFixed(2)}</td>
+                <td>${rowSub.toFixed(2)}</td>
+                <td>${rowLight.toFixed(2)}</td>
+                <td>${rowSec.toFixed(2)}</td>
+                <td>${rowClean.toFixed(2)}</td>
+                <td>${rowPodr.toFixed(2)}</td>
+                <td>${rowRemont.toFixed(2)}</td>
+                <td>${rowWater.toFixed(2)}</td>
+                <td>${rowPlat.toFixed(2)}</td>
+                <td>${rowDue.toFixed(2)}</td>
+                <td>${rowPaid.toFixed(2)}</td>
+                <td>${rowSaldo.toFixed(2)}</td>
+                <td>${rowCredit.toFixed(2)}</td>
             `;
                 tBody.appendChild(tr);
             });
+
+            const totalTr = document.createElement("tr");
+            totalTr.className = "total-row";
+            totalTr.style.fontWeight = "bold";
+            totalTr.style.background = "#f1f5f9";
+            totalTr.innerHTML = `
+                <td>Общо</td>
+                <td>${sumElevator.toFixed(2)}</td>
+                <td>${sumSub.toFixed(2)}</td>
+                <td>${sumLight.toFixed(2)}</td>
+                <td>${sumSec.toFixed(2)}</td>
+                <td>${sumClean.toFixed(2)}</td>
+                <td>${sumPodr.toFixed(2)}</td>
+                <td>${sumRemont.toFixed(2)}</td>
+                <td>${sumWater.toFixed(2)}</td>
+                <td>${sumPlat.toFixed(2)}</td>
+                <td>${sumDue.toFixed(2)}</td>
+                <td>${sumPaid.toFixed(2)}</td>
+                <td>${sumSaldo.toFixed(2)}</td>
+                <td>${sumCredit.toFixed(2)}</td>
+            `;
+            tBody.appendChild(totalTr);
         } else {
-            tBody.innerHTML = '<tr><td colspan="10" style="text-align:center;">Няма налични данни за избрания апартамент.</td></tr>';
+            tBody.innerHTML = '<tr><td colspan="14" style="text-align:center;">Няма налични данни за избрания апартамент.</td></tr>';
         }
 
         // --- ПЕРСОНАЛНО СЪОБЩЕНИЕ ЗА АПАРТАМЕНТА ---
@@ -1834,9 +1935,9 @@ window.submitBookData = async function () {
 // ==============================================
 
 const chargeLabelsMap = [
-    { labelId: 'lbl-chargesElevator',     name: 'Асансьор',     key: 'elevator' },
-    { labelId: 'lbl-chargesSubscription', name: 'Абонамент',    key: 'subscription' },
-    { labelId: 'lbl-chargesLight',        name: 'Ток',         key: 'light' },
+    { labelId: 'lbl-chargesElevator',     name: 'Асансьор ел.',     key: 'elevator' },
+    { labelId: 'lbl-chargesSubscription', name: 'Асансьор абон. и др.',    key: 'subscription' },
+    { labelId: 'lbl-chargesLight',        name: 'Етажно ел.',         key: 'light' },
     { labelId: 'lbl-chargesSecurity',     name: 'Охрана',       key: 'security' },
     { labelId: 'lbl-chargesCleaning',     name: 'Почистване',   key: 'cleaning' },
     { labelId: 'lbl-chargesPodrajka',     name: 'Фонд Поддръжка', key: 'maintenance', legacyKey: 'podrajka' },
@@ -3780,7 +3881,8 @@ async function loadMonthlyReportFromFirebase(routeKey, period) {
   
   let invoicedCounts = {
       elevator: 0, subscription: 0, light: 0,
-      security: 0, cleaning: 0, podrajka: 0, remont: 0
+      security: 0, cleaning: 0, podrajka: 0, remont: 0,
+      water: 0, platformSubscription: 0
   };
 
   snapshot.forEach(doc => {
@@ -3793,13 +3895,15 @@ async function loadMonthlyReportFromFirebase(routeKey, period) {
     totalCollected += paid;
 
     const det = d.details || {};
-    invoicedCounts.elevator += Number(det["Асансьор"] || d.elevator || 0);
-    invoicedCounts.subscription += Number(det["Абонамент"] || d.subscription || 0);
-    invoicedCounts.light += Number(det["Ток"] || d.light || 0);
-    invoicedCounts.security += Number(det["Вход"] || d.security || 0);
-    invoicedCounts.cleaning += Number(det["Чистач"] || d.cleaning || 0);
-    invoicedCounts.podrajka += Number(det["Поддръжка"] || d.podrajka || 0);
-    invoicedCounts.remont += Number(det["Ремонт"] || d.remont || 0);
+    invoicedCounts.elevator += Number(det["Асансьор ел."] || det["Асансьор"] || d.elevator || 0);
+    invoicedCounts.subscription += Number(det["Асансьор абон. и др."] || det["Абонамент"] || d.subscription || 0);
+    invoicedCounts.light += Number(det["Етажно ел."] || det["Ток"] || det["Осветление"] || d.light || 0);
+    invoicedCounts.security += Number(det["Охрана"] || det["Вход"] || d.security || 0);
+    invoicedCounts.cleaning += Number(det["Почистване"] || det["Чистач"] || d.cleaning || 0);
+    invoicedCounts.podrajka += Number(det["Фонд Поддръжка"] || det["Поддръжка"] || d.podrajka || 0);
+    invoicedCounts.remont += Number(det["Фонд ремонт"] || det["Ремонтен фонд"] || det["Ремонт"] || d.remont || 0);
+    invoicedCounts.water += Number(det["ВиК"] || det["ВиК ЕС"] || d.water || 0);
+    invoicedCounts.platformSubscription += Number(det["Управление"] || det["Абонамент Платформа"] || d.platformSubscription || 0);
 
     rows.push(d);
   });
@@ -3894,13 +3998,14 @@ window.generateReport = async function () {
             tableBody.innerHTML = "";
 
             const labels = {
-                elevator: "Разходи за Асансьор ел.",
+                elevator: "Асансьор ел.",
                 subscription: "Асансьор абон. и др.",
-                light: "Електрическа енергия - общи части",
-                security: "Охрана / Консиерж",
-                cleaning: "Хигиена и почистване",
+                light: "Етажно ел.",
+                security: "Охрана",
+                cleaning: "Почистване",
                 podrajka: "Фонд Поддръжка",
                 remont: "Фонд ремонт",
+                water: "ВиК",
                 platformSubscription: "Управление"
             };
 

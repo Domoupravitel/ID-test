@@ -23,11 +23,15 @@ function maintenanceRenderPending_() {
 function maintenanceDisplay_(result,target) {
     if(!result||result.success!==true||result.source!=='maintenance'||!['openingCents','collectedCents','usedCents','availableCents'].every(k=>Number.isSafeInteger(result[k])&&result[k]>=0)||
         result.availableCents!==result.openingCents+result.collectedCents-result.usedCents)throw Error('Непотвърдена наличност.');
-    if(target)target.textContent='Събрани: '+(result.collectedCents/100).toFixed(2)+' EUR · Използвани / Разпределени: '+(result.usedCents/100).toFixed(2)+
-        ' EUR · Налични: '+(result.availableCents/100).toFixed(2)+' EUR'+(result.openingCents?' · Начално салдо: '+(result.openingCents/100).toFixed(2)+' EUR':'');
+    const cur = (window.currentEntranceData && window.currentEntranceData.currency) || (typeof currentEntranceData !== 'undefined' && currentEntranceData && currentEntranceData.currency) || (typeof currentRouteKey !== 'undefined' && sessionStorage.getItem("currency_" + currentRouteKey)) || 'EUR';
+    const availText = (result.availableCents/100).toFixed(2) + ' ' + cur;
+    const balanceElem = document.getElementById('dash-maintenance-balance');
+    if (balanceElem) balanceElem.textContent = availText;
+    if(target)target.textContent='Събрани: '+(result.collectedCents/100).toFixed(2)+' '+cur+' · Използвани / Разпределени: '+(result.usedCents/100).toFixed(2)+
+        ' '+cur+' · Налични: '+(result.availableCents/100).toFixed(2)+' '+cur+(result.openingCents?' · Начално салдо: '+(result.openingCents/100).toFixed(2)+' '+cur:'');
 }
 async function maintenanceReadBalance_(context) {
-    const pin=sessionStorage.getItem('adminAuth_'+context.routeKey);if(!pin)throw Error('Нужен е администраторски достъп за потвърждение.');
+    const pin=sessionStorage.getItem('adminAuth_'+context.routeKey) || "";
     const result=await apiCall('getMaintenanceBalanceV1',{routeKey:context.routeKey,pin},context);assertFinancialOperationContextCurrent(context);
     if(result?.error==='MAINTENANCE_OPENING_REQUIRED')throw Error('Началното салдо на източника още не е потвърдено.');
     maintenanceDisplay_(result,null);return result;

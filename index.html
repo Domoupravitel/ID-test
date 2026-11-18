@@ -664,15 +664,15 @@
                 <p class="subtitle" style="font-size: 12px; margin-bottom: 15px;">Регистрирайте сума за избран период и категория. <span style="color: #d32f2f;">Може да се добавя или изважда (със знак -) сума за период — сторно операция.</span></p>
                 <label class="admin-label">Период (MM.YYYY)</label>
                 <select id="chargesPeriod" class="admin-input" onchange="loadCurrentCharges()"></select>
-                <label class="admin-label" id="lbl-chargesElevator" for="chargesElevator">Асансьор <span class="charge-current"></span></label>
+                <label class="admin-label" id="lbl-chargesElevator" for="chargesElevator">Асансьор ел. <span class="charge-current"></span></label>
                 <input type="text" inputmode="decimal" id="chargesElevator" class="admin-input" placeholder="+/- сума или 0" oninput="updateManualExpenseDraft('elevator')">
-                <input type="text" id="chargesElevatorNote" class="admin-input expense-note" aria-label="Асансьор — Основание / Бележка" placeholder="Основание / Бележка (по желание)" oninput="updateManualExpenseDraft('elevator')">
-                <label class="admin-label" id="lbl-chargesSubscription" for="chargesSubscription">Абонамент <span class="charge-current"></span></label>
+                <input type="text" id="chargesElevatorNote" class="admin-input expense-note" aria-label="Асансьор ел. — Основание / Бележка" placeholder="Основание / Бележка (по желание)" oninput="updateManualExpenseDraft('elevator')">
+                <label class="admin-label" id="lbl-chargesSubscription" for="chargesSubscription">Асансьор абон. и др. <span class="charge-current"></span></label>
                 <input type="text" inputmode="decimal" id="chargesSubscription" class="admin-input" placeholder="+/- сума или 0" oninput="updateManualExpenseDraft('subscription')">
-                <input type="text" id="chargesSubscriptionNote" class="admin-input expense-note" aria-label="Абонамент — Основание / Бележка" placeholder="Основание / Бележка (по желание)" oninput="updateManualExpenseDraft('subscription')">
-                <label class="admin-label" id="lbl-chargesLight" for="chargesLight">Ток <span class="charge-current"></span></label>
+                <input type="text" id="chargesSubscriptionNote" class="admin-input expense-note" aria-label="Асансьор абон. и др. — Основание / Бележка" placeholder="Основание / Бележка (по желание)" oninput="updateManualExpenseDraft('subscription')">
+                <label class="admin-label" id="lbl-chargesLight" for="chargesLight">Етажно ел. <span class="charge-current"></span></label>
                 <input type="text" inputmode="decimal" id="chargesLight" class="admin-input" placeholder="+/- сума или 0" oninput="updateManualExpenseDraft('light')">
-                <input type="text" id="chargesLightNote" class="admin-input expense-note" aria-label="Ток — Основание / Бележка" placeholder="Основание / Бележка (по желание)" oninput="updateManualExpenseDraft('light')">
+                <input type="text" id="chargesLightNote" class="admin-input expense-note" aria-label="Етажно ел. — Основание / Бележка" placeholder="Основание / Бележка (по желание)" oninput="updateManualExpenseDraft('light')">
                 <label class="admin-label" id="lbl-chargesSecurity" for="chargesSecurity">Охрана <span class="charge-current"></span></label>
                 <input type="text" inputmode="decimal" id="chargesSecurity" class="admin-input" placeholder="+/- сума или 0" oninput="updateManualExpenseDraft('security')">
                 <input type="text" id="chargesSecurityNote" class="admin-input expense-note" aria-label="Охрана — Основание / Бележка" placeholder="Основание / Бележка (по желание)" oninput="updateManualExpenseDraft('security')">
@@ -1758,12 +1758,6 @@
             </div>
 
             <!-- OLD APP CONTENT -->
-            <!-- BEGIN MAINTENANCE SUMMARY -->
-            <div class="glass-panel" style="padding:15px;margin:15px;">
-                <strong>Фонд Поддръжка — натрупан източник</strong>
-                <div id="maintenanceSourceSummary" role="status">Наличността не е потвърдена.</div>
-            </div>
-            <!-- END MAINTENANCE SUMMARY -->
             <div class="content-area">
                 
 
@@ -1854,13 +1848,17 @@
                                     <th>Период</th>
                                     <th>Асансьор ел.</th>
                                     <th>Асансьор абон. и др.</th>
-                                    <th>Осв.</th>
+                                    <th>Етажно ел.</th>
                                     <th>Охрана</th>
                                     <th>Почистване</th>
                                     <th>Фонд Поддръжка</th>
                                     <th>Фонд ремонт</th>
+                                    <th>ВиК</th>
+                                    <th>Управление</th>
                                     <th>Дължимо</th>
                                     <th>Платено</th>
+                                    <th>Салдо</th>
+                                    <th>Кредит</th>
                                 </tr>
                             </thead>
                             <tbody id="tableBody">
@@ -1884,7 +1882,7 @@
                     </div>
 
                     <div class="metrics-grid">
-                        <div class="metric-card glass-panel">
+                        <div class="metric-card glass-panel" id="card-dash-debts">
                             <div class="metric-icon debt">
                                 <span style="font-size:24px;">⛔</span>
                             </div>
@@ -1895,7 +1893,7 @@
                             </div>
                         </div>
 
-                        <div class="metric-card glass-panel highlight">
+                        <div class="metric-card glass-panel highlight" id="card-dash-repair">
                             <div class="metric-icon balance">
                                 <span style="font-size:24px;">🏦</span>
                             </div>
@@ -1903,6 +1901,28 @@
                                 <span class="label">Фонд ремонт</span>
                                 <h3 class="value" id="dash-balance">0.00 EUR</h3>
                                 <span class="trend" id="dash-balance-trend">Очаква данни</span>
+                            </div>
+                        </div>
+
+                        <div class="metric-card glass-panel" id="card-dash-maintenance">
+                            <div class="metric-icon maintenance">
+                                <span style="font-size:24px;">🛠️</span>
+                            </div>
+                            <div class="metric-info">
+                                <span class="label">Фонд Поддръжка</span>
+                                <h3 class="value" id="dash-maintenance-balance">0.00 EUR</h3>
+                                <span class="trend" id="maintenanceSourceSummary" role="status">Наличността се зарежда…</span>
+                            </div>
+                        </div>
+
+                        <div class="metric-card glass-panel" id="card-dash-credit">
+                            <div class="metric-icon credit">
+                                <span style="font-size:24px;">💳</span>
+                            </div>
+                            <div class="metric-info">
+                                <span class="label">Кредит</span>
+                                <h3 class="value" id="dash-credit-balance">0.00 EUR</h3>
+                                <span class="trend" id="dash-credit-trend">Няма активен кредит</span>
                             </div>
                         </div>
                     </div>

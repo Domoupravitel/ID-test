@@ -311,42 +311,77 @@ body {
 .old-styled-table {
   width: 100%;
   border-collapse: collapse;
-  min-width: 500px;
+  min-width: 950px;
 }
 
 .old-styled-table th {
-  text-align: left;
-  padding: 10px 8px;
+  text-align: right;
+  padding: 8px 10px;
   background: #f4f5f9;
   font-size: 13px;
   font-weight: 600;
   color: #555;
-  border-radius: 6px;
+  white-space: nowrap;
 }
 
 .old-styled-table td {
-  padding: 10px 8px;
+  text-align: right;
+  padding: 8px 10px;
   border-top: 1px solid #f0f0f4;
-  font-size: 14px;
+  font-size: 13px;
+  white-space: nowrap;
 }
 
 .old-styled-table tr:nth-child(even) td {
   background: #fafbfd;
 }
 
+.old-styled-table th:first-child,
+.old-styled-table td:first-child {
+  text-align: left;
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: #f4f5f9;
+  font-weight: 600;
+  box-shadow: 2px 0 4px rgba(0, 0, 0, 0.05);
+}
+
+.old-styled-table tr:nth-child(even) td:first-child {
+  background: #fafbfd;
+}
+
+.old-styled-table tr.total-row td {
+  border-top: 2px solid #cbd5e1;
+  background: #f1f5f9;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.old-styled-table tr.total-row td:first-child {
+  background: #f1f5f9;
+}
 
 /* GENERAL DASHBOARD BOTTOM SECTION */
 .metrics-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: repeat(2, 1fr);
   gap: 16px;
   margin-bottom: 24px;
+}
+
+@media (max-width: 640px) {
+  .metrics-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .metric-card {
   display: flex;
   align-items: center;
   gap: 16px;
+  position: relative;
+  overflow: hidden;
 }
 
 .metric-card.highlight::before {
@@ -358,6 +393,21 @@ body {
   height: 4px;
   background: linear-gradient(90deg, var(--primary), #8B5CF6);
 }
+
+.metric-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: rgba(59, 110, 220, 0.08);
+}
+.metric-icon.debt { background: rgba(239, 68, 68, 0.1); }
+.metric-icon.balance { background: rgba(59, 110, 220, 0.1); }
+.metric-icon.maintenance { background: rgba(245, 158, 11, 0.1); }
+.metric-icon.credit { background: rgba(139, 92, 246, 0.1); }
 
 .metric-info {
   flex: 1;
@@ -376,6 +426,14 @@ body {
   font-size: 1.6rem;
   font-weight: 700;
   color: #1a1a2e;
+}
+
+.metric-info .trend {
+  font-size: 0.8rem;
+  color: #64748b;
+  display: block;
+  margin-top: 2px;
+  line-height: 1.3;
 }
 
 /* LOADING & ADMIN OVERLAYS */
