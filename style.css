@@ -2176,6 +2176,9 @@ body {
   background: #fef2f2;
   color: #991b1b;
   border: 1px solid #fecaca;
+  white-space: normal !important;
+  word-break: normal;
+  overflow-wrap: break-word;
 }
 
 .art51-spinner {
