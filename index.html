@@ -40,9 +40,9 @@
     <link
         href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;600;800&display=swap"
         rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=1795013350000">
+    <link rel="stylesheet" href="style.css?v=1795018800000">
         <script src="firestore-client.js"></script>
-        <script src="app.js?v=1795013350000" defer></script>
+        <script src="app.js?v=1795018800000" defer></script>
         <script src="recurring-expenses.js" defer></script>
         <script src="fin01-payment.js" defer></script>
         <script src="maintenance-ledger.js" defer></script>
@@ -501,10 +501,18 @@
                         <!-- options will be populated by JS -->
                     </select>
 
+                    <div id="v2IncomeExtUnitGroup" style="display: none; margin-top: 6px; margin-bottom: 10px;">
+                        <label class="admin-label" for="v2IncomeExtUnit">Самостоятелен обект (по избор)</label>
+                        <select id="v2IncomeExtUnit" class="admin-input" onchange="v2HandleExtUnitChange()">
+                            <option value="">— Общ външен източник (без партида на обект) —</option>
+                        </select>
+                    </div>
+
                     <label class="admin-label">Категория по ЗУЕС</label>
                     <select id="v2IncomeCategory" class="admin-input" onchange="v2LoadPaymentDue()">
                         <option value="Управление и поддръжка">1. Управление и поддръжка</option>
                         <option value="Наем на общи части">2. Наем на общи части</option>
+                        <option value="Фонд ремонт">Фонд ремонт (Самостоятелен обект)</option>
                         <option value="Средства от бюджетни институции">3. Средства от бюджетни институции</option>
                         <option value="Кредит">4. Кредит</option>
                         <option value="ВЕИ на ЕС">5. ВЕИ на ЕС</option>
@@ -554,12 +562,19 @@
                     
                     <label class="admin-label">Вид платец (Категория по ЗУЕС)</label>
                     <select id="v2PayerType" class="admin-input">
+                        <option value="Управление и поддръжка">1. Управление и поддръжка (Самостоятелен обект)</option>
                         <option value="Наем на общи части">2. Наем на общи части</option>
+                        <option value="Фонд ремонт">Фонд ремонт (Самостоятелен обект)</option>
                         <option value="Средства от бюджетни институции">3. Средства от бюджетни институции</option>
                         <option value="Кредит">4. Кредит</option>
                         <option value="ВЕИ на ЕС">5. ВЕИ на ЕС</option>
                         <option value="Дарения">6. Дарения</option>
                         <option value="Други">7. Други</option>
+                    </select>
+
+                    <label class="admin-label" for="v2PayerExtUnit">Свързан самостоятелен обект (по избор)</label>
+                    <select id="v2PayerExtUnit" class="admin-input">
+                        <option value="">— Без връзка към конкретен обект —</option>
                     </select>
                     
                     <label class="admin-label">Наименование на платеца</label>
@@ -569,6 +584,24 @@
                     <input type="text" id="v2PayerNote" class="admin-input" placeholder="напр. Наемател ателие 1">
                     
                     <button class="admin-btn" id="v2SavePayerBtn" style="background: #1e3a8a; color: white; width: 100%; margin-top: 10px;" onclick="saveExternalPayer()">💾 Запиши</button>
+
+                    <div id="v2PendingExtPaymentsCard" style="display: none; margin-top: 16px; padding: 12px; border-radius: 8px; border: 1px solid #f59e0b; background: #fffbeb;">
+                        <h4 style="margin: 0 0 6px 0; font-size: 13px; color: #b45309;">⚠️ Чакащи потвърждение ePay плащания (нееднозначно основание)</h4>
+                        <p style="margin: 0 0 8px 0; font-size: 11px; color: #92400e;">Изберете целевата категория за всяко плащане, без произволно автоматично разпределяне:</p>
+                        <div class="table-responsive">
+                            <table class="status-table" style="width: 100%; border-collapse: collapse; font-size: 12px;">
+                                <thead>
+                                    <tr>
+                                        <th style="padding: 6px; text-align: left;">Период / Обект</th>
+                                        <th style="padding: 6px; text-align: left;">Наредител / Основание</th>
+                                        <th style="padding: 6px; text-align: right;">Сума</th>
+                                        <th style="padding: 6px; text-align: left;">Насочи към</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="v2PendingExtPaymentsBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
                     
                     <div class="table-responsive" style="margin-top: 20px; max-height: 250px; overflow-y: auto;">
                         <table class="status-table" style="width: 100%; border-collapse: collapse; font-size: 13px;">
@@ -862,6 +895,233 @@
                     </div>
                 </details>
                 <!-- END ART51 UI -->
+                <!-- BEGIN EXTERNAL UNITS UI -->
+                <details id="externalUnitsSettings" class="art51-details-container ext-units-details-container">
+                    <summary class="art51-summary" onclick="openExternalUnitsSettings()">Самостоятелни обекти (извън A1–AN)</summary>
+                    <p class="art51-header-text">Регистър и конфигурация на външни самостоятелни обекти (магазини, гаражи, ателиета, офиси, кабинети) с двустепенно разпределение без промяна на формулите за апартаментите.</p>
+
+                    <div id="extUnitIdealWarning" class="ext-unit-warning-banner" style="display:none;" role="alert"></div>
+
+                    <div class="art51-card art51-form-card ext-unit-form-card">
+                        <div class="art51-field-group">
+                            <label for="extUnitSelect" class="admin-label">Избор на обект</label>
+                            <div class="art51-apartment-row">
+                                <select id="extUnitSelect" class="admin-input" onchange="extUnitSelectionChanged()">
+                                    <option value="">➕ Нов самостоятелен обект</option>
+                                </select>
+                                <div id="extUnitCurrentBadge" class="art51-badge"></div>
+                            </div>
+                        </div>
+
+                        <div class="ext-unit-grid-2">
+                            <div class="art51-field-group">
+                                <label for="extUnitName" class="admin-label">Наименование на обекта</label>
+                                <input type="text" id="extUnitName" class="admin-input" maxlength="120" placeholder="напр. Магазин 1 / Гараж №4">
+                            </div>
+                            <div class="art51-field-group">
+                                <label for="extUnitAccessType" class="admin-label">Вид достъп</label>
+                                <select id="extUnitAccessType" class="admin-input" onchange="extUnitAccessTypeChanged()">
+                                    <option value="SEPARATE_ENTRANCE">Самостоятелен вход (чл. 51, ал. 6)</option>
+                                    <option value="COMMON_ENTRANCE">Общ вход</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="ext-unit-grid-2">
+                            <div class="art51-field-group">
+                                <label for="extUnitDocPurpose" class="admin-label">Предназначение по документи</label>
+                                <select id="extUnitDocPurpose" class="admin-input">
+                                    <option value="Магазин">Магазин</option>
+                                    <option value="Гараж">Гараж</option>
+                                    <option value="Офис">Офис</option>
+                                    <option value="Ателие">Ателие</option>
+                                    <option value="Кабинет">Кабинет</option>
+                                    <option value="Склад">Склад</option>
+                                    <option value="Друго">Друго</option>
+                                </select>
+                            </div>
+                            <div class="art51-field-group">
+                                <label for="extUnitActualUsage" class="admin-label">Фактическо използване</label>
+                                <select id="extUnitActualUsage" class="admin-input">
+                                    <option value="Търговски обект">Търговски обект</option>
+                                    <option value="Гараж">Гараж</option>
+                                    <option value="Офис / Кабинет">Офис / Кабинет</option>
+                                    <option value="Живеене">Живеене</option>
+                                    <option value="Склад">Склад</option>
+                                    <option value="Необитаем">Необитаем</option>
+                                    <option value="Друго">Друго</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="ext-unit-grid-2">
+                            <div class="art51-field-group">
+                                <label for="extUnitArea" class="admin-label">Площ в кв.м (опционално)</label>
+                                <input type="text" inputmode="decimal" id="extUnitArea" class="admin-input" placeholder="пр. 24.50">
+                            </div>
+                            <div class="art51-field-group">
+                                <label for="extUnitCadastre" class="admin-label">Кадастрален идентификатор (опционално)</label>
+                                <input type="text" id="extUnitCadastre" class="admin-input" maxlength="120" placeholder="пр. 68134.100.1.1.50">
+                            </div>
+                        </div>
+
+                        <div class="ext-unit-grid-2">
+                            <div class="art51-field-group">
+                                <label for="extUnitMgmtPart" class="admin-label">Участие в разходите за Управление и поддръжка</label>
+                                <select id="extUnitMgmtPart" class="admin-input">
+                                    <option value="true">ДА (участва в разпределението)</option>
+                                    <option value="false">НЕ (изключен от автоматично начисляване)</option>
+                                </select>
+                            </div>
+                            <div class="art51-field-group">
+                                <label for="extUnitOccupants" class="admin-label">Брой обитатели / ползватели</label>
+                                <input type="number" id="extUnitOccupants" class="admin-input" min="0" step="1" value="1" placeholder="Мин. 1 при режим Обитатели">
+                            </div>
+                        </div>
+
+                        <div id="extUnitArt51Group" class="ext-unit-grid-2" style="display:none;">
+                            <div class="art51-field-group">
+                                <label for="extUnitArt51Active" class="admin-label">Дейност с обществен достъп (чл. 51, ал. 5)</label>
+                                <select id="extUnitArt51Active" class="admin-input" onchange="extUnitArt51ActiveChanged()">
+                                    <option value="false">НЕ (1x стандартен дял)</option>
+                                    <option value="true">ДА (коефициент 3–5x)</option>
+                                </select>
+                            </div>
+                            <div class="art51-field-group" id="extUnitMultiplierGroup" style="display:none;">
+                                <label for="extUnitMultiplier" class="admin-label">Коефициент по чл. 51 (3–5)</label>
+                                <input type="number" id="extUnitMultiplier" class="admin-input" min="3" max="5" step="1" value="3" placeholder="3, 4 или 5">
+                            </div>
+                        </div>
+
+                        <div class="ext-unit-grid-2">
+                            <div class="art51-field-group">
+                                <label for="extUnitIdealStatus" class="admin-label">Идеални части — статус</label>
+                                <select id="extUnitIdealStatus" class="admin-input" onchange="extUnitIdealStatusChanged()">
+                                    <option value="UNESTABLISHED">Неустановени</option>
+                                    <option value="ESTABLISHED">Установени (%)</option>
+                                </select>
+                            </div>
+                            <div class="art51-field-group" id="extUnitIdealPercentGroup" style="display:none;">
+                                <label for="extUnitIdealPercent" class="admin-label">Идеални части (%)</label>
+                                <input type="text" inputmode="decimal" id="extUnitIdealPercent" class="admin-input" placeholder="пр. 2.50">
+                            </div>
+                        </div>
+
+                        <div class="ext-unit-grid-2">
+                            <div class="art51-field-group">
+                                <label for="extUnitRepairPart" class="admin-label">Автоматично начисляване за Фонд ремонт</label>
+                                <select id="extUnitRepairPart" class="admin-input">
+                                    <option value="false">НЕ</option>
+                                    <option value="true">ДА (по установени ид. части)</option>
+                                </select>
+                            </div>
+                            <div class="art51-field-group">
+                                <label for="extUnitRentAmount" class="admin-label">Месечен наем по договор (EUR)</label>
+                                <input type="text" inputmode="decimal" id="extUnitRentAmount" class="admin-input" value="0" placeholder="0.00">
+                            </div>
+                        </div>
+
+                        <div class="art51-field-group">
+                            <label for="extUnitPeriod" class="admin-label">От период (MM.YYYY)</label>
+                            <input type="text" id="extUnitPeriod" class="admin-input" placeholder="MM.YYYY" maxlength="7">
+                        </div>
+
+                        <button type="button" id="extUnitSaveBtn" class="admin-btn primary art51-save-btn" onclick="saveExternalUnitSettings()">ЗАПАЗИ ОБЕКТ</button>
+                        <p id="extUnitStatusMsg" class="art51-status-msg" role="status"></p>
+                    </div>
+
+                    <div id="extUnitsRegistryCard" class="art51-card art51-actions-card">
+                        <h4 class="art51-actions-title">Регистър „Самостоятелни обекти“</h4>
+                        <div class="art51-table-wrapper">
+                            <table id="extUnitsRegistryTable" class="art51-table">
+                                <thead>
+                                    <tr>
+                                        <th>ID / Наименование</th>
+                                        <th>По док. / Факт.</th>
+                                        <th>Достъп / Коеф.</th>
+                                        <th>Ид. части / Обит.</th>
+                                        <th>Участие УП / Ремонт</th>
+                                        <th>Наем</th>
+                                        <th>От период</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="extUnitsRegistryBody">
+                                    <tr><td colspan="7" style="text-align: center; color: #64748b; padding: 14px;">Няма регистрирани самостоятелни обекти.</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div id="extUnitsStatementCard" class="art51-card art51-actions-card">
+                        <div class="ext-unit-statement-header">
+                            <h4 class="art51-actions-title" style="margin:0;">Справка по периоди: Начислено, Платено, Аванс и Салдо</h4>
+                            <select id="extUnitStatementFilter" class="admin-input ext-unit-filter-select" onchange="renderExternalUnitsStatementView()">
+                                <option value="ALL">Всички самостоятелни обекти</option>
+                            </select>
+                        </div>
+                        <div class="art51-table-wrapper" style="margin-top: 10px;">
+                            <table id="extUnitsStatementTable" class="art51-table">
+                                <thead>
+                                    <tr>
+                                        <th>Обект / Период</th>
+                                        <th>Упр. и поддръжка (Нач./Плат.)</th>
+                                        <th>Фонд ремонт (Нач./Плат.)</th>
+                                        <th>Наем (Нач./Плат.)</th>
+                                        <th>Общо Начислено</th>
+                                        <th>Общо Платено</th>
+                                        <th>Аванс</th>
+                                        <th>Салдо (Дължимо)</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="extUnitsStatementBody">
+                                    <tr><td colspan="8" style="text-align: center; color: #64748b; padding: 14px;">Няма начисления за самостоятелни обекти.</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <h4 class="art51-actions-title" style="margin-top: 16px;">Финансова сверка по периоди (MASTER + Външни обекти + Закръгляване)</h4>
+                        <div class="art51-table-wrapper">
+                            <table id="extUnitsReconciliationTable" class="art51-table">
+                                <thead>
+                                    <tr>
+                                        <th>Период</th>
+                                        <th>Разход по док.</th>
+                                        <th>База MASTER (A1–AN)</th>
+                                        <th>База Външни (1x)</th>
+                                        <th>Надбавка чл. 51</th>
+                                        <th>Закръгляване (MASTER)</th>
+                                        <th>Общо Вземания</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="extUnitsReconciliationBody">
+                                    <tr><td colspan="7" style="text-align: center; color: #64748b; padding: 12px;">Няма операции с двустепенно разпределение.</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div id="extUnitActionsCard" class="art51-card art51-actions-card">
+                        <h4 class="art51-actions-title">Регистър на административните промени (Самостоятелни обекти)</h4>
+                        <div class="art51-table-wrapper">
+                            <table id="extUnitActionsTable" class="art51-table">
+                                <thead>
+                                    <tr>
+                                        <th>Дата и час</th>
+                                        <th>Обект</th>
+                                        <th>Участие УП</th>
+                                        <th>Предишно състояние</th>
+                                        <th>Ново състояние</th>
+                                        <th>От период</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="extUnitActionsBody">
+                                    <tr><td colspan="6" style="text-align: center; color: #64748b; padding: 14px;">Няма записани промени.</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </details>
+                <!-- END EXTERNAL UNITS UI -->
                 <div id="master-tab-logika" class="master-panel">
                     <label class="admin-label">Логика</label>
                     <select id="masterLogikaVal" class="admin-input">

@@ -4425,8 +4425,12 @@ window.generateReport = async function () {
                     totalIncomesSum += Number(inc.paymentId ? inc.loanRepaymentCents / 100 : inc.amount || 0); // FIN01_TOTAL
                     if (inc.paymentId && inc.allocationSummary) inc = {...inc, category:inc.allocationSummary}; // FIN01_UI
                     const tr = document.createElement("tr");
-                    const payer = inc.apt === "EXTERNAL" ? "Външен източник" : `Ап. ${inc.apt}`;
-                    const noteStr = inc.note ? ` (${inc.note})` : "";
+                    const parsedExt = typeof parseExternalUnitTagClient_ === 'function' ? parseExternalUnitTagClient_(inc.note) : null;
+                    const payer = inc.apt === "EXTERNAL"
+                        ? (parsedExt ? `Външен обект: ${parsedExt.unitName} (${parsedExt.unitId})` : "Външен източник")
+                        : `Ап. ${inc.apt}`;
+                    const displayNote = parsedExt ? parsedExt.cleanNote : inc.note;
+                    const noteStr = displayNote ? ` (${displayNote})` : "";
                     tr.innerHTML = `
                         <td style="padding: 10px 0; border-bottom: 1px dashed #eee;">Приход от ${payer} - кат. "${inc.category}"${noteStr}</td>
                         <td style="text-align: right; padding: 10px 0; border-bottom: 1px dashed #eee;">${Number(inc.amount || 0).toFixed(2)} EUR</td>
@@ -4584,16 +4588,22 @@ async function checkRemontEligibility() {
         
         let allHaveParts = false;
         let missing = [];
+        let extUnestablished = [];
+        let extSumDeviation = null;
         if (res && res.success && res.parts && typeof apartmentList !== 'undefined' && apartmentList.length > 0) {
             missing = apartmentList.filter(apt => res.parts[apt] === undefined || res.parts[apt] === "" || parseFloat(res.parts[apt]) <= 0);
-            allHaveParts = missing.length === 0;
+            extUnestablished = Array.isArray(res.unestablishedRepairExternalUnits) ? res.unestablishedRepairExternalUnits : [];
+            if (typeof res.externalIdealPartsSum === 'number' && res.externalIdealPartsSum > 0 && res.buildingSumValid === false) {
+                extSumDeviation = res;
+            }
+            allHaveParts = missing.length === 0 && extUnestablished.length === 0 && !extSumDeviation;
         }
 
         if (input) {
             const pending = !!manualExpenseState_().pending;
             input.dataset.expenseUnavailable = String(!allHaveParts);
             input.disabled = !allHaveParts || pending;
-            input.placeholder = allHaveParts ? "Обща сума за входа" : "Деактивирано (липсват Ид. части за всички)";
+            input.placeholder = allHaveParts ? "Обща сума за входа" : "Деактивирано (непълна база за Ид. части)";
             if (!allHaveParts && !pending) {
                 input.value = "";
                 updateManualExpenseDraft('repairFund');
@@ -4603,7 +4613,11 @@ async function checkRemontEligibility() {
         if (warn) {
             warn.style.display = allHaveParts ? "none" : "block";
             if (!allHaveParts) {
-                if (missing.length > 0 && missing.length <= 15) {
+                if (extUnestablished.length > 0) {
+                    warn.innerHTML = `⚠️ За начисления към фонд ремонт идеалните части трябва да са установени за всички участващи обекти.<br><b>Неустановени за:</b> ${extUnestablished.join(", ")}`;
+                } else if (extSumDeviation) {
+                    warn.innerHTML = `⚠️ Общият сбор на идеалните части (Апартаменти: ${Number(extSumDeviation.totalSum).toFixed(2)}% + Външни обекти: ${Number(extSumDeviation.externalIdealPartsSum).toFixed(2)}% = ${Number(extSumDeviation.buildingTotalSum).toFixed(2)}%) се отклонява от 100.00%.`;
+                } else if (missing.length > 0 && missing.length <= 15) {
                     warn.innerHTML = `⚠️ За начисления към фонд ремонт първо въведете Ид. част (%) за <b>всички</b> апартаменти.<br><b>Липсват за:</b> ${missing.join(", ")}`;
                 } else if (missing.length > 15) {
                     warn.innerHTML = `⚠️ За начисления към фонд ремонт първо въведете Ид. част (%) за <b>всички</b> апартаменти.<br><b>Липсват за ${missing.length} апартамента.</b>`;
@@ -4709,6 +4723,7 @@ function switchAdminTab(tab) {
         }
         if (typeof loadIncomesV2 === 'function') loadIncomesV2();
         if (typeof loadExternalPayers === 'function') loadExternalPayers();
+        if (typeof loadExternalUnitsData === 'function') loadExternalUnitsData(true);
         if (typeof loadCreditLiabilitiesRegister === 'function') loadCreditLiabilitiesRegister();
         if (typeof updateCreditCategoryAvailability === 'function') updateCreditCategoryAvailability();
     }
@@ -4774,19 +4789,33 @@ window.v2HandleAptChange = function() {
     const apt = document.getElementById("v2IncomeApt").value;
     const catSel = document.getElementById("v2IncomeCategory");
     const isApartment = apt && apt !== "EXTERNAL";
+    const extGroup = document.getElementById("v2IncomeExtUnitGroup");
+    if (extGroup) {
+        extGroup.style.display = apt === "EXTERNAL" ? "block" : "none";
+        if (apt === "EXTERNAL" && typeof populateExternalUnitSelects_ === 'function') {
+            populateExternalUnitSelects_();
+        }
+    }
+
+    const extUnitSel = document.getElementById("v2IncomeExtUnit");
+    const selectedExtUnit = (apt === "EXTERNAL" && extUnitSel) ? extUnitSel.value : "";
 
     // Когато платецът е конкретен апартамент, показваме само "Управление и
     // поддръжка" и "Кредит" — останалите категории (наем на общи части,
     // бюджетни средства, ВЕИ, дарения и т.н.) са само за Външен източник.
     Array.from(catSel.options).forEach(opt => {
-        if (opt.value === "Управление и поддръжка" || opt.value === "Кредит" || opt.value === "") {
-            opt.style.display = "";
+        if (isApartment) {
+            opt.style.display = (opt.value === "Управление и поддръжка" || opt.value === "Кредит" || opt.value === "") ? "" : "none";
+        } else if (selectedExtUnit) {
+            opt.style.display = (opt.value === "Управление и поддръжка" || opt.value === "Фонд ремонт" || opt.value === "Наем на общи части" || opt.value === "") ? "" : "none";
         } else {
-            opt.style.display = isApartment ? "none" : "";
+            opt.style.display = "";
         }
     });
 
     if (isApartment && catSel.value !== "Кредит" && catSel.value !== "Управление и поддръжка") {
+        catSel.value = "Управление и поддръжка";
+    } else if (selectedExtUnit && !["Управление и поддръжка", "Фонд ремонт", "Наем на общи части"].includes(catSel.value)) {
         catSel.value = "Управление и поддръжка";
     }
 
@@ -4794,6 +4823,10 @@ window.v2HandleAptChange = function() {
     v2LoadPaymentDue();
     if (typeof updateCreditCategoryAvailability === 'function') updateCreditCategoryAvailability();
     if (typeof fin01RefreshPaymentView_ === 'function') fin01RefreshPaymentView_(); // FIN01_UI
+};
+
+window.v2HandleExtUnitChange = function() {
+    window.v2HandleAptChange();
 };
 
 
@@ -4809,6 +4842,15 @@ window.v2LoadPaymentDue = async function(operationContext) {
     const refreshSelection = Object.freeze({ apt: apt, period: period, category: category });
     
     if (!lbl) return;
+
+    if (apt === "EXTERNAL") {
+        const extSel = document.getElementById("v2IncomeExtUnit");
+        const extUnitId = extSel ? extSel.value : "";
+        if (extUnitId && typeof renderExternalUnitPaymentDueBadge_ === 'function') {
+            renderExternalUnitPaymentDueBadge_(extUnitId, category, lbl);
+            return;
+        }
+    }
     
     // Външен източник няма салдо/задължения към входа
     if (!apt || apt === "EXTERNAL" || !window.fb || !window.db) {
@@ -5195,6 +5237,18 @@ window.submitIncomeV2 = async function() {
     btn.disabled = true;
     btn.textContent = "Записване...";
 
+    const extUnitSelEl = document.getElementById("v2IncomeExtUnit");
+    const selectedExtUnitId = (apt === "EXTERNAL" && extUnitSelEl) ? extUnitSelEl.value : "";
+    let finalNote = note;
+    let selectedExtUnitObj = null;
+    if (selectedExtUnitId && Array.isArray(window._cachedExternalUnits)) {
+        selectedExtUnitObj = window._cachedExternalUnits.find(u => u.unitId === selectedExtUnitId) || null;
+        if (selectedExtUnitObj) {
+            const tag = `[ОБЕКТ:${selectedExtUnitObj.unitId}|${selectedExtUnitObj.name}]`;
+            finalNote = note.startsWith(tag) ? note : (note ? `${tag} ${note}` : tag);
+        }
+    }
+
     const recordData = {
         routeKey: operationContext.routeKey,
         period: period,
@@ -5202,7 +5256,7 @@ window.submitIncomeV2 = async function() {
         category: category,
         amount: amount,
         docNum: docNum,
-        note: note
+        note: finalNote
     };
     if (!editId) recordData.timestamp = new Date().getTime();
     let primaryIncomePersisted = false;
@@ -5221,6 +5275,31 @@ window.submitIncomeV2 = async function() {
             await addDoc(mutationCollection("incomesV2", operationContext.routeKey), recordData);
             primaryIncomePersisted = true;
             assertFinancialOperationContextCurrent(operationContext);
+
+            if (apt === "EXTERNAL" && selectedExtUnitId) {
+                try {
+                    const extPayId = 'manual_' + recordData.timestamp + '_' + selectedExtUnitId;
+                    await apiCall('recordExternalUnitPaymentV1', {
+                        routeKey: operationContext.routeKey,
+                        pin: operationPin,
+                        request: JSON.stringify({
+                            paymentId: extPayId,
+                            unitId: selectedExtUnitId,
+                            period: period,
+                            category: category,
+                            amount: amount,
+                            docNum: docNum,
+                            note: note,
+                            source: 'manual',
+                            timestamp: recordData.timestamp,
+                            skipIncomeWrite: true
+                        })
+                    }, operationContext);
+                    if (typeof loadExternalUnitsData === 'function') loadExternalUnitsData(true);
+                } catch (extErr) {
+                    console.warn("External unit payment sync warning:", extErr);
+                }
+            }
             
             // Връзка с V1: Ако е от апартамент, запиши го и като плащане във V1
             if (apt !== "EXTERNAL" && category === "Управление и поддръжка") {
@@ -5682,10 +5761,14 @@ window.loadIncomesV2 = async function(operationContext) {
 
         let html = "";
         records.forEach(r => {
-            const payer = r.apt === "EXTERNAL" ? "Външен източник" : "Ап. " + r.apt;
-            if (r.paymentId && r.allocationSummary) r = {...r, note:(r.note || '')+'\n'+r.allocationSummary}; // FIN01_UI
+            const parsedExt = typeof parseExternalUnitTagClient_ === 'function' ? parseExternalUnitTagClient_(r.note) : null;
+            const payer = r.apt === "EXTERNAL"
+                ? (parsedExt ? `Външен обект: ${parsedExt.unitName} (${parsedExt.unitId})` : "Външен източник")
+                : "Ап. " + r.apt;
+            let rawNote = parsedExt ? parsedExt.cleanNote : (r.note || "");
+            if (r.paymentId && r.allocationSummary) rawNote = rawNote + (rawNote ? '\n' : '') + r.allocationSummary; // FIN01_UI
             const docText = r.docNum ? `<b>Док:</b> ${r.docNum}<br>` : "";
-            const noteText = r.note ? `<span style="color:#666; font-size:11px;">${r.note}</span>` : "";
+            const noteText = rawNote ? `<span style="color:#666; font-size:11px;">${rawNote}</span>` : "";
             
             const safeDoc = (r.docNum || "").replace(/'/g, "\\'");
             const safeNote = (r.note || "").replace(/'/g, "\\'");
@@ -5717,7 +5800,17 @@ window.saveExternalPayer = async function() {
     const operationContext = captureFinancialOperationContext();
     const payerType = document.getElementById("v2PayerType").value;
     const payerName = document.getElementById("v2PayerName").value.trim();
-    const note = document.getElementById("v2PayerNote").value.trim();
+    const rawNote = document.getElementById("v2PayerNote").value.trim();
+    const extUnitSel = document.getElementById("v2PayerExtUnit");
+    const extUnitId = extUnitSel ? extUnitSel.value : "";
+    let note = rawNote;
+    if (extUnitId && Array.isArray(window._cachedExternalUnits)) {
+        const u = window._cachedExternalUnits.find(x => x.unitId === extUnitId);
+        if (u) {
+            const tag = `[ОБЕКТ:${u.unitId}|${u.name}]`;
+            note = rawNote.startsWith(tag) ? rawNote : (rawNote ? `${tag} ${rawNote}` : tag);
+        }
+    }
 
     if (!payerType || !payerName) {
         showToast("Моля, попълнете Вид платец и Наименование на платеца.", "error");
@@ -6281,9 +6374,496 @@ window.submitDistributionV2 = async function() {
 document.addEventListener('input', function (e) {
     if (!e.target) return;
     const target = e.target;
-    if (target.inputMode === 'decimal' || target.id === 'adminAmount' || target.id === 'masterIdVal' || target.id === 'v2IncomeAmount' || target.id === 'v2DistAmount' || target.id?.startsWith('charges') || target.id?.startsWith('recurringBase_') || target.id?.startsWith('fin01')) {
+    if (target.inputMode === 'decimal' || target.id === 'adminAmount' || target.id === 'masterIdVal' || target.id === 'v2IncomeAmount' || target.id === 'v2DistAmount' || target.id?.startsWith('charges') || target.id?.startsWith('recurringBase_') || target.id?.startsWith('fin01') || target.id?.startsWith('extUnit')) {
         if (typeof target.value === 'string' && target.value.includes(',')) {
             showToast('Използвайте точка (.) за десетични стойности.', 'error');
         }
     }
 }, true);
+
+// ============================================================================
+// BEGIN EXTERNAL UNITS CLIENT (REV. 3)
+// ============================================================================
+window._cachedExternalUnits = [];
+window._cachedExternalUnitStatements = [];
+window._cachedExternalReconciliation = [];
+window._cachedExternalPendingPayments = [];
+window._cachedExternalUnitActions = [];
+
+function parseExternalUnitTagClient_(note) {
+    const m = /^\[ОБЕКТ:(EXT_\d+)\|([^\]]+)\]\s*(.*)$/.exec(String(note || '').trim());
+    if (!m) return null;
+    return { unitId: m[1], unitName: m[2], cleanNote: m[3] || '' };
+}
+
+function getDefaultExternalUnitPeriod_() {
+    const now = new Date();
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const yyyy = String(now.getFullYear());
+    return `${mm}.${yyyy}`;
+}
+
+function populateExternalUnitSelects_() {
+    const units = Array.isArray(window._cachedExternalUnits) ? window._cachedExternalUnits : [];
+    const incSel = document.getElementById('v2IncomeExtUnit');
+    if (incSel) {
+        const cur = incSel.value;
+        incSel.innerHTML = '<option value="">— Общ външен източник (без партида на обект) —</option>';
+        units.forEach(u => {
+            incSel.appendChild(new Option(`${u.unitId} — ${u.name} (${u.documentedPurpose})`, u.unitId));
+        });
+        if (cur && units.some(u => u.unitId === cur)) incSel.value = cur;
+    }
+
+    const payerSel = document.getElementById('v2PayerExtUnit');
+    if (payerSel) {
+        const cur = payerSel.value;
+        payerSel.innerHTML = '<option value="">— Без връзка към конкретен обект —</option>';
+        units.forEach(u => {
+            payerSel.appendChild(new Option(`${u.unitId} — ${u.name}`, u.unitId));
+        });
+        if (cur && units.some(u => u.unitId === cur)) payerSel.value = cur;
+    }
+}
+
+function renderExternalUnitPaymentDueBadge_(unitId, category, lblEl) {
+    if (!lblEl) return;
+    const stmts = Array.isArray(window._cachedExternalUnitStatements) ? window._cachedExternalUnitStatements : [];
+    const st = stmts.find(s => s.unitId === unitId);
+    if (!st || !st.summaryByBucket) {
+        lblEl.innerHTML = '';
+        return;
+    }
+    const bucketKey = category === 'Фонд ремонт' ? 'repairFund'
+        : category === 'Наем на общи части' ? 'contractRent'
+        : 'management';
+    const b = st.summaryByBucket[bucketKey] || { debtCents: 0, advanceCents: 0 };
+    if (b.debtCents > 0) {
+        lblEl.innerHTML = `(Дължимо по ${category}: <b style="color:#dc2626;">${(b.debtCents / 100).toFixed(2)} EUR</b>)`;
+    } else if (b.advanceCents > 0) {
+        lblEl.innerHTML = `(Аванс по ${category}: <b style="color:#16a34a;">+${(b.advanceCents / 100).toFixed(2)} EUR</b>)`;
+    } else {
+        lblEl.innerHTML = `(Салдо по ${category}: <b>0.00 EUR</b>)`;
+    }
+}
+
+window.openExternalUnitsSettings = function() {
+    const periodEl = document.getElementById('extUnitPeriod');
+    if (periodEl && !periodEl.value) {
+        periodEl.value = getDefaultExternalUnitPeriod_();
+    }
+    loadExternalUnitsData(false);
+};
+
+window.extUnitAccessTypeChanged = function() {
+    const accessEl = document.getElementById('extUnitAccessType');
+    const art51Group = document.getElementById('extUnitArt51Group');
+    const art51ActiveEl = document.getElementById('extUnitArt51Active');
+    if (!accessEl || !art51Group) return;
+    if (accessEl.value === 'COMMON_ENTRANCE') {
+        art51Group.style.display = '';
+    } else {
+        art51Group.style.display = 'none';
+        if (art51ActiveEl) art51ActiveEl.value = 'false';
+    }
+    extUnitArt51ActiveChanged();
+};
+
+window.extUnitArt51ActiveChanged = function() {
+    const accessEl = document.getElementById('extUnitAccessType');
+    const art51ActiveEl = document.getElementById('extUnitArt51Active');
+    const multGroup = document.getElementById('extUnitMultiplierGroup');
+    if (!multGroup) return;
+    const show = accessEl && accessEl.value === 'COMMON_ENTRANCE' && art51ActiveEl && art51ActiveEl.value === 'true';
+    multGroup.style.display = show ? '' : 'none';
+};
+
+window.extUnitIdealStatusChanged = function() {
+    const statusEl = document.getElementById('extUnitIdealStatus');
+    const pctGroup = document.getElementById('extUnitIdealPercentGroup');
+    const pctInput = document.getElementById('extUnitIdealPercent');
+    if (!statusEl || !pctGroup) return;
+    if (statusEl.value === 'ESTABLISHED') {
+        pctGroup.style.display = '';
+    } else {
+        pctGroup.style.display = 'none';
+        if (pctInput) pctInput.value = '';
+    }
+};
+
+window.extUnitSelectionChanged = function() {
+    const sel = document.getElementById('extUnitSelect');
+    const badge = document.getElementById('extUnitCurrentBadge');
+    const statusMsg = document.getElementById('extUnitStatusMsg');
+    if (statusMsg) statusMsg.textContent = '';
+    if (!sel) return;
+    const unitId = sel.value;
+    const units = Array.isArray(window._cachedExternalUnits) ? window._cachedExternalUnits : [];
+    const u = units.find(x => x.unitId === unitId);
+
+    if (!u) {
+        if (badge) badge.innerHTML = '<span class="art51-status-ne">Нов обект</span>';
+        document.getElementById('extUnitName').value = '';
+        document.getElementById('extUnitAccessType').value = 'SEPARATE_ENTRANCE';
+        document.getElementById('extUnitDocPurpose').value = 'Магазин';
+        document.getElementById('extUnitActualUsage').value = 'Търговски обект';
+        document.getElementById('extUnitArea').value = '';
+        document.getElementById('extUnitCadastre').value = '';
+        document.getElementById('extUnitMgmtPart').value = 'true';
+        document.getElementById('extUnitOccupants').value = '1';
+        document.getElementById('extUnitArt51Active').value = 'false';
+        document.getElementById('extUnitMultiplier').value = '3';
+        document.getElementById('extUnitIdealStatus').value = 'UNESTABLISHED';
+        document.getElementById('extUnitIdealPercent').value = '';
+        document.getElementById('extUnitRepairPart').value = 'false';
+        document.getElementById('extUnitRentAmount').value = '0';
+        document.getElementById('extUnitPeriod').value = getDefaultExternalUnitPeriod_();
+        extUnitAccessTypeChanged();
+        extUnitIdealStatusChanged();
+        return;
+    }
+
+    if (badge) {
+        badge.innerHTML = u.managementParticipation
+            ? `<span class="art51-status-ne">${u.unitId}: Участие УП - ДА (${u.art51Multiplier || 1}x)</span>`
+            : `<span class="art51-status-da">${u.unitId}: Участие УП - НЕ</span>`;
+    }
+    document.getElementById('extUnitName').value = u.name || '';
+    document.getElementById('extUnitAccessType').value = u.accessType || 'SEPARATE_ENTRANCE';
+    document.getElementById('extUnitDocPurpose').value = u.documentedPurpose || 'Магазин';
+    document.getElementById('extUnitActualUsage').value = u.actualUsage || 'Търговски обект';
+    document.getElementById('extUnitArea').value = u.areaSqm !== null && u.areaSqm !== undefined ? String(u.areaSqm) : '';
+    document.getElementById('extUnitCadastre').value = u.cadastralId || '';
+    document.getElementById('extUnitMgmtPart').value = String(Boolean(u.managementParticipation));
+    document.getElementById('extUnitOccupants').value = String(u.occupantsCount !== undefined ? u.occupantsCount : 1);
+    document.getElementById('extUnitArt51Active').value = String(Boolean(u.art51Active));
+    document.getElementById('extUnitMultiplier').value = String(u.art51Multiplier && u.art51Multiplier >= 3 ? u.art51Multiplier : 3);
+    document.getElementById('extUnitIdealStatus').value = u.idealPartsStatus || 'UNESTABLISHED';
+    document.getElementById('extUnitIdealPercent').value = (u.idealPartsStatus === 'ESTABLISHED' && u.idealPartsPercent !== null) ? String(u.idealPartsPercent) : '';
+    document.getElementById('extUnitRepairPart').value = String(Boolean(u.autoChargeRepairFund));
+    document.getElementById('extUnitRentAmount').value = String(u.contractRentAmount || 0);
+    document.getElementById('extUnitPeriod').value = u.effectiveFromPeriod || getDefaultExternalUnitPeriod_();
+    extUnitAccessTypeChanged();
+    extUnitIdealStatusChanged();
+};
+
+window.loadExternalUnitsData = async function(silent) {
+    const requestContext = captureRouteRequestContext();
+    try {
+        const res = await apiCall('getExternalUnitsV1', { routeKey: currentRouteKey });
+        throwIfStaleRouteRequestContext(requestContext);
+        if (!res || !res.success) return;
+
+        window._cachedExternalUnits = Array.isArray(res.units) ? res.units : [];
+        window._cachedExternalUnitStatements = Array.isArray(res.unitStatements) ? res.unitStatements : [];
+        window._cachedExternalReconciliation = Array.isArray(res.reconciliationByPeriod) ? res.reconciliationByPeriod : [];
+        window._cachedExternalPendingPayments = Array.isArray(res.pendingPayments) ? res.pendingPayments : [];
+        window._cachedExternalUnitActions = Array.isArray(res.actions) ? res.actions : [];
+
+        const sel = document.getElementById('extUnitSelect');
+        if (sel) {
+            const prevVal = sel.value;
+            sel.innerHTML = '<option value="">➕ Нов самостоятелен обект</option>';
+            window._cachedExternalUnits.forEach(u => {
+                sel.appendChild(new Option(`${u.unitId} — ${u.name}`, u.unitId));
+            });
+            if (prevVal && window._cachedExternalUnits.some(u => u.unitId === prevVal)) {
+                sel.value = prevVal;
+            }
+            if (!silent) extUnitSelectionChanged();
+        }
+
+        const filterSel = document.getElementById('extUnitStatementFilter');
+        if (filterSel) {
+            const prevFilter = filterSel.value || 'ALL';
+            filterSel.innerHTML = '<option value="ALL">Всички самостоятелни обекти</option>';
+            window._cachedExternalUnits.forEach(u => {
+                filterSel.appendChild(new Option(`${u.unitId} — ${u.name}`, u.unitId));
+            });
+            if (prevFilter === 'ALL' || window._cachedExternalUnits.some(u => u.unitId === prevFilter)) {
+                filterSel.value = prevFilter;
+            }
+        }
+
+        populateExternalUnitSelects_();
+        renderExternalUnitsRegistry();
+        renderExternalUnitsStatementView();
+        renderExternalUnitActions();
+        renderPendingExternalPayments_();
+        updateExternalIdealWarningBanner_();
+    } catch (e) {
+        if (!isStaleRouteRequestError(e)) console.warn('loadExternalUnitsData failed:', e);
+    }
+};
+
+function updateExternalIdealWarningBanner_() {
+    const warnEl = document.getElementById('extUnitIdealWarning');
+    if (!warnEl) return;
+    const units = Array.isArray(window._cachedExternalUnits) ? window._cachedExternalUnits : [];
+    const unest = units.filter(u => u.idealPartsStatus === 'UNESTABLISHED');
+    if (unest.length > 0) {
+        const names = unest.map(u => `${u.unitId} (${u.name})`).join(', ');
+        warnEl.style.display = 'block';
+        warnEl.innerHTML = `ℹ️ <b>Обекти с неустановени идеални части:</b> ${names}. В режими „Равно“ и „Обитатели“ те участват нормално по съответния параметър. При режим „Идеални части“ и „Фонд ремонт“ автоматичното начисляване за обект с неустановен дял е блокирано до установяване на дяловете.`;
+    } else {
+        warnEl.style.display = 'none';
+        warnEl.innerHTML = '';
+    }
+}
+
+window.saveExternalUnitSettings = async function() {
+    const requestContext = captureRouteRequestContext();
+    const btn = document.getElementById('extUnitSaveBtn');
+    const statusMsg = document.getElementById('extUnitStatusMsg');
+    if (statusMsg) statusMsg.textContent = '';
+
+    const unitId = document.getElementById('extUnitSelect')?.value || '';
+    const name = document.getElementById('extUnitName')?.value.trim() || '';
+    const accessType = document.getElementById('extUnitAccessType')?.value || 'SEPARATE_ENTRANCE';
+    const documentedPurpose = document.getElementById('extUnitDocPurpose')?.value || 'Магазин';
+    const actualUsage = document.getElementById('extUnitActualUsage')?.value || 'Търговски обект';
+    const areaSqm = document.getElementById('extUnitArea')?.value.trim() || '';
+    const cadastralId = document.getElementById('extUnitCadastre')?.value.trim() || '';
+    const managementParticipation = document.getElementById('extUnitMgmtPart')?.value === 'true';
+    const occupantsStr = document.getElementById('extUnitOccupants')?.value.trim() || '0';
+    const art51Active = accessType === 'COMMON_ENTRANCE' && document.getElementById('extUnitArt51Active')?.value === 'true';
+    const art51Multiplier = art51Active ? Number(document.getElementById('extUnitMultiplier')?.value || 3) : 1;
+    const idealPartsStatus = document.getElementById('extUnitIdealStatus')?.value || 'UNESTABLISHED';
+    const idealPartsPercent = idealPartsStatus === 'ESTABLISHED' ? document.getElementById('extUnitIdealPercent')?.value.trim() : null;
+    const autoChargeRepairFund = document.getElementById('extUnitRepairPart')?.value === 'true';
+    const contractRentAmount = document.getElementById('extUnitRentAmount')?.value.trim() || '0';
+    const effectiveFromPeriod = document.getElementById('extUnitPeriod')?.value.trim() || '';
+
+    if ([areaSqm, String(idealPartsPercent || ''), contractRentAmount].some(s => s.includes(','))) {
+        showToast('Използвайте точка (.) за десетични стойности.', 'error');
+        if (statusMsg) statusMsg.textContent = 'Грешка: Използвайте точка (.) за десетични стойности.';
+        return;
+    }
+
+    const changeRequestId = (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
+        ? crypto.randomUUID()
+        : '10000000-1000-4000-8000-' + String(Date.now()).padStart(12, '0');
+
+    const payload = {
+        changeRequestId: changeRequestId,
+        unitId: unitId || undefined,
+        name: name,
+        documentedPurpose: documentedPurpose,
+        actualUsage: actualUsage,
+        areaSqm: areaSqm === '' ? null : areaSqm,
+        cadastralId: cadastralId === '' ? null : cadastralId,
+        accessType: accessType,
+        idealPartsStatus: idealPartsStatus,
+        idealPartsPercent: idealPartsStatus === 'ESTABLISHED' ? idealPartsPercent : null,
+        occupantsCount: occupantsStr,
+        managementParticipation: managementParticipation,
+        autoChargeRepairFund: autoChargeRepairFund,
+        art51Active: art51Active,
+        art51Multiplier: art51Multiplier,
+        contractRentAmount: contractRentAmount,
+        effectiveFromPeriod: effectiveFromPeriod,
+        active: true
+    };
+
+    if (btn) btn.disabled = true;
+    if (statusMsg) statusMsg.textContent = 'Записване...';
+
+    try {
+        const adminEmail = sessionStorage.getItem('adminEmail_' + currentRouteKey) || localStorage.getItem('savedAdminEmail') || '';
+        const res = await apiCall('saveExternalUnitV1', {
+            routeKey: currentRouteKey,
+            pin: getStoredPin(),
+            adminEmail: adminEmail,
+            request: JSON.stringify(payload)
+        });
+        throwIfStaleRouteRequestContext(requestContext);
+
+        if (!res || !res.success) {
+            const errText = (res && res.error) ? res.error : 'Грешка при запис на самостоятелния обект.';
+            if (statusMsg) statusMsg.textContent = errText;
+            showToast(errText, 'error');
+            return;
+        }
+
+        if (statusMsg) statusMsg.textContent = `Потвърдено за ${res.unit.unitId} (${res.unit.name}) от период ${res.unit.effectiveFromPeriod}.`;
+        showToast('Самостоятелният обект е записан успешно!', 'success');
+        await loadExternalUnitsData(true);
+        const sel = document.getElementById('extUnitSelect');
+        if (sel && res.unit && res.unit.unitId) {
+            sel.value = res.unit.unitId;
+            extUnitSelectionChanged();
+        }
+        if (typeof checkRemontEligibility === 'function') checkRemontEligibility();
+    } catch (e) {
+        if (!isStaleRouteRequestError(e)) {
+            if (statusMsg) statusMsg.textContent = e.message || 'Грешка при запис.';
+            showToast(e.message || 'Грешка при запис.', 'error');
+        }
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+};
+
+window.renderExternalUnitsRegistry = function() {
+    const tbody = document.getElementById('extUnitsRegistryBody');
+    if (!tbody) return;
+    const units = Array.isArray(window._cachedExternalUnits) ? window._cachedExternalUnits : [];
+    if (units.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #64748b; padding: 14px;">Няма регистрирани самостоятелни обекти.</td></tr>';
+        return;
+    }
+    tbody.innerHTML = units.map(u => {
+        const accessText = u.accessType === 'COMMON_ENTRANCE'
+            ? `Общ вход (${u.art51Active ? u.art51Multiplier + 'x чл. 51' : '1x'})`
+            : 'Самостоятелен (1x, чл. 51 ал. 6)';
+        const idealText = u.idealPartsStatus === 'ESTABLISHED'
+            ? `${Number(u.idealPartsPercent).toFixed(2)}%`
+            : 'Неустановени';
+        const areaInfo = u.areaSqm ? ` (${u.areaSqm} кв.м)` : '';
+        return `<tr>
+            <td><b>${u.unitId}</b> — ${u.name}${areaInfo}</td>
+            <td>${u.documentedPurpose} / ${u.actualUsage}</td>
+            <td>${accessText}</td>
+            <td>${idealText} / ${u.occupantsCount} обит.</td>
+            <td>УП: <b>${u.managementParticipation ? 'ДА' : 'НЕ'}</b> | Рем.: <b>${u.autoChargeRepairFund ? 'ДА' : 'НЕ'}</b></td>
+            <td>${Number(u.contractRentAmount || 0).toFixed(2)} EUR</td>
+            <td>${u.effectiveFromPeriod}</td>
+        </tr>`;
+    }).join('');
+};
+
+window.renderExternalUnitsStatementView = function() {
+    const tbody = document.getElementById('extUnitsStatementBody');
+    const recBody = document.getElementById('extUnitsReconciliationBody');
+    const filterVal = document.getElementById('extUnitStatementFilter')?.value || 'ALL';
+    const stmts = Array.isArray(window._cachedExternalUnitStatements) ? window._cachedExternalUnitStatements : [];
+    const recs = Array.isArray(window._cachedExternalReconciliation) ? window._cachedExternalReconciliation : [];
+
+    if (tbody) {
+        const filtered = filterVal === 'ALL' ? stmts : stmts.filter(s => s.unitId === filterVal);
+        const rows = [];
+        filtered.forEach(st => {
+            (st.periods || []).forEach(p => {
+                if (p.chargedCents === 0 && p.paidCents === 0 && p.endingDebtCents === 0 && p.endingAdvanceCents === 0) return;
+                const mgmt = p.buckets.management;
+                const rep = p.buckets.repairFund;
+                const rent = p.buckets.contractRent;
+                rows.push(`<tr>
+                    <td><b>${st.unitId}</b> (${st.name}) — ${p.period}</td>
+                    <td>${(mgmt.chargedCents / 100).toFixed(2)} / ${(mgmt.paidCents / 100).toFixed(2)} EUR</td>
+                    <td>${(rep.chargedCents / 100).toFixed(2)} / ${(rep.paidCents / 100).toFixed(2)} EUR</td>
+                    <td>${(rent.chargedCents / 100).toFixed(2)} / ${(rent.paidCents / 100).toFixed(2)} EUR</td>
+                    <td><b>${(p.chargedCents / 100).toFixed(2)} EUR</b></td>
+                    <td style="color:#16a34a;"><b>${(p.paidCents / 100).toFixed(2)} EUR</b></td>
+                    <td style="color:#0284c7;">${(p.endingAdvanceCents / 100).toFixed(2)} EUR</td>
+                    <td style="color:${p.endingDebtCents > 0 ? '#dc2626' : '#16a34a'};"><b>${(p.endingDebtCents / 100).toFixed(2)} EUR</b></td>
+                </tr>`);
+            });
+        });
+        tbody.innerHTML = rows.length > 0
+            ? rows.join('')
+            : '<tr><td colspan="8" style="text-align: center; color: #64748b; padding: 14px;">Няма начисления или движения за избрания филтър.</td></tr>';
+    }
+
+    if (recBody) {
+        const activeRecs = recs.filter(r => r.grossExpenseCents !== 0 || r.externalBaseCents !== 0);
+        recBody.innerHTML = activeRecs.length > 0
+            ? activeRecs.map(r => {
+                const resSign = r.masterRoundingResidualCents > 0 ? '+' : '';
+                return `<tr>
+                    <td><b>${r.period}</b></td>
+                    <td>${(r.grossExpenseCents / 100).toFixed(2)} EUR</td>
+                    <td>${(r.masterBaseCents / 100).toFixed(2)} EUR</td>
+                    <td>${(r.externalBaseCents / 100).toFixed(2)} EUR</td>
+                    <td>+${(r.externalSurchargeCents / 100).toFixed(2)} EUR</td>
+                    <td>${resSign}${(r.masterRoundingResidualCents / 100).toFixed(2)} EUR</td>
+                    <td><b>${(r.totalReceivablesCents / 100).toFixed(2)} EUR</b></td>
+                </tr>`;
+            }).join('')
+            : '<tr><td colspan="7" style="text-align: center; color: #64748b; padding: 12px;">Няма операции с двустепенно разпределение.</td></tr>';
+    }
+};
+
+window.renderExternalUnitActions = function() {
+    const tbody = document.getElementById('extUnitActionsBody');
+    if (!tbody) return;
+    const actions = Array.isArray(window._cachedExternalUnitActions) ? window._cachedExternalUnitActions : [];
+    if (actions.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #64748b; padding: 14px;">Няма записани промени.</td></tr>';
+        return;
+    }
+    tbody.innerHTML = actions.map(a => {
+        const dt = a.timestamp ? new Date(a.timestamp).toLocaleString('bg-BG') : '';
+        return `<tr>
+            <td>${dt}</td>
+            <td><b>${a.unitId}</b> — ${a.unitName || ''}</td>
+            <td><b>${a.managementParticipation || '—'}</b></td>
+            <td>${a.previousState || '—'}</td>
+            <td>${a.newState || '—'}</td>
+            <td>${a.effectiveFromPeriod || '—'}</td>
+        </tr>`;
+    }).join('');
+};
+
+function renderPendingExternalPayments_() {
+    const card = document.getElementById('v2PendingExtPaymentsCard');
+    const tbody = document.getElementById('v2PendingExtPaymentsBody');
+    if (!card || !tbody) return;
+    const pending = Array.isArray(window._cachedExternalPendingPayments) ? window._cachedExternalPendingPayments : [];
+    if (pending.length === 0) {
+        card.style.display = 'none';
+        tbody.innerHTML = '';
+        return;
+    }
+    card.style.display = 'block';
+    tbody.innerHTML = pending.map((p, idx) => `<tr>
+        <td style="padding: 6px;"><b>${p.period}</b><br>${p.unitId} (${p.unitName})</td>
+        <td style="padding: 6px;">${p.payerName || ''}<br><span style="color:#666; font-size:11px;">${p.reasonFromEmail || ''}</span></td>
+        <td style="padding: 6px; text-align:right;"><b>${Number(p.amount).toFixed(2)} EUR</b></td>
+        <td style="padding: 6px;">
+            <select id="pendingExtCat_${idx}" class="admin-input" style="font-size:11px; padding:4px; margin-bottom:4px;">
+                <option value="Управление и поддръжка">Управление и поддръжка</option>
+                <option value="Фонд ремонт">Фонд ремонт</option>
+                <option value="Наем на общи части">Наем на общи части</option>
+            </select>
+            <button type="button" class="admin-btn primary" style="font-size:11px; padding:4px 8px;" onclick="resolvePendingExternalEpayPayment('${p.pendingId}', ${idx})">Потвърди</button>
+        </td>
+    </tr>`).join('');
+}
+
+window.resolvePendingExternalEpayPayment = async function(pendingId, idx) {
+    const pending = (window._cachedExternalPendingPayments || []).find(p => p.pendingId === pendingId);
+    if (!pending) return;
+    const catEl = document.getElementById('pendingExtCat_' + idx);
+    const category = catEl ? catEl.value : 'Управление и поддръжка';
+    try {
+        const res = await apiCall('resolveExternalPendingPaymentV1', {
+            routeKey: currentRouteKey,
+            pin: getStoredPin(),
+            request: JSON.stringify({
+                paymentId: pending.paymentId,
+                resolvePendingId: pending.pendingId,
+                unitId: pending.unitId,
+                period: pending.period,
+                category: category,
+                amount: pending.amount,
+                docNum: pending.ePayCode ? ('ePay ' + pending.ePayCode) : 'ePay',
+                note: 'Потвърдено ePay плащане. Наредител: ' + (pending.payerName || '') + '. Основание: ' + (pending.reasonFromEmail || ''),
+                source: 'epay-resolved',
+                timestamp: pending.timestamp
+            })
+        });
+        if (res && res.success) {
+            showToast('Плащането е разпределено успешно!', 'success');
+            await loadExternalUnitsData(true);
+            if (typeof loadIncomesV2 === 'function') loadIncomesV2();
+        } else {
+            showToast((res && res.error) || 'Грешка при потвърждаване.', 'error');
+        }
+    } catch (e) {
+        showToast(e.message || 'Грешка при потвърждаване.', 'error');
+    }
+};
+// ============================================================================
+// END EXTERNAL UNITS CLIENT
+// ============================================================================

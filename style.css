@@ -2316,4 +2316,60 @@ body {
   }
 }
 
+/* ==========================================
+   EXTERNAL UNITS UI (Responsive Desktop & Mobile)
+   ========================================== */
+.ext-units-details-container {
+  margin-top: 12px;
+}
+
+.ext-unit-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.ext-unit-warning-banner {
+  margin: 0 0 12px 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border-left: 4px solid #d97706;
+  background: rgba(245, 158, 11, 0.12);
+  color: #b45309;
+  font-size: 12.5px;
+  line-height: 1.45;
+  box-sizing: border-box;
+}
+
+.ext-unit-statement-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ext-unit-filter-select {
+  max-width: 260px;
+  margin-bottom: 0 !important;
+}
+
+@media (max-width: 600px) {
+  .ext-unit-grid-2 {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .ext-unit-statement-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .ext-unit-filter-select {
+    max-width: 100%;
+    width: 100%;
+  }
+}
+
+
 
