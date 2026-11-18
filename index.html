@@ -797,22 +797,69 @@
                 </div>
                 <!-- Logic Tab Content -->
                 <!-- BEGIN ART51 UI -->
-                <details id="art51Settings">
-                    <summary onclick="openArt51Settings()">Общ. достъп по чл. 51, ал. 5 ЗУЕС</summary>
-                    <p class="subtitle">Прилага се въз основа на въведено мотивирано решение на ОС за дейност с достъп на външни лица. Чл. 51, ал. 6 урежда отделно обектите със самостоятелен вход — не активирайте тук, когато изключението е приложимо. Платформата не установява правните факти или валидността на решението.</p>
-                    <label>Апартамент <select id="art51Apartment" onchange="art51ContextChanged();loadArt51Settings()"></select></label>
-                    <label>От период (MM.YYYY) <input id="art51Period" placeholder="11.2026" maxlength="7" oninput="art51ContextChanged()"></label>
-                    <p class="subtitle">Решението се записва от текущ или бъдещ календарен месец. Затворени минали месеци не се променят.</p>
-                    <button type="button" onclick="loadArt51Settings()">Покажи приложимото решение</button>
-                    <label>Общ. достъп <select id="art51Active"><option value="false">Не</option><option value="true">Да</option></select></label>
-                    <label>Множител (3–5) <input type="number" min="3" max="5" step="any" id="art51Multiplier"></label>
-                    <label>Решение на ОС — дата <input type="date" id="art51DecisionDate"></label>
-                    <label>Протокол / основание <input id="art51Reference" maxlength="256"></label>
-                    <label><input type="checkbox" id="art51Confirmed"> Потвърждавам, че е налице мотивирано решение на Общото събрание за прилагане на чл. 51, ал. 5 ЗУЕС.</label>
-                    <button type="button" onclick="saveArt51Settings()">Запази решение</button>
-                    <button type="button" onclick="retryArt51Settings()">Повтори непотвърдения запис</button>
-                    <p id="art51Status" role="status"></p>
-                    <pre id="art51History"></pre>
+                <details id="art51Settings" class="art51-details-container">
+                    <summary class="art51-summary" onclick="openArt51Settings()">Обекти с дейност с обществен достъп</summary>
+                    <p class="art51-header-text">Съгласно чл. 51, ал. 5 ЗУЕС. Обектите със самостоятелен вход по Чл. 51, ал. 6 — не активирайте тук</p>
+                    <div class="art51-card art51-form-card">
+                        <div class="art51-field-group">
+                            <label for="art51Apartment" class="admin-label">Апартамент</label>
+                            <div class="art51-apartment-row">
+                                <select id="art51Apartment" class="admin-input" onchange="art51ApartmentChanged()"></select>
+                                <div id="art51CurrentBadge" class="art51-badge"></div>
+                            </div>
+                        </div>
+                        <div class="art51-field-group">
+                            <label for="art51Active" class="admin-label">Общ. достъп НЕ/ДА</label>
+                            <select id="art51Active" class="admin-input" onchange="art51ActiveChanged()">
+                                <option value="false">НЕ</option>
+                                <option value="true">ДА</option>
+                            </select>
+                        </div>
+                        <div class="art51-field-group">
+                            <label for="art51Period" class="admin-label">От период (MM.YYYY)</label>
+                            <input type="text" id="art51Period" class="admin-input" placeholder="MM.YYYY" maxlength="7">
+                        </div>
+                        <div class="art51-field-group" id="art51MultiplierGroup">
+                            <label for="art51Multiplier" class="admin-label">Множител (3–5)</label>
+                            <input type="number" id="art51Multiplier" class="admin-input" min="3" max="5" step="1" placeholder="3, 4 или 5">
+                        </div>
+                        <div class="art51-field-group" id="art51DecisionDateGroup">
+                            <label for="art51DecisionDate" class="admin-label">Решение на ОС — дата</label>
+                            <input type="date" id="art51DecisionDate" class="admin-input">
+                        </div>
+                        <div class="art51-field-group" id="art51ReferenceGroup">
+                            <label for="art51Reference" class="admin-label">Протокол / основание</label>
+                            <input type="text" id="art51Reference" class="admin-input" maxlength="256" placeholder="Незадължително">
+                        </div>
+                        <button type="button" id="art51SaveBtn" class="admin-btn primary art51-save-btn" onclick="saveArt51Settings()">ЗАПАЗИ</button>
+                        <p id="art51Status" class="art51-status-msg" role="status"></p>
+                        <!-- Hidden compatibility handles -->
+                        <input type="checkbox" id="art51Confirmed" style="display:none;" aria-hidden="true">
+                        <pre id="art51History" style="display:none;" aria-hidden="true"></pre>
+                    </div>
+                    <div id="art51ActionsCard" class="art51-card art51-actions-card">
+                        <h4 class="art51-actions-title">Регистър на действията</h4>
+                        <div class="art51-table-wrapper">
+                            <table id="art51ActionsTable" class="art51-table">
+                                <thead>
+                                    <tr>
+                                        <th>Дата и час</th>
+                                        <th>Апартамент</th>
+                                        <th>Предишно състояние</th>
+                                        <th>Ново състояние</th>
+                                        <th>Множител</th>
+                                        <th>От период</th>
+                                        <th>Решение на ОС</th>
+                                        <th>Протокол / основание</th>
+                                        <th>Администратор</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="art51ActionsBody">
+                                    <tr><td colspan="9" style="text-align: center; color: #64748b; padding: 14px;">Няма записани действия.</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
                 </details>
                 <!-- END ART51 UI -->
                 <div id="master-tab-logika" class="master-panel">

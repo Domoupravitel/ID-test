@@ -2061,3 +2061,190 @@ body {
   }
 }
 
+/* ==========================================================================
+   ART51 PUBLIC ACCESS & ACTION REGISTER STYLES
+   ========================================================================== */
+.art51-details-container {
+  margin: 14px 0 20px 0;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 14px 16px;
+  background: #f8fafc;
+}
+
+.art51-summary {
+  font-family: var(--font-head, 'Outfit', sans-serif);
+  font-size: 16px;
+  font-weight: 700;
+  color: #1e3a8a;
+  cursor: pointer;
+  user-select: none;
+  padding: 4px 0;
+  outline: none;
+}
+
+.art51-summary:hover {
+  color: #2563eb;
+}
+
+.art51-header-text {
+  margin: 12px 0 16px 0;
+  font-size: 13.5px;
+  color: #475569;
+  line-height: 1.5;
+  background: #f1f5f9;
+  padding: 10px 14px;
+  border-radius: 6px;
+  border-left: 4px solid #3b82f6;
+}
+
+.art51-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 18px 16px;
+  margin-bottom: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.art51-form-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.art51-field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  width: 100%;
+}
+
+.art51-apartment-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+.art51-apartment-row select {
+  flex: 1 1 180px;
+  min-width: 140px;
+}
+
+.art51-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+.art51-badge-da {
+  background: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+}
+
+.art51-badge-ne {
+  background: #dcfce7;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+}
+
+.art51-status-da {
+  color: #dc2626 !important;
+  font-weight: 700;
+}
+
+.art51-status-ne {
+  color: #16a34a !important;
+  font-weight: 700;
+}
+
+.art51-save-btn {
+  margin-top: 8px !important;
+  width: 100%;
+  min-height: 44px;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.art51-status-msg {
+  font-size: 13px;
+  line-height: 1.4;
+  margin: 6px 0 0 0;
+  min-height: 18px;
+}
+
+.art51-actions-card {
+  margin-top: 14px;
+}
+
+.art51-actions-title {
+  margin: 0 0 12px 0;
+  color: #1e3a8a;
+  font-size: 15px;
+  font-weight: 700;
+  font-family: var(--font-head, 'Outfit', sans-serif);
+}
+
+.art51-table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+.art51-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  min-width: 680px;
+  text-align: left;
+}
+
+.art51-table th {
+  background: #f8fafc;
+  color: #334155;
+  font-weight: 600;
+  padding: 9px 12px;
+  border-bottom: 2px solid #e2e8f0;
+  white-space: nowrap;
+}
+
+.art51-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid #f1f5f9;
+  color: #1e293b;
+  vertical-align: middle;
+}
+
+.art51-table tbody tr:hover {
+  background: #f8fafc;
+}
+
+@media (max-width: 480px) {
+  .art51-card {
+    padding: 14px 12px;
+  }
+  .art51-apartment-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .art51-badge {
+    justify-content: center;
+    width: 100%;
+  }
+  .art51-table {
+    font-size: 11.5px;
+  }
+}
+
+

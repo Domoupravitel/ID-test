@@ -472,68 +472,347 @@ async function bgApiCall(action, params = {}) {
 }
 
 // BEGIN ART51 CLIENT
-let art51Pending = null;
-let art51ContextKey_ = null, art51RequestSequence_ = 0;
-let art51DataKey_ = null;
-function art51CurrentKey_() { return JSON.stringify([currentRouteKey,document.getElementById('art51Apartment').value,document.getElementById('art51Period').value,typeof financialNavigationRevision_==='number'?financialNavigationRevision_:0]); }
-window.art51ContextChanged = function() {
-    art51DataKey_=null;art51ContextKey_=art51CurrentKey_();art51RequestSequence_++;
-    document.getElementById('art51Confirmed').checked=false;
-    document.getElementById('art51Reference').value='';
-    document.getElementById('art51DecisionDate').value='';
-    document.getElementById('art51Active').value='false';
-    document.getElementById('art51Multiplier').value='';
-    document.getElementById('art51Status').textContent='Изберете и потвърдете решение за текущия обект.';
-};
-window.openArt51Settings = function() {
-    if(art51ContextKey_!==art51CurrentKey_())window.art51ContextChanged();
-    if(art51Pending&&art51Pending.route!==currentRouteKey)art51Pending=null;
-    if(!art51Pending){const retained=sessionStorage.getItem('art51Pending_'+currentRouteKey);if(retained){const p=JSON.parse(retained);if(p.route===currentRouteKey&&typeof p.raw==='string')art51Pending=Object.freeze(p);}}
-    const target=document.getElementById('art51Apartment'),source=document.getElementById('masterInfoApt');
-    if(!target.options.length&&source)target.innerHTML=source.innerHTML;
-};
-window.loadArt51Settings = async function() {
-    if(art51ContextKey_!==art51CurrentKey_())window.art51ContextChanged();
-    const key=art51CurrentKey_(),sequence=++art51RequestSequence_;art51ContextKey_=key;art51DataKey_=null;
-    document.getElementById('art51Confirmed').checked=false;
-    const owner=captureRouteRequestContext(),route=currentRouteKey,apartment=document.getElementById('art51Apartment').value,period=document.getElementById('art51Period').value;
-    let result;
-    try{result=await apiCall('getArt51V1',{pin:getStoredPin(),request:JSON.stringify({apartment,period})});throwIfStaleRouteRequestContext(owner);}
-    catch(e){if(key===art51CurrentKey_()&&sequence===art51RequestSequence_)document.getElementById('art51Status').textContent='Няма потвърдено прочитане. Заредете настройката отново.';return;}
-    if(key!==art51CurrentKey_()||sequence!==art51RequestSequence_)return;
-    const status=document.getElementById('art51Status');if(!result.success){status.textContent='Няма потвърдено прочитане: '+(result.error||'неясен резултат');return;}
-    const v=result.version;document.getElementById('art51Active').value=v&&v.active?'true':'false';document.getElementById('art51Multiplier').value=v&&v.active?v.multiplier:'';
-    document.getElementById('art51DecisionDate').value=v&&v.active?v.decisionDate:'';document.getElementById('art51Reference').value=v&&v.active?v.decisionReference:'';document.getElementById('art51Confirmed').checked=false;
-    status.textContent=v?'Приложимо решение от '+v.effectiveFromPeriod+'; Общ. достъп: '+(v.active?'Да, множител '+v.multiplier:'Не'):'Общ. достъп: Не (няма приложимо решение)';
-    document.getElementById('art51History').textContent=result.history.map(x=>x.effectiveFromPeriod+': '+(x.active?'Да ×'+x.multiplier:'Не')+'; '+(x.decisionDate||'')+' '+(x.decisionReference||'')).join('\n');
-    art51DataKey_=key;
-};
-async function sendArt51Pending_() {
-    if(!art51Pending)return;const attempt=art51Pending,owner=captureRouteRequestContext();
-    if(attempt.route!==currentRouteKey)throw Error('Маршрутът е променен.');
-    const key=art51CurrentKey_(),sequence=++art51RequestSequence_,intent=JSON.parse(attempt.raw);
-    if(intent.apartment!==document.getElementById('art51Apartment').value||intent.effectiveFromPeriod!==document.getElementById('art51Period').value)throw Error('Възстановете обекта и периода на непотвърдения запис.');
-    document.getElementById('art51Status').textContent='Непотвърден запис — изчаква се сървърът.';
-    const result=await apiCall('saveArt51V1',{pin:getStoredPin(),request:attempt.raw});throwIfStaleRouteRequestContext(owner);
-    if(key!==art51CurrentKey_()||sequence!==art51RequestSequence_)return;
-    const status=document.getElementById('art51Status');
-    if(!result.success){status.textContent=result.error==='ART51_REPORT_SYNC_PENDING'?'Решението е записано, но салдата и отчетите не са потвърдени. Използвайте „Повтори непотвърдения запис“.':'Непотвърден запис. Настройката не е потвърдена като приложена. За същия запис използвайте „Повтори непотвърдения запис“. '+(result.error||'');if(['ART51_VALIDATION','ART51_DECISION','ART51_PROSPECTIVE_PERIOD','ART51_FINANCIAL_CONFLICT'].includes(result.error)){sessionStorage.removeItem('art51Pending_'+attempt.route);art51Pending=null;}return;}
-    if(art51Pending===attempt){sessionStorage.removeItem('art51Pending_'+attempt.route);art51Pending=null;}
-    status.textContent='Потвърдено решение от '+result.version.effectiveFromPeriod+'.';
+function art51CurrentCalendarPeriod_() {
+    const now = new Date();
+    return String(now.getMonth() + 1).padStart(2, '0') + '.' + now.getFullYear();
 }
-window.saveArt51Settings = async function() {
-    if(art51ContextKey_!==null&&art51ContextKey_!==art51CurrentKey_()){window.art51ContextChanged();return;}
-    art51ContextKey_=art51CurrentKey_();
-    if(!art51Pending){const retained=sessionStorage.getItem('art51Pending_'+currentRouteKey);if(retained)art51Pending=Object.freeze(JSON.parse(retained));}
-    if(art51Pending){document.getElementById('art51Status').textContent='Първо потвърдете предишния запис чрез „Повтори непотвърдения запис“.';return;}
-    if(art51DataKey_!==art51CurrentKey_()){document.getElementById('art51Status').textContent='Първо заредете успешно настройката за текущия вход, апартамент и период.';return;}
-    const active=document.getElementById('art51Active').value==='true';
-    const request={contractVersion:1,changeRequestId:crypto.randomUUID(),apartment:document.getElementById('art51Apartment').value,active,
-        multiplier:active?Number(document.getElementById('art51Multiplier').value):null,effectiveFromPeriod:document.getElementById('art51Period').value,
-        decisionDate:active?document.getElementById('art51DecisionDate').value:null,decisionReference:active?document.getElementById('art51Reference').value:null,motivatedDecisionConfirmed:active?document.getElementById('art51Confirmed').checked:false};
-    const pending=Object.freeze({route:currentRouteKey,raw:JSON.stringify(request)});sessionStorage.setItem('art51Pending_'+currentRouteKey,JSON.stringify(pending));art51Pending=pending;await sendArt51Pending_();
+
+function art51PeriodNumber_(p) {
+    if (!p || typeof p !== 'string' || !/^(0[1-9]|1[0-2])\.(20[0-4][0-9]|2050)$/.test(p)) return 0;
+    return Number(p.slice(3)) * 12 + Number(p.slice(0, 2));
+}
+
+function art51CurrentAdminEmail_() {
+    return sessionStorage.getItem("adminEmail_" + currentRouteKey) ||
+           localStorage.getItem("savedAdminEmail") ||
+           (typeof entranceData !== 'undefined' && entranceData && entranceData.adminEmail) || '';
+}
+
+function art51FormatDateTime_(iso) {
+    if (!iso) return '-';
+    try {
+        const d = new Date(iso);
+        if (isNaN(d.getTime())) return iso;
+        return d.toLocaleString('bg-BG', { timeZone: 'Europe/Sofia' });
+    } catch(e) {
+        return iso;
+    }
+}
+
+function art51EscapeHtml_(str) {
+    return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function renderArt51ActionsTable_(actions) {
+    const tbody = document.getElementById('art51ActionsBody');
+    if (!tbody) return;
+    if (!Array.isArray(actions) || actions.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; color: #64748b; padding: 14px;">Няма записани действия.</td></tr>';
+        return;
+    }
+    const sorted = actions.slice().sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    let html = '';
+    sorted.forEach(a => {
+        const dt = art51FormatDateTime_(a.timestamp);
+        const apt = a.apartment || '-';
+        const prevState = a.previousState === 'ДА' ? '<span class="art51-status-da">ДА</span>' : '<span class="art51-status-ne">НЕ</span>';
+        const newState = a.newState === 'ДА' ? '<span class="art51-status-da">ДА</span>' : '<span class="art51-status-ne">НЕ</span>';
+        
+        let multStr = '-';
+        if (a.previousMultiplier && a.newMultiplier) multStr = `${a.previousMultiplier} → ${a.newMultiplier}`;
+        else if (a.newMultiplier) multStr = `- → ${a.newMultiplier}`;
+        else if (a.previousMultiplier) multStr = `${a.previousMultiplier} → -`;
+        
+        const period = a.effectiveFromPeriod || '-';
+        const decDate = a.decisionDate || '-';
+        const decRef = a.decisionReference ? art51EscapeHtml_(a.decisionReference) : '-';
+        const admin = a.adminEmail ? art51EscapeHtml_(a.adminEmail) : '-';
+        
+        html += `<tr>
+            <td style="white-space: nowrap;">${dt}</td>
+            <td style="font-weight: 600;">${apt}</td>
+            <td>${prevState}</td>
+            <td>${newState}</td>
+            <td style="font-weight: 600;">${multStr}</td>
+            <td>${period}</td>
+            <td>${decDate}</td>
+            <td>${decRef}</td>
+            <td>${admin}</td>
+        </tr>`;
+    });
+    tbody.innerHTML = html;
+}
+
+window.loadArt51Actions = async function() {
+    const owner = captureRouteRequestContext();
+    try {
+        const result = await apiCall('getArt51ActionsV1', { pin: getStoredPin() });
+        throwIfStaleRouteRequestContext(owner);
+        if (result && result.success && Array.isArray(result.actions)) {
+            renderArt51ActionsTable_(result.actions);
+        }
+    } catch(e) {}
 };
-window.retryArt51Settings = sendArt51Pending_;
+
+window.openArt51Settings = function() {
+    const target = document.getElementById('art51Apartment');
+    const source = document.getElementById('masterInfoApt');
+    if (target && !target.options.length) {
+        if (source && source.options && source.options.length) {
+            Array.from(source.options).forEach(opt => {
+                if (opt.value) {
+                    const o = document.createElement('option');
+                    o.value = opt.value;
+                    o.textContent = opt.textContent;
+                    target.appendChild(o);
+                }
+            });
+        } else if (typeof entranceData !== 'undefined' && entranceData && entranceData.apartmentsCount) {
+            const count = Number(entranceData.apartmentsCount) || 30;
+            for (let i = 1; i <= count; i++) {
+                const o = document.createElement('option');
+                o.value = 'A' + i;
+                o.textContent = 'A' + i;
+                target.appendChild(o);
+            }
+        }
+    }
+    const periodInput = document.getElementById('art51Period');
+    if (periodInput && !periodInput.value) {
+        periodInput.value = art51CurrentCalendarPeriod_();
+    }
+    window.art51ApartmentChanged();
+    window.loadArt51Actions();
+};
+
+window.art51ApartmentChanged = async function() {
+    const aptSelect = document.getElementById('art51Apartment');
+    if (!aptSelect) return;
+    const apt = aptSelect.value;
+    const badge = document.getElementById('art51CurrentBadge');
+    const statusMsg = document.getElementById('art51Status');
+    if (statusMsg) statusMsg.textContent = '';
+    
+    if (!apt) {
+        if (badge) { badge.innerHTML = ''; badge.className = 'art51-badge'; }
+        return;
+    }
+    const currentPeriod = art51CurrentCalendarPeriod_();
+    const periodInput = document.getElementById('art51Period');
+    if (periodInput && !periodInput.value) periodInput.value = currentPeriod;
+    
+    // Initial display
+    if (badge) {
+        badge.innerHTML = `${apt} (общ. достъп - <span class="art51-status-ne">НЕ</span>)`;
+        badge.className = 'art51-badge art51-badge-ne';
+    }
+    
+    const owner = captureRouteRequestContext();
+    try {
+        const result = await apiCall('getArt51V1', { pin: getStoredPin(), request: JSON.stringify({ apartment: apt, period: currentPeriod }) });
+        throwIfStaleRouteRequestContext(owner);
+        if (result && result.success) {
+            const v = result.version;
+            const isDa = !!(v && v.active);
+            if (badge) {
+                if (isDa) {
+                    badge.innerHTML = `${apt} (общ. достъп - <span class="art51-status-da">ДА</span>)`;
+                    badge.className = 'art51-badge art51-badge-da';
+                } else {
+                    badge.innerHTML = `${apt} (общ. достъп - <span class="art51-status-ne">НЕ</span>)`;
+                    badge.className = 'art51-badge art51-badge-ne';
+                }
+            }
+            if (aptSelect.options[aptSelect.selectedIndex]) {
+                aptSelect.options[aptSelect.selectedIndex].textContent = `${apt} (общ. достъп - ${isDa ? 'ДА' : 'НЕ'})`;
+            }
+            
+            const activeSel = document.getElementById('art51Active');
+            if (activeSel) activeSel.value = isDa ? 'true' : 'false';
+            
+            const multInput = document.getElementById('art51Multiplier');
+            const dateInput = document.getElementById('art51DecisionDate');
+            const refInput = document.getElementById('art51Reference');
+            
+            if (isDa) {
+                if (multInput) multInput.value = v.multiplier || 3;
+                if (dateInput) dateInput.value = v.decisionDate || '';
+                if (refInput) refInput.value = v.decisionReference || '';
+            } else {
+                if (multInput) multInput.value = '';
+                if (dateInput) dateInput.value = '';
+                if (refInput) refInput.value = '';
+            }
+            window.art51ActiveChanged();
+            if (Array.isArray(result.actions)) {
+                renderArt51ActionsTable_(result.actions);
+            }
+        }
+    } catch(e) {}
+};
+
+window.art51ActiveChanged = function() {
+    const active = document.getElementById('art51Active').value === 'true';
+    const multGroup = document.getElementById('art51MultiplierGroup');
+    const dateGroup = document.getElementById('art51DecisionDateGroup');
+    const refGroup = document.getElementById('art51ReferenceGroup');
+    const multInput = document.getElementById('art51Multiplier');
+    
+    if (active) {
+        if (multInput && !multInput.value) multInput.value = '3';
+        if (multGroup) multGroup.style.opacity = '1';
+        if (dateGroup) dateGroup.style.opacity = '1';
+        if (refGroup) refGroup.style.opacity = '1';
+    } else {
+        if (multGroup) multGroup.style.opacity = '0.6';
+        if (dateGroup) dateGroup.style.opacity = '0.6';
+        if (refGroup) refGroup.style.opacity = '0.6';
+    }
+};
+
+window.saveArt51Settings = async function() {
+    const statusMsg = document.getElementById('art51Status');
+    const saveBtn = document.getElementById('art51SaveBtn');
+    const apt = document.getElementById('art51Apartment').value;
+    const active = document.getElementById('art51Active').value === 'true';
+    const period = (document.getElementById('art51Period').value || '').trim();
+    const multVal = document.getElementById('art51Multiplier').value;
+    const dateVal = (document.getElementById('art51DecisionDate').value || '').trim();
+    const refVal = (document.getElementById('art51Reference').value || '').trim();
+    
+    if (!apt) {
+        showToast('Моля, изберете апартамент.', 'error');
+        if (statusMsg) statusMsg.textContent = 'Моля, изберете апартамент.';
+        return;
+    }
+    if (!/^(0[1-9]|1[0-2])\.(20[0-4][0-9]|2050)$/.test(period)) {
+        showToast('Невалиден период. Форматът трябва да е MM.YYYY.', 'error');
+        if (statusMsg) statusMsg.textContent = 'Невалиден период. Форматът трябва да е MM.YYYY.';
+        return;
+    }
+    const currentPeriod = art51CurrentCalendarPeriod_();
+    if (art51PeriodNumber_(period) < art51PeriodNumber_(currentPeriod)) {
+        showToast('Периодът не може да бъде в миналото. Изберете текущ или бъдещ месец.', 'error');
+        if (statusMsg) statusMsg.textContent = 'Периодът не може да бъде в миналото. Изберете текущ или бъдещ месец.';
+        return;
+    }
+    
+    let multiplier = null;
+    let decisionDate = null;
+    let decisionReference = null;
+    let motivatedDecisionConfirmed = false;
+    
+    if (active) {
+        const mNum = Number(multVal);
+        if (isNaN(mNum) || mNum < 3 || mNum > 5) {
+            showToast('Невалиден множител. Въведете число от 3 до 5.', 'error');
+            if (statusMsg) statusMsg.textContent = 'Невалиден множител. Въведете число от 3 до 5.';
+            return;
+        }
+        multiplier = mNum;
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(dateVal) || isNaN(Date.parse(dateVal + 'T00:00:00.000Z'))) {
+            showToast('Моля, въведете дата на решение на ОС.', 'error');
+            if (statusMsg) statusMsg.textContent = 'Моля, въведете дата на решение на ОС.';
+            return;
+        }
+        decisionDate = dateVal;
+        decisionReference = refVal;
+        motivatedDecisionConfirmed = true;
+    } else {
+        multiplier = null;
+        decisionDate = null;
+        decisionReference = null;
+        motivatedDecisionConfirmed = false;
+    }
+    
+    const request = {
+        contractVersion: 1,
+        changeRequestId: crypto.randomUUID(),
+        apartment: apt,
+        active: active,
+        multiplier: multiplier,
+        effectiveFromPeriod: period,
+        decisionDate: decisionDate,
+        decisionReference: decisionReference,
+        motivatedDecisionConfirmed: motivatedDecisionConfirmed
+    };
+    
+    if (saveBtn) {
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Записване...';
+    }
+    if (statusMsg) statusMsg.textContent = 'Записване на настройката...';
+    
+    const adminEmail = art51CurrentAdminEmail_();
+    const owner = captureRouteRequestContext();
+    try {
+        const result = await apiCall('saveArt51V1', {
+            pin: getStoredPin(),
+            request: JSON.stringify(request),
+            adminEmail: adminEmail
+        });
+        throwIfStaleRouteRequestContext(owner);
+        
+        if (result && result.success) {
+            showToast('Настройката е запазена успешно.', 'success');
+            if (statusMsg) statusMsg.textContent = 'Настройката е запазена успешно.';
+            
+            // Calculate applicable status for current period
+            const badge = document.getElementById('art51CurrentBadge');
+            const aptSelect = document.getElementById('art51Apartment');
+            let isCurrentDa = false;
+            if (art51PeriodNumber_(period) <= art51PeriodNumber_(currentPeriod)) {
+                isCurrentDa = active;
+            } else {
+                const wasDa = badge && badge.classList.contains('art51-badge-da');
+                isCurrentDa = wasDa;
+            }
+            if (badge) {
+                if (isCurrentDa) {
+                    badge.innerHTML = `${apt} (общ. достъп - <span class="art51-status-da">ДА</span>)`;
+                    badge.className = 'art51-badge art51-badge-da';
+                } else {
+                    badge.innerHTML = `${apt} (общ. достъп - <span class="art51-status-ne">НЕ</span>)`;
+                    badge.className = 'art51-badge art51-badge-ne';
+                }
+            }
+            if (aptSelect && aptSelect.options[aptSelect.selectedIndex]) {
+                aptSelect.options[aptSelect.selectedIndex].textContent = `${apt} (общ. достъп - ${isCurrentDa ? 'ДА' : 'НЕ'})`;
+            }
+            
+            if (Array.isArray(result.actions)) {
+                renderArt51ActionsTable_(result.actions);
+            } else {
+                window.loadArt51Actions();
+            }
+        } else {
+            let errorMsg = 'Възникна грешка при запазване.';
+            const err = result ? result.error : '';
+            if (err === 'ART51_DECISION') errorMsg = 'Невалидни данни за решението на ОС (необходими са валиден множител от 3 до 5 и дата на ОС).';
+            else if (err === 'ART51_PROSPECTIVE_PERIOD') errorMsg = 'Периодът не може да бъде в миналото. Изберете текущ или бъдещ месец.';
+            else if (err === 'ART51_VALIDATION') errorMsg = 'Невалидни данни за настройката.';
+            else if (err === 'ART51_FINANCIAL_CONFLICT') errorMsg = 'Финансов конфликт: съществуват приключени начисления или плащания.';
+            else if (err) errorMsg = 'Грешка: ' + err;
+            
+            showToast(errorMsg, 'error');
+            if (statusMsg) statusMsg.textContent = errorMsg;
+        }
+    } catch(err) {
+        const errorMsg = 'Грешка при връзка със сървъра: ' + (err.message || err);
+        showToast(errorMsg, 'error');
+        if (statusMsg) statusMsg.textContent = errorMsg;
+    } finally {
+        if (saveBtn) {
+            saveBtn.disabled = false;
+            saveBtn.textContent = 'ЗАПАЗИ';
+        }
+    }
+};
+
+// Aliases for compatibility
+window.loadArt51Settings = window.art51ApartmentChanged;
+window.art51ContextChanged = function() {};
+window.retryArt51Settings = window.saveArt51Settings;
 // END ART51 CLIENT
 async function apiCall(action, params = {}, operationContext) {
     showLoading();
