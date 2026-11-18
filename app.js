@@ -623,9 +623,6 @@ window.art51ApartmentChanged = async function() {
                     badge.className = 'art51-badge art51-badge-ne';
                 }
             }
-            if (aptSelect.options[aptSelect.selectedIndex]) {
-                aptSelect.options[aptSelect.selectedIndex].textContent = `${apt} (общ. достъп - ${isDa ? 'ДА' : 'НЕ'})`;
-            }
             
             const activeSel = document.getElementById('art51Active');
             if (activeSel) activeSel.value = isDa ? 'true' : 'false';
@@ -775,9 +772,6 @@ window.saveArt51Settings = async function() {
                     badge.innerHTML = `${apt} (общ. достъп - <span class="art51-status-ne">НЕ</span>)`;
                     badge.className = 'art51-badge art51-badge-ne';
                 }
-            }
-            if (aptSelect && aptSelect.options[aptSelect.selectedIndex]) {
-                aptSelect.options[aptSelect.selectedIndex].textContent = `${apt} (общ. достъп - ${isCurrentDa ? 'ДА' : 'НЕ'})`;
             }
             
             if (Array.isArray(result.actions)) {
