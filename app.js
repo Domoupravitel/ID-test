@@ -179,6 +179,39 @@ function formatRegisterDate(ts) {
     return `${dd}.${mm}.${yy}`;
 }
 
+function formatVisibleCategory(cat) {
+    if (!cat) return "";
+    let s = String(cat).trim();
+    if (s === "Плащане за СО" || s === "EXT_PAYMENT") return "Плащане за самостоятелен обект";
+    if (s === "РУП — надбавка чл. 51, ал. 5") return "Управление и поддръжка — надбавка по чл. 51, ал. 5";
+    if (s === "РУП (основа)" || s === "РУП основа") return "Управление и поддръжка (основа)";
+    if (s === "РУП (надбавка)" || s === "РУП надбавка") return "Управление и поддръжка (надбавка)";
+    if (s === "РУП") return "Управление и поддръжка";
+    if (s === "Наем на общи части") return "Наем";
+    s = s.replace(/Плащане за СО/g, "Плащане за самостоятелен обект");
+    s = s.replace(/РУП — надбавка чл\. 51, ал\. 5/g, "Управление и поддръжка — надбавка по чл. 51, ал. 5");
+    s = s.replace(/РУП \(основа\)/g, "Управление и поддръжка (основа)");
+    s = s.replace(/РУП \(надбавка\)/g, "Управление и поддръжка (надбавка)");
+    s = s.replace(/РУП основа/g, "Управление и поддръжка (основа)");
+    s = s.replace(/РУП надбавка/g, "Управление и поддръжка (надбавка)");
+    s = s.replace(/РУП осн\./g, "Упр. и поддръжка (основа)");
+    return s;
+}
+
+function formatVisibleSummaryText(text) {
+    if (!text) return "";
+    let s = String(text);
+    s = s.replace(/Плащане за СО/g, "Плащане за самостоятелен обект");
+    s = s.replace(/РУП — надбавка чл\. 51, ал\. 5/g, "Управление и поддръжка — надбавка по чл. 51, ал. 5");
+    s = s.replace(/РУП \(основа\)/g, "Управление и поддръжка (основа)");
+    s = s.replace(/РУП \(надбавка\)/g, "Управление и поддръжка (надбавка)");
+    s = s.replace(/РУП основа/g, "Управление и поддръжка (основа)");
+    s = s.replace(/РУП надбавка/g, "Управление и поддръжка (надбавка)");
+    s = s.replace(/РУП осн\./g, "Упр. и поддръжка (основа)");
+    s = s.replace(/\bСО\b/g, "Самостоятелен обект");
+    return s;
+}
+
 // Превръща период "ММ.ГГГГ" в сравнимо число ГГГГММ — огледално на
 // periodToSortable_ в Code.gs. НЕ сравнявай периоди като текст директно
 // (грешно около всяка годишна граница).
@@ -1000,6 +1033,8 @@ function resetApartmentData() {
     document.getElementById("payment-reference-box").style.display = "none";
     document.getElementById("payment-details-box").style.display = "none";
     document.getElementById("individualAptNotice").style.display = "none";
+    const aBox = document.getElementById("individualAptArt51Box");
+    if (aBox) aBox.style.display = "none";
 }
 
 // --- TOAST ---
@@ -1904,6 +1939,27 @@ async function loadApartmentData(apartment) {
             aptNoticeBanner.style.display = "block";
         } else {
             aptNoticeBanner.style.display = "none";
+        }
+
+        // --- ОБЩЕСТВЕН ДОСТЪП (ЧЛ. 51 ЗУЕС) ---
+        const art51Box = document.getElementById("individualAptArt51Box");
+        const art51Text = document.getElementById("individualAptArt51Text");
+        try {
+            const summaryRes = await apiCall('getApartmentMasterSummary', { apartment: apartment });
+            if (summaryRes && summaryRes.success && summaryRes.data && summaryRes.data.art51 && summaryRes.data.art51.active) {
+                const a51 = summaryRes.data.art51;
+                const mult = a51.multiplier || 3;
+                const eff = a51.effectiveFromPeriod ? ` (в сила от период ${a51.effectiveFromPeriod})` : '';
+                const dec = (a51.decisionReference || a51.decisionDate)
+                    ? `<br><span style="color:#475569;">Основание: Решение на ОС ${[a51.decisionReference, a51.decisionDate].filter(Boolean).join(' / ')}</span>`
+                    : '';
+                if (art51Text) art51Text.innerHTML = `Приложим коефициент: <b>${mult}×</b>${eff}${dec}`;
+                if (art51Box) art51Box.style.display = "block";
+            } else {
+                if (art51Box) art51Box.style.display = "none";
+            }
+        } catch (eArt) {
+            if (art51Box) art51Box.style.display = "none";
         }
     } else {
         showToast("Грешка при зареждане на данните", "error");
@@ -2854,6 +2910,11 @@ window.switchMasterTab = function (tab, btn) {
     }
 
     if (tab === 'extunits') {
+        if (btn) {
+            btn.style.background = "var(--primary)";
+            btn.style.color = "white";
+            btn.style.borderColor = "var(--primary)";
+        }
         if (typeof window.openExternalUnitsSettings === 'function') {
             window.openExternalUnitsSettings();
         }
@@ -3427,16 +3488,27 @@ window.loadApartmentMasterSummary = async function () {
         throwIfStaleRouteRequestContext(requestContext);
         if (res && res.success) {
             const d = res.data;
+            const a51 = d.art51;
+            let art51Line = '<li><b>🏢 Обществен достъп (чл. 51):</b> <span style="color:#64748b;">❌ НЕ</span></li>';
+            if (a51 && a51.active) {
+                const mult = a51.multiplier || 3;
+                const eff = a51.effectiveFromPeriod ? ` (в сила от ${a51.effectiveFromPeriod})` : '';
+                const dec = (a51.decisionReference || a51.decisionDate)
+                    ? `<br><small style="color:#64748b; font-weight:normal;">Решение: ${[a51.decisionReference, a51.decisionDate].filter(Boolean).join(' / ')}</small>`
+                    : '';
+                art51Line = `<li><b>🏢 Обществен достъп (чл. 51):</b> <span style="color:#2563eb; font-weight:700;">✅ ДА (${mult}×)</span>${eff}${dec}</li>`;
+            }
             container.innerHTML = `
                 <div style="background:rgba(0,122,255,0.05); padding:15px; border-radius:8px; border-left:4px solid var(--primary);">
                     <h4 style="margin-bottom:10px;">📊 Статус за Апт. ${apt}</h4>
-                    <ul style="list-style:none; padding:0;">
+                    <ul style="list-style:none; padding:0; display:flex; flex-direction:column; gap:6px;">
                         <li><b>👥 Обитатели:</b> ${d.occupants || 0} бр.</li>
                         <li><b>🔑 Чипове:</b> ${d.chips || 0} бр.</li>
                         <li><b>🔘 Уч. асансьор:</b> ${d.participation === 'Да' ? '✅ Да' : '❌ Не'}</li>
                         <li><b>📐 Идеални части:</b> ${d.idealParts || 0}%</li>
+                        ${art51Line}
                     </ul>
-                    <p style="font-size:11px; color:#666; margin-top:10px;">* Посочените данни са от текущия MASTER регистър и се използват за следващите начисления.</p>
+                    <p style="font-size:11px; color:#666; margin-top:10px;">* Посочените данни са от действащите MASTER и ЗУЕС (чл. 51) регистри и се използват за следващите начисления.</p>
                 </div>
             `;
 
@@ -3962,6 +4034,18 @@ window.switchZuesSubTab = function (subId) {
     document.querySelectorAll(".zues-sub-panel").forEach(p => p.style.display = "none");
     const target = document.getElementById("zub-" + subId);
     if (target) target.style.display = "block";
+
+    document.querySelectorAll(".zues-sub-btn").forEach(btn => {
+        btn.classList.remove("active");
+        btn.setAttribute("aria-selected", "false");
+        btn.setAttribute("aria-expanded", "false");
+    });
+    const activeBtn = document.getElementById("zues-btn-" + subId);
+    if (activeBtn) {
+        activeBtn.classList.add("active");
+        activeBtn.setAttribute("aria-selected", "true");
+        activeBtn.setAttribute("aria-expanded", "true");
+    }
 
     if (subId === 'z-meeting') {
         populateAttendanceTable();
@@ -4513,6 +4597,7 @@ async function loadMonthlyReportFromFirebase(routeKey, period) {
           chips: d["Чипове"] !== undefined ? d["Чипове"] : (r.chips || 0),
           participation: d["Участие"] !== undefined ? d["Участие"] : (r.participation || 'Да'),
           idealParts: d["Ид. части"] !== undefined ? d["Ид. части"] : (r.idealParts || 0),
+          art51Multiplier: d["Коефициент 3-5"] || d["чл. 51"] || d["Обществен достъп"] || (r.art51 ? r.art51.multiplier : null) || null,
           due: Number(r.totalDue || r.due || 0)
         };
       }).sort((a, b) => {
@@ -4588,8 +4673,8 @@ window.generateReport = async function () {
             if (d.incomesV2 && d.incomesV2.length > 0) {
                 d.incomesV2.forEach(inc => {
                     totalIncomesSum += Number(inc.paymentId ? inc.loanRepaymentCents / 100 : inc.amount || 0); // FIN01_TOTAL
-                    if (inc.paymentId && inc.allocationSummary) inc = {...inc, category:inc.allocationSummary}; // FIN01_UI
-                    if (inc.extPaymentId && inc.allocationSummary) inc = {...inc, category:(inc.category || 'Плащане за СО') + ' — ' + inc.allocationSummary};
+                    if (inc.paymentId && inc.allocationSummary) inc = {...inc, category:formatVisibleSummaryText(inc.allocationSummary)}; // FIN01_UI
+                    if (inc.extPaymentId && inc.allocationSummary) inc = {...inc, category:(inc.category || 'Плащане за самостоятелен обект') + ' — ' + formatVisibleSummaryText(inc.allocationSummary)};
                     const tr = document.createElement("tr");
                     const parsedExt = typeof parseExternalUnitTagClient_ === 'function' ? parseExternalUnitTagClient_(inc.note) : null;
                     const extUnitLabel = parsedExt
@@ -4598,7 +4683,7 @@ window.generateReport = async function () {
                     const payer = inc.apt === "EXTERNAL"
                         ? (extUnitLabel || "Външен източник")
                         : `Ап. ${inc.apt}`;
-                    const displayCat = inc.category === "Наем на общи части" ? "Наем" : (inc.category || "");
+                    const displayCat = formatVisibleCategory(inc.category);
                     const displayNote = parsedExt ? parsedExt.cleanNote : inc.note;
                     const noteStr = displayNote ? ` (${displayNote})` : "";
                     tr.innerHTML = `
@@ -4620,7 +4705,7 @@ window.generateReport = async function () {
                     totalDistSum += Number(dist.amount || 0);
                     const tr = document.createElement("tr");
                     const destType = dist.type === "balance" ? "На салдо" : "На каса";
-                    const distCat = dist.sourceBreakdownSummary ? `${dist.category} [${dist.sourceBreakdownSummary}]` : (dist.category === "Наем на общи части" ? "Наем" : dist.category);
+                    const distCat = dist.sourceBreakdownSummary ? `${formatVisibleCategory(dist.category)} [${formatVisibleSummaryText(dist.sourceBreakdownSummary)}]` : formatVisibleCategory(dist.category);
                     const noteStr = dist.note ? ` (${dist.note})` : "";
                     tr.innerHTML = `
                         <td style="padding: 10px 0; border-bottom: 1px dashed #eee;">Разпределено от "${distCat}" към ${destType}${noteStr}</td>
@@ -4667,12 +4752,13 @@ window.generateReport = async function () {
                             <td style="padding: 6px 0;">${a.chips}</td>
                             <td style="padding: 6px 0;">${a.participation}</td>
                             <td style="padding: 6px 0;">${a.idealParts}%</td>
+                            <td style="padding: 6px 0;">${a.art51Multiplier && a.art51Multiplier > 1 ? (a.art51Multiplier + '×') : 'Не'}</td>
                             <td style="padding: 6px 0; font-weight: bold;">${a.due.toFixed(2)} EUR</td>
                         </tr>
                     `;
                 });
             } else {
-                aptRowsHTML = `<tr><td colspan="6" style="padding: 10px; text-align: center;">Няма налични детайлни данни</td></tr>`;
+                aptRowsHTML = `<tr><td colspan="7" style="padding: 10px; text-align: center;">Няма налични детайлни данни</td></tr>`;
             }
 
             statsSect.innerHTML = `
@@ -4689,6 +4775,7 @@ window.generateReport = async function () {
                                 <th style="padding: 8px 4px; border-bottom: 2px solid #ddd;">Чипове</th>
                                 <th style="padding: 8px 4px; border-bottom: 2px solid #ddd;">Участие Асан.</th>
                                 <th style="padding: 8px 4px; border-bottom: 2px solid #ddd;">Ид. Части</th>
+                                <th style="padding: 8px 4px; border-bottom: 2px solid #ddd;">Общ. достъп (чл. 51)</th>
                                 <th style="padding: 8px 4px; border-bottom: 2px solid #ddd;">Начислено</th>
                             </tr>
                         </thead>
@@ -5491,7 +5578,7 @@ window.submitIncomeV2 = async function() {
             if (typeof updateV2DistAvailableSum === 'function') updateV2DistAvailableSum();
         } catch (extErr) {
             if (!isStaleRouteRequestError(extErr) && isFinancialOperationContextCurrent(operationContext)) {
-                showToast("Грешка при запис на плащане за СО: " + (extErr.message || extErr), "error");
+                showToast("Грешка при запис на плащане за самостоятелен обект: " + (extErr.message || extErr), "error");
             }
         } finally {
             if (isFinancialOperationContextCurrent(operationContext)) {
@@ -6040,14 +6127,14 @@ window.loadIncomesV2 = async function(operationContext) {
             const payer = r.apt === "EXTERNAL"
                 ? (extUnitLabel || "Външен източник")
                 : "Ап. " + r.apt;
-            const displayCat = r.category === "Наем на общи части" ? "Наем" : (r.category || "");
+            const displayCat = formatVisibleCategory(r.category);
             let rawNote = parsedExt ? parsedExt.cleanNote : (r.note || "");
-            if (r.paymentId && r.allocationSummary) rawNote = rawNote + (rawNote ? '\n' : '') + r.allocationSummary; // FIN01_UI
+            if (r.paymentId && r.allocationSummary) rawNote = rawNote + (rawNote ? '\n' : '') + formatVisibleSummaryText(r.allocationSummary); // FIN01_UI
             const docText = r.docNum ? `<b>Док:</b> ${r.docNum}<br>` : "";
             const noteText = rawNote ? `<span style="color:#666; font-size:11px;">${rawNote}</span>` : "";
             let extSummaryHtml = "";
             if (r.extPaymentId && r.allocationSummary && (!r.note || !r.note.includes(r.allocationSummary))) {
-                extSummaryHtml = `<div style="margin-top:4px; font-size:11px; color:#1e40af; font-weight:600;">${r.allocationSummary}</div>`;
+                extSummaryHtml = `<div style="margin-top:4px; font-size:11px; color:#1e40af; font-weight:600;">${formatVisibleSummaryText(r.allocationSummary)}</div>`;
             }
             let stornoHtml = "";
             if (r.extPaymentId && r.kind !== "REVERSAL" && r.settlementStatus !== "REVERSED" && !r.reversedByPaymentId) {
@@ -6921,8 +7008,8 @@ function renderExternalUnitPaymentDueBadge_(unitId, category, lblEl) {
     if (debtCents > 0) {
         const b = st.summaryByComponent || st.summaryByBucket || {};
         const parts = [];
-        if (b.rupBase && b.rupBase.debtCents > 0) parts.push(`РУП осн.: ${(b.rupBase.debtCents / 100).toFixed(2)}`);
-        if (b.rupSurcharge && b.rupSurcharge.debtCents > 0) parts.push(`Надбавка: ${(b.rupSurcharge.debtCents / 100).toFixed(2)}`);
+        if (b.rupBase && b.rupBase.debtCents > 0) parts.push(`Упр. и поддръжка (основа): ${(b.rupBase.debtCents / 100).toFixed(2)}`);
+        if (b.rupSurcharge && b.rupSurcharge.debtCents > 0) parts.push(`Упр. и поддръжка (надбавка): ${(b.rupSurcharge.debtCents / 100).toFixed(2)}`);
         if (b.repairFund && b.repairFund.debtCents > 0) parts.push(`Фонд ремонт: ${(b.repairFund.debtCents / 100).toFixed(2)}`);
         if (b.contractRent && b.contractRent.debtCents > 0) parts.push(`Наем: ${(b.contractRent.debtCents / 100).toFixed(2)}`);
         const detail = parts.length > 0 ? ` [${parts.join(' · ')}]` : '';
@@ -7002,8 +7089,8 @@ window.onV2IncomeExtPaymentInputChanged = function() {
                 : '';
             content.innerHTML = `
                 ${explicitBadge}
-                <div class="ext-unit-preview-row"><span>РУП (основа)</span><strong>${fmt(c.rupBaseCents)}</strong></div>
-                <div class="ext-unit-preview-row"><span>РУП (надбавка чл. 51, ал. 5)</span><strong>${fmt(c.rupSurchargeCents)}</strong></div>
+                <div class="ext-unit-preview-row"><span>Управление и поддръжка (основа)</span><strong>${fmt(c.rupBaseCents)}</strong></div>
+                <div class="ext-unit-preview-row"><span>Управление и поддръжка — надбавка по чл. 51, ал. 5</span><strong>${fmt(c.rupSurchargeCents)}</strong></div>
                 <div class="ext-unit-preview-row"><span>Фонд ремонт</span><strong>${fmt(c.repairFundCents)}</strong></div>
                 <div class="ext-unit-preview-row"><span>Наем</span><strong>${fmt(c.contractRentCents)}</strong></div>
                 <div class="ext-unit-preview-row ext-unit-preview-advance"><span>Аванс</span><strong>${fmt(c.unallocatedAdvanceCents)}</strong></div>
@@ -7249,6 +7336,9 @@ window.saveExternalUnitSettings = async function() {
     const statusMsg = document.getElementById('extUnitStatusMsg');
     if (statusMsg) statusMsg.textContent = '';
 
+    const origBtnHtml = btn ? btn.innerHTML : '';
+    const t0 = (typeof performance !== 'undefined' && typeof performance.now === 'function') ? performance.now() : Date.now();
+
     const unitId = document.getElementById('extUnitSelect')?.value || '';
     const name = document.getElementById('extUnitName')?.value.trim() || '';
     const accessType = document.getElementById('extUnitAccessType')?.value || 'SEPARATE_ENTRANCE';
@@ -7300,8 +7390,13 @@ window.saveExternalUnitSettings = async function() {
         payload.cadastralId = cadastralId === '' ? null : cadastralId;
     }
 
-    if (btn) btn.disabled = true;
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="art51-spinner" style="display:inline-block; vertical-align:middle; width:14px; height:14px; border:2px solid rgba(255,255,255,0.4); border-top-color:#fff; border-radius:50%; margin-right:6px; animation:spin 0.7s linear infinite;"></span>Запазване…';
+    }
     if (statusMsg) statusMsg.textContent = 'Записване...';
+
+    const t1 = (typeof performance !== 'undefined' && typeof performance.now === 'function') ? performance.now() : Date.now();
 
     try {
         const adminEmail = sessionStorage.getItem('adminEmail_' + currentRouteKey) || localStorage.getItem('savedAdminEmail') || '';
@@ -7313,33 +7408,77 @@ window.saveExternalUnitSettings = async function() {
         });
         throwIfStaleRouteRequestContext(requestContext);
 
+        const t2 = (typeof performance !== 'undefined' && typeof performance.now === 'function') ? performance.now() : Date.now();
+
         if (!res || !res.success) {
             const errText = (res && res.error) ? res.error : 'Грешка при запис на самостоятелния обект.';
             if (statusMsg) statusMsg.textContent = errText;
             showToast(errText, 'error');
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = origBtnHtml;
+            }
             return;
         }
 
         if (typeof window.clearMasterDirtyState === 'function') window.clearMasterDirtyState();
         const savedUnitId = res.unit && res.unit.unitId ? res.unit.unitId : '';
-        showToast('Самостоятелният обект е записан успешно!', 'success');
-        await loadExternalUnitsData(true);
+        
+        // Instant UI update using data returned directly from saveExternalUnitV1!
+        if (Array.isArray(res.units)) {
+            window._cachedExternalUnits = res.units;
+        }
+        if (Array.isArray(res.actions)) {
+            window._cachedExternalUnitActions = res.actions;
+        }
         const sel = document.getElementById('extUnitSelect');
-        if (sel && savedUnitId) {
-            sel.value = savedUnitId;
-            extUnitSelectionChanged();
+        if (sel) {
+            sel.innerHTML = '<option value="">➕ Нов самостоятелен обект</option>';
+            (window._cachedExternalUnits || []).forEach(u => {
+                sel.appendChild(new Option(`${u.unitId} — ${u.name}`, u.unitId));
+            });
+            if (savedUnitId) {
+                sel.value = savedUnitId;
+                extUnitSelectionChanged();
+            }
         }
+        const filterSel = document.getElementById('extUnitStatementFilter');
+        if (filterSel) {
+            const prevFilter = filterSel.value || 'ALL';
+            filterSel.innerHTML = '<option value="ALL">Всички самостоятелни обекти</option>';
+            (window._cachedExternalUnits || []).forEach(u => {
+                filterSel.appendChild(new Option(`${u.unitId} — ${u.name}`, u.unitId));
+            });
+            filterSel.value = prevFilter;
+        }
+        populateExternalUnitSelects_();
+        renderExternalUnitsRegistry();
+        renderExternalUnitActions();
+        updateExternalIdealWarningBanner_();
+
+        const t3 = (typeof performance !== 'undefined' && typeof performance.now === 'function') ? performance.now() : Date.now();
+        console.log(`[PERF_SAVE_EXT_UNIT] Total UI time: ${(t3 - t0).toFixed(1)}ms | API roundtrip: ${(t2 - t1).toFixed(1)}ms | UI render: ${(t3 - t2).toFixed(1)}ms`);
+
+        showToast('Обектът е запазен', 'success');
         if (statusMsg && res.unit) {
-            statusMsg.innerHTML = `✅ Потвърдено за <b>${res.unit.unitId} (${res.unit.name})</b> от период ${res.unit.effectiveFromPeriod}. &nbsp;🔗 <a href="#" class="ext-unit-epay-link" onclick="navigateToExternalPayerForUnit('${savedUnitId}'); return false;">За ePay: свържи обекта с платец</a>`;
+            statusMsg.innerHTML = `✅ Обектът е запазен успешно: <b>${res.unit.unitId} (${res.unit.name})</b> от период ${res.unit.effectiveFromPeriod}. &nbsp;🔗 <a href="#" class="ext-unit-epay-link" onclick="navigateToExternalPayerForUnit('${savedUnitId}'); return false;">За ePay: свържи обекта с платец</a>`;
         }
-        if (typeof checkRemontEligibility === 'function') checkRemontEligibility();
+
+        // Non-blocking background sync for statements and ideal parts checks
+        setTimeout(() => {
+            if (typeof loadExternalUnitsData === 'function') loadExternalUnitsData(true);
+            if (typeof checkRemontEligibility === 'function') checkRemontEligibility();
+        }, 50);
     } catch (e) {
         if (!isStaleRouteRequestError(e)) {
             if (statusMsg) statusMsg.textContent = e.message || 'Грешка при запис.';
             showToast(e.message || 'Грешка при запис.', 'error');
         }
     } finally {
-        if (btn) btn.disabled = false;
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = origBtnHtml;
+        }
     }
 };
 
@@ -7461,8 +7600,8 @@ function renderPendingExternalPayments_() {
         <td style="padding: 6px; text-align:right;"><b>${Number(p.amount).toFixed(2)} EUR</b></td>
         <td style="padding: 6px;">
             <select id="pendingExtCat_${idx}" class="admin-input" style="font-size:11px; padding:4px; margin-bottom:4px;">
-                <option value="Плащане за СО">Плащане за СО (автоматичен приоритет)</option>
-                <option value="Управление и поддръжка">Управление и поддръжка (РУП)</option>
+                <option value="Плащане за СО">Плащане за самостоятелен обект (автоматичен приоритет)</option>
+                <option value="Управление и поддръжка">Управление и поддръжка</option>
                 <option value="Фонд ремонт">Фонд ремонт</option>
                 <option value="Наем">Наем</option>
             </select>

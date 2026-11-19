@@ -453,7 +453,7 @@
                         <label class="v2-dist-cat-item">
                             <span class="v2-dist-cat-left">
                                 <input type="checkbox" class="v2-dist-cat-cb" value="РУП — надбавка чл. 51, ал. 5" onchange="onV2DistCategoriesChanged()">
-                                <span class="v2-dist-cat-name">РУП — надбавка чл. 51, ал. 5</span>
+                                <span class="v2-dist-cat-name">Управление и поддръжка — надбавка по чл. 51, ал. 5</span>
                             </span>
                             <span class="v2-dist-cat-avail" data-avail-for="РУП — надбавка чл. 51, ал. 5">0.00 EUR</span>
                         </label>
@@ -516,7 +516,7 @@
                     </div>
                     <select id="v2DistCategory" class="admin-input" style="display:none;" onchange="updateV2DistAvailableSum()">
                         <option value="">Избери...</option>
-                        <option value="РУП — надбавка чл. 51, ал. 5">РУП — надбавка чл. 51, ал. 5</option>
+                        <option value="РУП — надбавка чл. 51, ал. 5">Управление и поддръжка — надбавка по чл. 51, ал. 5</option>
                         <option value="Наем">2. Наем</option>
                         <option value="Средства от бюджетни институции">3. Средства от бюджетни институции</option>
                         <option value="Кредит">4. Кредит</option>
@@ -582,7 +582,7 @@
 
                     <label class="admin-label">Категория</label>
                     <select id="v2IncomeCategory" class="admin-input" onchange="v2LoadPaymentDue()">
-                        <option value="Плащане за СО" style="display:none;">Плащане за СО</option>
+                        <option value="Плащане за СО" style="display:none;">Плащане за самостоятелен обект</option>
                         <option value="Управление и поддръжка">1. Управление и поддръжка</option>
                         <option value="Наем">2. Наем</option>
                         <option value="Средства от бюджетни институции">3. Средства от бюджетни институции</option>
@@ -602,7 +602,7 @@
                     <textarea id="v2IncomeNote" class="admin-input" placeholder="Въведете кратко описание..." style="min-height: 60px;" oninput="onV2IncomeExtPaymentInputChanged()"></textarea>
 
                     <div id="extUnitPaymentPreviewBox" class="ext-unit-payment-preview-box" style="display: none;" aria-live="polite">
-                        <div class="ext-unit-preview-title">📊 Предварителен преглед на разпределението (СО)</div>
+                        <div class="ext-unit-preview-title">📊 Предварителен преглед на разпределението (Самостоятелен обект)</div>
                         <div id="extUnitPaymentPreviewContent" class="ext-unit-preview-grid"></div>
                     </div>
 
@@ -639,7 +639,7 @@
                     
                     <label class="admin-label">Вид платец (Категория)</label>
                     <select id="v2PayerType" class="admin-input">
-                        <option value="Плащане за СО">Плащане за СО (Автоматично разпределяне)</option>
+                        <option value="Плащане за СО">Плащане за самостоятелен обект (Автоматично разпределяне)</option>
                         <option value="Управление и поддръжка">1. Управление и поддръжка (Самостоятелен обект)</option>
                         <option value="Наем">2. Наем</option>
                         <option value="Фонд ремонт">Фонд ремонт (Самостоятелен обект)</option>
@@ -896,16 +896,16 @@
                     Обитатели, Чипове) за дълги периоди.</p>
                 <div id="masterAccordionContainer" class="master-accordion-container">
                     <!-- 1. Метод на разпределяне на разходи -->
-                    <div id="masterGroupDistribution" class="master-acc-group open">
-                        <button type="button" class="master-acc-group-btn active" onclick="toggleMasterAccordionGroup('distribution', this)" aria-expanded="true">
+                    <div id="masterGroupDistribution" class="master-acc-group">
+                        <button type="button" class="master-acc-group-btn" onclick="toggleMasterAccordionGroup('distribution', this)" aria-expanded="false">
                             <span>📐 Метод на разпределяне на разходи</span>
-                            <span class="master-acc-chevron">▾</span>
+                            <span class="master-acc-chevron">▸</span>
                         </button>
-                        <div id="masterGroupBody_distribution" class="master-acc-group-body">
+                        <div id="masterGroupBody_distribution" class="master-acc-group-body" style="display:none;">
                             <!-- Логика -->
                             <div class="master-acc-item">
-                                <button type="button" class="master-tab active" data-master-tab="logika" onclick="switchMasterTab('logika',this)"><span>📐 Логика</span><span class="master-item-chevron">▾</span></button>
-                                <div id="master-tab-logika" class="master-panel" style="display:block;">
+                                <button type="button" class="master-tab" data-master-tab="logika" onclick="switchMasterTab('logika',this)"><span>📐 Логика</span><span class="master-item-chevron">▸</span></button>
+                                <div id="master-tab-logika" class="master-panel" style="display:none;">
                                     <label class="admin-label">Логика</label>
                                     <select id="masterLogikaVal" class="admin-input">
                                         <option value="Равно">Равно</option>
@@ -1386,7 +1386,7 @@
                                             <thead>
                                                 <tr>
                                                     <th>Обект / Период</th>
-                                                    <th>РУП основа / надбавка (Нач./Плат.)</th>
+                                                    <th>Управление и поддръжка: основа / надбавка (Нач./Плат.)</th>
                                                     <th>Фонд ремонт (Нач./Плат.)</th>
                                                     <th>Наем (Нач./Плат.)</th>
                                                     <th>Общо Начислено</th>
@@ -1453,17 +1453,17 @@
                             <span>⚖ ЗУЕС Мениджър</span>
                             <span class="master-item-chevron">▸</span>
                         </button>
-                        <div id="master-tab-zues" class="master-panel" style="display: none;">
-                            <div
+                        <div id="master-tab-zues" class="master-panel" style="display:none;">
+                            <div class="zues-sub-tabs-bar"
                                 style="display:flex;gap:6px;flex-wrap:wrap;margin:0 0 15px; border-bottom: 1px solid #eee; padding-bottom: 10px;">
-                                <button class="admin-btn secondary small" style="padding: 6px 10px; font-size: 11px;"
-                                    onclick="switchZuesSubTab('z-book')">📖 Книга на ЕС</button>
-                                <button class="admin-btn secondary small" style="padding: 6px 10px; font-size: 11px;"
-                                    onclick="switchZuesSubTab('z-fullbook')">📋 Цяла книга</button>
-                                <button class="admin-btn secondary small" style="padding: 6px 10px; font-size: 11px;"
-                                    onclick="switchZuesSubTab('z-meeting')">🤝 Общо събрание</button>
-                                <button class="admin-btn secondary small" style="padding: 6px 10px; font-size: 11px;"
-                                    onclick="switchZuesSubTab('z-docs')">📄 Декларации</button>
+                                <button type="button" id="zues-btn-z-book" class="admin-btn secondary small zues-sub-btn active" style="padding: 6px 10px; font-size: 11px;"
+                                    onclick="switchZuesSubTab('z-book')" aria-selected="true" aria-expanded="true">📖 Книга на ЕС</button>
+                                <button type="button" id="zues-btn-z-fullbook" class="admin-btn secondary small zues-sub-btn" style="padding: 6px 10px; font-size: 11px;"
+                                    onclick="switchZuesSubTab('z-fullbook')" aria-selected="false" aria-expanded="false">📋 Цяла книга</button>
+                                <button type="button" id="zues-btn-z-meeting" class="admin-btn secondary small zues-sub-btn" style="padding: 6px 10px; font-size: 11px;"
+                                    onclick="switchZuesSubTab('z-meeting')" aria-selected="false" aria-expanded="false">🤝 Общо събрание</button>
+                                <button type="button" id="zues-btn-z-docs" class="admin-btn secondary small zues-sub-btn" style="padding: 6px 10px; font-size: 11px;"
+                                    onclick="switchZuesSubTab('z-docs')" aria-selected="false" aria-expanded="false">📄 Декларации</button>
                             </div>
 
                             <!-- Sub-Tab: Book -->
@@ -2250,6 +2250,18 @@
                                 апартамент:</strong>
                             <div id="individualAptNoticeText"
                                 style="font-size: 13px; line-height: 1.5; white-space: pre-wrap;"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Individual Apartment Art 51 Info Box -->
+                <div id="individualAptArt51Box"
+                    style="display:none; margin-bottom: 20px; background: #eff6ff; border: 1px solid #93c5fd; border-radius: 12px; padding: 14px 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.03);">
+                    <div style="display: flex; align-items: flex-start; gap: 12px;">
+                        <span style="font-size: 22px;">🏢</span>
+                        <div>
+                            <strong style="display: block; font-size: 13px; color: #1e40af; margin-bottom: 3px;">Обект с дейност с обществен достъп (чл. 51, ал. 5 ЗУЕС):</strong>
+                            <div id="individualAptArt51Text" style="font-size: 12px; color: #1e3a8a; line-height: 1.5;"></div>
                         </div>
                     </div>
                 </div>
