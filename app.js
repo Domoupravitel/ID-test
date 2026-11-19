@@ -936,7 +936,7 @@ async function apiCall(action, params = {}, operationContext) {
 
     try {
         // The accepted form-POST contract avoids URL limits for nine per-category notes.
-        const response = (action === 'distributeMaintenanceV1' || action === 'fin01Preview' || action === 'fin01Settle' || action === 'addChargesV2' || action === 'saveRecurringExpenseV1') ? // SLICE5_RECURRING_UI // FIN01_POST // MAINTENANCE_POST
+        const response = (action === 'distributeMaintenanceV1' || action === 'fin01Preview' || action === 'fin01Settle' || action === 'addChargesV2' || action === 'saveRecurringExpenseV1' || action === 'previewExternalUnitPaymentV1' || action === 'recordExternalUnitPaymentV1' || action === 'reverseExternalUnitPaymentV1' || action === 'distributeIncomeV2') ? // SLICE5_RECURRING_UI // FIN01_POST // MAINTENANCE_POST
             await fetch(SCRIPT_URL, {method: 'POST', body: new URLSearchParams(params)}) :
             await fetch(`${SCRIPT_URL}?${queryParams}`);
         const result = await response.json();
@@ -2118,9 +2118,10 @@ function populateAdminDropdowns() {
     autoFillCurrentPeriod();
     
     const v2AptSel = document.getElementById("v2IncomeApt");
-    if (v2AptSel && apartmentList.length > 0 && v2AptSel.options.length <= 2) {
+    if (v2AptSel && apartmentList.length > 0 && v2AptSel.options.length <= 3) {
         v2AptSel.innerHTML = '<option value="">Избери...</option>';
         v2AptSel.appendChild(new Option("Външен източник", "EXTERNAL"));
+        v2AptSel.appendChild(new Option("Самостоятелни обекти (извън A1–AN)", "EXTERNAL_UNIT"));
         apartmentList.forEach(a => v2AptSel.appendChild(new Option(a, a)));
     }
 if (typeof loadCurrentCharges === 'function') loadCurrentCharges();
@@ -2682,7 +2683,146 @@ window.submitAdminEmail = async function () {
     }
 }
 
+let _masterDirtyTab = null;
+
+window.clearMasterDirtyState = function () {
+    _masterDirtyTab = null;
+};
+
+function checkMasterDirtyAndConfirm_(nextKey) {
+    if (_masterDirtyTab && _masterDirtyTab !== nextKey) {
+        const proceed = typeof window.confirm === 'function'
+            ? window.confirm("Имате незапазени промени в текущия раздел на настройките. Сигурни ли сте, че искате да превключите без запис?")
+            : true;
+        if (!proceed) return false;
+        _masterDirtyTab = null;
+    }
+    return true;
+}
+
+document.addEventListener("input", function (e) {
+    const panel = e.target && typeof e.target.closest === 'function' ? e.target.closest(".master-panel") : null;
+    if (panel && panel.id && panel.id.startsWith("master-tab-")) {
+        _masterDirtyTab = panel.id.replace("master-tab-", "");
+    }
+}, true);
+
+document.addEventListener("change", function (e) {
+    const panel = e.target && typeof e.target.closest === 'function' ? e.target.closest(".master-panel") : null;
+    if (panel && panel.id && panel.id.startsWith("master-tab-")) {
+        const ignoreIds = ["masterInfoApt", "art51Apartment", "extUnitSelect", "extUnitStatementFilter", "zuesFilterApt", "zuesFilterStatus", "zuesReportApt"];
+        if (e.target.id && ignoreIds.includes(e.target.id)) return;
+        _masterDirtyTab = panel.id.replace("master-tab-", "");
+    }
+}, true);
+
+window.toggleMasterAccordionGroup = function (groupKey, btn) {
+    const body = document.getElementById("masterGroupBody_" + groupKey);
+    const groupEl = btn && typeof btn.closest === 'function' ? btn.closest(".master-acc-group") : null;
+    const isCurrentlyOpen = body && body.style.display !== "none";
+
+    if (isCurrentlyOpen) {
+        if (!checkMasterDirtyAndConfirm_(null)) return;
+        body.style.display = "none";
+        if (groupEl) groupEl.classList.remove("open");
+        if (btn) {
+            btn.classList.remove("active");
+            btn.setAttribute("aria-expanded", "false");
+            const chev = btn.querySelector(".master-acc-chevron");
+            if (chev) chev.textContent = "▸";
+        }
+        body.querySelectorAll(".master-panel").forEach(p => p.style.display = "none");
+        body.querySelectorAll(".master-tab").forEach(b => {
+            b.classList.remove("active");
+            const c = b.querySelector(".master-item-chevron");
+            if (c) c.textContent = "▸";
+        });
+        return;
+    }
+
+    if (!checkMasterDirtyAndConfirm_("group_" + groupKey)) return;
+
+    // Затваряме всички други групи и самостоятелни панели
+    document.querySelectorAll(".master-acc-group").forEach(g => {
+        g.classList.remove("open");
+        const gBtn = g.querySelector(".master-acc-group-btn");
+        if (gBtn) {
+            gBtn.classList.remove("active");
+            gBtn.setAttribute("aria-expanded", "false");
+            const c = gBtn.querySelector(".master-acc-chevron");
+            if (c) c.textContent = "▸";
+        }
+        const gBody = g.querySelector(".master-acc-group-body");
+        if (gBody) gBody.style.display = "none";
+    });
+    document.querySelectorAll(".master-panel").forEach(p => p.style.display = "none");
+    document.querySelectorAll(".master-tab").forEach(b => {
+        b.classList.remove("active");
+        b.style.background = "";
+        b.style.color = "";
+        b.style.borderColor = "";
+        const c = b.querySelector(".master-item-chevron");
+        if (c) c.textContent = "▸";
+    });
+
+    if (body) body.style.display = "flex";
+    if (groupEl) groupEl.classList.add("open");
+    if (btn) {
+        btn.classList.add("active");
+        btn.setAttribute("aria-expanded", "true");
+        const chev = btn.querySelector(".master-acc-chevron");
+        if (chev) chev.textContent = "▾";
+        if (typeof btn.scrollIntoView === 'function') {
+            btn.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        }
+    }
+};
+
 window.switchMasterTab = function (tab, btn) {
+    const pane = document.getElementById("master-tab-" + tab);
+    const isAlreadyOpen = pane && pane.style.display === "block";
+
+    if (isAlreadyOpen) {
+        if (!checkMasterDirtyAndConfirm_(null)) return;
+        pane.style.display = "none";
+        if (btn) {
+            btn.classList.remove("active");
+            btn.style.background = "";
+            btn.style.color = "";
+            btn.style.borderColor = "";
+            const chev = btn.querySelector(".master-item-chevron");
+            if (chev) chev.textContent = "▸";
+        }
+        return;
+    }
+
+    if (!checkMasterDirtyAndConfirm_(tab)) return;
+
+    const parentGroup = btn && typeof btn.closest === 'function' ? btn.closest(".master-acc-group") : null;
+    document.querySelectorAll(".master-acc-group").forEach(g => {
+        const gBtn = g.querySelector(".master-acc-group-btn");
+        const gBody = g.querySelector(".master-acc-group-body");
+        if (g === parentGroup) {
+            g.classList.add("open");
+            if (gBody) gBody.style.display = "flex";
+            if (gBtn) {
+                gBtn.classList.add("active");
+                gBtn.setAttribute("aria-expanded", "true");
+                const c = gBtn.querySelector(".master-acc-chevron");
+                if (c) c.textContent = "▾";
+            }
+        } else {
+            g.classList.remove("open");
+            if (gBody) gBody.style.display = "none";
+            if (gBtn) {
+                gBtn.classList.remove("active");
+                gBtn.setAttribute("aria-expanded", "false");
+                const c = gBtn.querySelector(".master-acc-chevron");
+                if (c) c.textContent = "▸";
+            }
+        }
+    });
+
     document.querySelectorAll(".master-panel").forEach(p => p.style.display = "none");
     document.querySelectorAll(".master-tab").forEach(b => {
         b.classList.remove("active");
@@ -2690,11 +2830,16 @@ window.switchMasterTab = function (tab, btn) {
         b.style.background = "";
         b.style.color = "";
         b.style.borderColor = "";
+        const c = b.querySelector(".master-item-chevron");
+        if (c) c.textContent = "▸";
     });
 
-    const pane = document.getElementById("master-tab-" + tab);
     if (pane) pane.style.display = "block";
-    btn.classList.add("active");
+    if (btn) {
+        btn.classList.add("active");
+        const chev = btn.querySelector(".master-item-chevron");
+        if (chev) chev.textContent = "▾";
+    }
 
     if (tab === 'idealni') {
         if (typeof window.refreshIdealPartsTabState === 'function') {
@@ -2702,12 +2847,31 @@ window.switchMasterTab = function (tab, btn) {
         }
     }
 
+    if (tab === 'art51') {
+        if (typeof window.openArt51Settings === 'function') {
+            window.openArt51Settings();
+        }
+    }
+
+    if (tab === 'extunits') {
+        if (typeof window.openExternalUnitsSettings === 'function') {
+            window.openExternalUnitsSettings();
+        }
+    }
+
     if (tab === 'zues') {
-        // Синьо когато е активно
-        btn.style.background = "var(--primary)";
-        btn.style.color = "white";
-        btn.style.borderColor = "var(--primary)";
+        if (btn) {
+            btn.style.background = "var(--primary)";
+            btn.style.color = "white";
+            btn.style.borderColor = "var(--primary)";
+        }
         switchZuesSubTab('z-book');
+    }
+
+    _masterDirtyTab = null;
+
+    if (btn && typeof btn.scrollIntoView === 'function') {
+        btn.scrollIntoView({ behavior: "smooth", block: "nearest" });
     }
 }
 
@@ -3198,6 +3362,7 @@ window.submitMaster = async function (sheetName) {
         throwIfStaleRouteRequestContext(requestContext);
 
         if (result && result.success) {
+            _masterDirtyTab = null;
             showToast(`Успешно обновен регистър: ${sheetName}. Данните се синхронизират...`, "success");
             if (sheetName === 'Логика') {
                 const logikaSelect = document.getElementById('masterLogikaVal');
@@ -4424,15 +4589,20 @@ window.generateReport = async function () {
                 d.incomesV2.forEach(inc => {
                     totalIncomesSum += Number(inc.paymentId ? inc.loanRepaymentCents / 100 : inc.amount || 0); // FIN01_TOTAL
                     if (inc.paymentId && inc.allocationSummary) inc = {...inc, category:inc.allocationSummary}; // FIN01_UI
+                    if (inc.extPaymentId && inc.allocationSummary) inc = {...inc, category:(inc.category || 'Плащане за СО') + ' — ' + inc.allocationSummary};
                     const tr = document.createElement("tr");
                     const parsedExt = typeof parseExternalUnitTagClient_ === 'function' ? parseExternalUnitTagClient_(inc.note) : null;
+                    const extUnitLabel = parsedExt
+                        ? `Външен обект: ${parsedExt.unitName} (${parsedExt.unitId})`
+                        : (inc.extUnitId ? `Външен обект: ${inc.extUnitName || inc.extUnitId} (${inc.extUnitId})` : null);
                     const payer = inc.apt === "EXTERNAL"
-                        ? (parsedExt ? `Външен обект: ${parsedExt.unitName} (${parsedExt.unitId})` : "Външен източник")
+                        ? (extUnitLabel || "Външен източник")
                         : `Ап. ${inc.apt}`;
+                    const displayCat = inc.category === "Наем на общи части" ? "Наем" : (inc.category || "");
                     const displayNote = parsedExt ? parsedExt.cleanNote : inc.note;
                     const noteStr = displayNote ? ` (${displayNote})` : "";
                     tr.innerHTML = `
-                        <td style="padding: 10px 0; border-bottom: 1px dashed #eee;">Приход от ${payer} - кат. "${inc.category}"${noteStr}</td>
+                        <td style="padding: 10px 0; border-bottom: 1px dashed #eee;">Приход от ${payer} - кат. "${displayCat}"${noteStr}</td>
                         <td style="text-align: right; padding: 10px 0; border-bottom: 1px dashed #eee;">${Number(inc.amount || 0).toFixed(2)} EUR</td>
                     `;
                     collectedRows.appendChild(tr);
@@ -4450,9 +4620,10 @@ window.generateReport = async function () {
                     totalDistSum += Number(dist.amount || 0);
                     const tr = document.createElement("tr");
                     const destType = dist.type === "balance" ? "На салдо" : "На каса";
+                    const distCat = dist.sourceBreakdownSummary ? `${dist.category} [${dist.sourceBreakdownSummary}]` : (dist.category === "Наем на общи части" ? "Наем" : dist.category);
                     const noteStr = dist.note ? ` (${dist.note})` : "";
                     tr.innerHTML = `
-                        <td style="padding: 10px 0; border-bottom: 1px dashed #eee;">Разпределено от "${dist.category}" към ${destType}${noteStr}</td>
+                        <td style="padding: 10px 0; border-bottom: 1px dashed #eee;">Разпределено от "${distCat}" към ${destType}${noteStr}</td>
                         <td style="text-align: right; padding: 10px 0; border-bottom: 1px dashed #eee;">${Number(dist.amount || 0).toFixed(2)} EUR</td>
                     `;
                     distRows.appendChild(tr);
@@ -4780,7 +4951,7 @@ window.updateCreditCategoryAvailability = async function() {
     creditOption.title = _creditIdealPartsOk ? "" : "Изисква се да въведете идеални части за ВСИЧКИ апартаменти в MASTER – Настройки, преди да можете да въвеждате нов кредит.";
 
     if (creditOption.disabled && catSel.value === "Кредит") {
-        catSel.value = "Управление и поддръжка";
+        catSel.value = "Наем";
         showToast("⚠️ Не са въведени идеални части за всички апартаменти — попълнете ги в MASTER – Настройки, за да въвеждате нов кредит.", "error");
     }
 };
@@ -4788,45 +4959,65 @@ window.updateCreditCategoryAvailability = async function() {
 window.v2HandleAptChange = function() {
     const apt = document.getElementById("v2IncomeApt").value;
     const catSel = document.getElementById("v2IncomeCategory");
-    const isApartment = apt && apt !== "EXTERNAL";
+    const isExtUnitMode = apt === "EXTERNAL_UNIT";
+    const isExternalSourceMode = apt === "EXTERNAL";
+    const isApartment = apt && !isExtUnitMode && !isExternalSourceMode;
+
     const extGroup = document.getElementById("v2IncomeExtUnitGroup");
     if (extGroup) {
-        extGroup.style.display = apt === "EXTERNAL" ? "block" : "none";
-        if (apt === "EXTERNAL" && typeof populateExternalUnitSelects_ === 'function') {
+        extGroup.style.display = isExtUnitMode ? "block" : "none";
+        if (isExtUnitMode && typeof populateExternalUnitSelects_ === 'function') {
             populateExternalUnitSelects_();
         }
     }
 
-    const extUnitSel = document.getElementById("v2IncomeExtUnit");
-    const selectedExtUnit = (apt === "EXTERNAL" && extUnitSel) ? extUnitSel.value : "";
+    const previewBox = document.getElementById("extUnitPaymentPreviewBox");
+    if (previewBox && !isExtUnitMode) {
+        previewBox.style.display = "none";
+    }
 
-    // Когато платецът е конкретен апартамент, показваме само "Управление и
-    // поддръжка" и "Кредит" — останалите категории (наем на общи части,
-    // бюджетни средства, ВЕИ, дарения и т.н.) са само за Външен източник.
     Array.from(catSel.options).forEach(opt => {
         if (isApartment) {
             opt.style.display = (opt.value === "Управление и поддръжка" || opt.value === "Кредит" || opt.value === "") ? "" : "none";
-        } else if (selectedExtUnit) {
-            opt.style.display = (opt.value === "Управление и поддръжка" || opt.value === "Фонд ремонт" || opt.value === "Наем на общи части" || opt.value === "") ? "" : "none";
+        } else if (isExtUnitMode) {
+            opt.style.display = (opt.value === "Плащане за СО") ? "" : "none";
+        } else if (isExternalSourceMode) {
+            opt.style.display = (opt.value !== "Плащане за СО" && opt.value !== "Управление и поддръжка") ? "" : "none";
         } else {
-            opt.style.display = "";
+            opt.style.display = (opt.value !== "Плащане за СО") ? "" : "none";
         }
     });
 
-    if (isApartment && catSel.value !== "Кредит" && catSel.value !== "Управление и поддръжка") {
-        catSel.value = "Управление и поддръжка";
-    } else if (selectedExtUnit && !["Управление и поддръжка", "Фонд ремонт", "Наем на общи части"].includes(catSel.value)) {
-        catSel.value = "Управление и поддръжка";
+    if (isExtUnitMode) {
+        catSel.value = "Плащане за СО";
+        catSel.disabled = true;
+    } else if (isApartment) {
+        catSel.disabled = false;
+        if (catSel.value !== "Кредит" && catSel.value !== "Управление и поддръжка") {
+            catSel.value = "Управление и поддръжка";
+        }
+    } else if (isExternalSourceMode) {
+        catSel.disabled = false;
+        if (catSel.value === "Плащане за СО" || catSel.value === "Управление и поддръжка") {
+            catSel.value = "Наем";
+        }
+    } else {
+        catSel.disabled = false;
     }
 
-    catSel.disabled = false;
     v2LoadPaymentDue();
     if (typeof updateCreditCategoryAvailability === 'function') updateCreditCategoryAvailability();
-    if (typeof fin01RefreshPaymentView_ === 'function') fin01RefreshPaymentView_(); // FIN01_UI
+    if (!isExtUnitMode && typeof fin01RefreshPaymentView_ === 'function') fin01RefreshPaymentView_(); // FIN01_UI
+    if (isExtUnitMode) {
+        const fin01Controls = document.getElementById('fin01PaymentControls');
+        if (fin01Controls) fin01Controls.hidden = true;
+        if (typeof onV2IncomeExtPaymentInputChanged === 'function') onV2IncomeExtPaymentInputChanged();
+    }
 };
 
 window.v2HandleExtUnitChange = function() {
-    window.v2HandleAptChange();
+    v2LoadPaymentDue();
+    if (typeof onV2IncomeExtPaymentInputChanged === 'function') onV2IncomeExtPaymentInputChanged();
 };
 
 
@@ -4843,17 +5034,20 @@ window.v2LoadPaymentDue = async function(operationContext) {
     
     if (!lbl) return;
 
-    if (apt === "EXTERNAL") {
+    if (apt === "EXTERNAL_UNIT" || apt === "EXTERNAL") {
         const extSel = document.getElementById("v2IncomeExtUnit");
-        const extUnitId = extSel ? extSel.value : "";
+        const extUnitId = (apt === "EXTERNAL_UNIT" && extSel) ? extSel.value : "";
         if (extUnitId && typeof renderExternalUnitPaymentDueBadge_ === 'function') {
             renderExternalUnitPaymentDueBadge_(extUnitId, category, lbl);
             return;
         }
+        lbl.innerHTML = "";
+        lbl.className = "charge-current";
+        return;
     }
     
     // Външен източник няма салдо/задължения към входа
-    if (!apt || apt === "EXTERNAL" || !window.fb || !window.db) {
+    if (!apt || apt === "EXTERNAL" || apt === "EXTERNAL_UNIT" || !window.fb || !window.db) {
         lbl.innerHTML = "";
         lbl.className = "charge-current";
         return;
@@ -5228,6 +5422,86 @@ window.submitIncomeV2 = async function() {
         return;
     }
 
+    const extUnitSelEl = document.getElementById("v2IncomeExtUnit");
+    const selectedExtUnitId = ((apt === "EXTERNAL_UNIT" || apt === "EXTERNAL") && extUnitSelEl) ? extUnitSelEl.value : "";
+
+    if (apt === "EXTERNAL_UNIT") {
+        if (!selectedExtUnitId) {
+            showToast("Моля, изберете самостоятелен обект.", "error");
+            return;
+        }
+        if (amount <= 0) {
+            showToast("За самостоятелен обект въведете положителна сума (за корекция използвайте Сторно в Регистър Приходи).", "error");
+            return;
+        }
+        if (editId) {
+            showToast("Прието плащане на самостоятелен обект не се редактира. Използвайте Сторно.", "error");
+            return;
+        }
+
+        const btn = document.getElementById("v2SubmitBtn");
+        btn.disabled = true;
+        btn.textContent = "Записване...";
+        try {
+            assertFinancialOperationContextCurrent(operationContext);
+            const ts = new Date().getTime();
+            const extPayId = (window._currentExtPaymentId && window._currentExtPaymentUnitId === selectedExtUnitId)
+                ? window._currentExtPaymentId
+                : ('manual_' + ts + '_' + selectedExtUnitId);
+            window._currentExtPaymentId = extPayId;
+            window._currentExtPaymentUnitId = selectedExtUnitId;
+
+            const payRes = await apiCall('recordExternalUnitPaymentV1', {
+                routeKey: operationContext.routeKey,
+                pin: operationPin,
+                request: JSON.stringify({
+                    paymentId: extPayId,
+                    unitId: selectedExtUnitId,
+                    period: period,
+                    category: "Плащане за СО",
+                    amount: amount,
+                    docNum: docNum,
+                    note: note,
+                    basis: note,
+                    source: 'manual',
+                    timestamp: ts,
+                    expectedDebtFingerprint: window._lastExtPaymentPreviewFingerprint || undefined,
+                    skipIncomeWrite: false
+                })
+            }, operationContext);
+            assertFinancialOperationContextCurrent(operationContext);
+            if (!payRes || !payRes.success) {
+                throw new Error((payRes && payRes.error) ? payRes.error : "Грешка при запис на плащане за самостоятелен обект.");
+            }
+
+            window._currentExtPaymentId = null;
+            window._currentExtPaymentUnitId = null;
+            window._lastExtPaymentPreviewFingerprint = null;
+
+            document.getElementById("v2IncomeAmount").value = "";
+            document.getElementById("v2IncomeDoc").value = "";
+            document.getElementById("v2IncomeNote").value = "";
+            const previewBox = document.getElementById("extUnitPaymentPreviewBox");
+            if (previewBox) previewBox.style.display = "none";
+
+            showToast(SAVED_SYNC_TOAST_MSG, "neutral", 3000);
+            if (typeof loadExternalUnitsData === 'function') await loadExternalUnitsData(true);
+            await loadIncomesV2(operationContext);
+            await v2LoadPaymentDue(operationContext);
+            if (typeof updateV2DistAvailableSum === 'function') updateV2DistAvailableSum();
+        } catch (extErr) {
+            if (!isStaleRouteRequestError(extErr) && isFinancialOperationContextCurrent(operationContext)) {
+                showToast("Грешка при запис на плащане за СО: " + (extErr.message || extErr), "error");
+            }
+        } finally {
+            if (isFinancialOperationContextCurrent(operationContext)) {
+                btn.disabled = false;
+                btn.textContent = "➕ Добави приход";
+            }
+        }
+        return;
+    }
+
     if (!window.fb || !window.fb.addDoc) {
         showToast("Грешка при връзка с базата данни (Firebase AddDoc липсва).", "error");
         return;
@@ -5237,8 +5511,6 @@ window.submitIncomeV2 = async function() {
     btn.disabled = true;
     btn.textContent = "Записване...";
 
-    const extUnitSelEl = document.getElementById("v2IncomeExtUnit");
-    const selectedExtUnitId = (apt === "EXTERNAL" && extUnitSelEl) ? extUnitSelEl.value : "";
     let finalNote = note;
     let selectedExtUnitObj = null;
     if (selectedExtUnitId && Array.isArray(window._cachedExternalUnits)) {
@@ -5750,7 +6022,7 @@ window.loadIncomesV2 = async function(operationContext) {
             const localIncomes = JSON.parse(localStorage.getItem('incomesV2_' + operationContext.routeKey) || '[]');
             records = localIncomes;
         }
-        records = records.filter(r => !r.paymentId || r.settlementStatus === 'APPLIED'); // FIN01_UI
+        records = records.filter(r => (!r.paymentId || r.settlementStatus === 'APPLIED') && (!r.extPaymentId || r.settlementStatus === 'APPLIED' || r.settlementStatus === 'REVERSED')); // FIN01_UI
         
         records.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
 
@@ -5762,24 +6034,39 @@ window.loadIncomesV2 = async function(operationContext) {
         let html = "";
         records.forEach(r => {
             const parsedExt = typeof parseExternalUnitTagClient_ === 'function' ? parseExternalUnitTagClient_(r.note) : null;
+            const extUnitLabel = parsedExt
+                ? `Външен обект: ${parsedExt.unitName} (${parsedExt.unitId})`
+                : (r.extUnitId ? `Външен обект: ${r.extUnitName || r.extUnitId} (${r.extUnitId})` : null);
             const payer = r.apt === "EXTERNAL"
-                ? (parsedExt ? `Външен обект: ${parsedExt.unitName} (${parsedExt.unitId})` : "Външен източник")
+                ? (extUnitLabel || "Външен източник")
                 : "Ап. " + r.apt;
+            const displayCat = r.category === "Наем на общи части" ? "Наем" : (r.category || "");
             let rawNote = parsedExt ? parsedExt.cleanNote : (r.note || "");
             if (r.paymentId && r.allocationSummary) rawNote = rawNote + (rawNote ? '\n' : '') + r.allocationSummary; // FIN01_UI
             const docText = r.docNum ? `<b>Док:</b> ${r.docNum}<br>` : "";
             const noteText = rawNote ? `<span style="color:#666; font-size:11px;">${rawNote}</span>` : "";
-            
-            const safeDoc = (r.docNum || "").replace(/'/g, "\\'");
-            const safeNote = (r.note || "").replace(/'/g, "\\'");
+            let extSummaryHtml = "";
+            if (r.extPaymentId && r.allocationSummary && (!r.note || !r.note.includes(r.allocationSummary))) {
+                extSummaryHtml = `<div style="margin-top:4px; font-size:11px; color:#1e40af; font-weight:600;">${r.allocationSummary}</div>`;
+            }
+            let stornoHtml = "";
+            if (r.extPaymentId && r.kind !== "REVERSAL" && r.settlementStatus !== "REVERSED" && !r.reversedByPaymentId) {
+                const safePayId = String(r.extPaymentId).replace(/'/g, "\\'");
+                stornoHtml = `<div style="margin-top:4px;"><button type="button" class="admin-btn" style="background:#ef4444; color:#fff; padding:2px 8px; font-size:11px;" onclick="reverseExternalUnitPaymentUI('${safePayId}')">↩ Сторно</button></div>`;
+            } else if (r.settlementStatus === "REVERSED" || r.reversedByPaymentId) {
+                stornoHtml = `<div style="margin-top:4px; font-size:11px; color:#dc2626; font-weight:600;">[СТОРНИРАНО]</div>`;
+            }
+
+            const amtNum = parseFloat(r.amount) || 0;
+            const amtColor = amtNum < 0 ? "#dc2626" : "#16a34a";
 
             html += `
                 <tr>
                     <td style="padding: 8px; border-bottom: 1px solid #eee;">${formatRegisterDate(r.timestamp)}</td>
                     <td style="padding: 8px; border-bottom: 1px solid #eee;">${payer}</td>
-                    <td style="padding: 8px; border-bottom: 1px solid #eee;">${r.category}</td>
-                    <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right; font-weight: bold; color: #16a34a;">${parseFloat(r.amount).toFixed(2)}</td>
-                    <td style="padding: 8px; border-bottom: 1px solid #eee;">${docText}${noteText}</td>
+                    <td style="padding: 8px; border-bottom: 1px solid #eee;">${displayCat}</td>
+                    <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right; font-weight: bold; color: ${amtColor};">${amtNum.toFixed(2)}</td>
+                    <td style="padding: 8px; border-bottom: 1px solid #eee;">${docText}${noteText}${extSummaryHtml}${stornoHtml}</td>
                 </tr>
             `;
         });
@@ -5981,21 +6268,58 @@ window.loadExternalPayers = async function(operationContext) {
 // V2 DISTRIBUTION LOGIC
 // ==============================================
 
+window._cachedV2DistBalancesByCatCents = {};
+
+function getSelectedV2DistCategories_() {
+    const cbs = document.querySelectorAll('#v2DistCategoryList .v2-dist-cat-cb:checked');
+    if (cbs && cbs.length > 0) {
+        return Array.from(cbs).map(cb => cb.value);
+    }
+    const sel = document.getElementById("v2DistCategory");
+    return (sel && sel.value) ? [sel.value] : [];
+}
+
+window.onV2DistCategoriesChanged = function() {
+    const selected = getSelectedV2DistCategories_();
+    const sel = document.getElementById("v2DistCategory");
+    if (sel) {
+        sel.value = selected.length === 1 ? selected[0] : (selected.length > 1 ? selected[0] : "");
+    }
+    updateV2DistAvailableSum();
+};
+
+function updateV2DistCategoryListBadges_(balancesMap, cur) {
+    const currency = cur || sessionStorage.getItem("currency_" + currentRouteKey) || "EUR";
+    document.querySelectorAll('#v2DistCategoryList .v2-dist-cat-avail').forEach(el => {
+        const cat = el.getAttribute('data-avail-for');
+        if (!cat) return;
+        const cents = balancesMap && Number.isFinite(balancesMap[cat]) ? balancesMap[cat] : 0;
+        const eur = (cents / 100).toFixed(2);
+        el.textContent = `${eur} ${currency}`;
+        el.style.color = cents > 0 ? '#16a34a' : '#64748b';
+        el.style.fontWeight = cents > 0 ? '700' : '500';
+    });
+}
+
 window.updateV2DistAvailableSum = async function() {
-    if(typeof maintenanceUpdateAvailable_==='function'&&await maintenanceUpdateAvailable_())return; // MAINTENANCE_AVAILABLE
-    const category = document.getElementById("v2DistCategory").value;
+    const selectedCats = getSelectedV2DistCategories_();
+    const selEl = document.getElementById("v2DistCategory");
+    if (selectedCats.length === 1 && selectedCats[0] === 'maintenance') {
+        if (selEl) selEl.value = 'maintenance';
+    } else if (selEl && selEl.value === 'maintenance' && selectedCats.length !== 1) {
+        selEl.value = selectedCats[0] || '';
+    }
+
     const lbl = document.getElementById("lbl-v2DistAmount");
     if (!lbl) return;
 
-    // Изискване 4: за категория "Кредит" разпределянето е само "На каса" —
-    // сумата вече е начислена по апартаментите като кредитно задължение
-    // (виж creditLiabilitiesV2), затова "На салдо" няма смисъл тук.
+    const hasCredit = selectedCats.includes("Кредит");
     const balanceLabel = document.getElementById("v2DistTypeBalanceLabel");
     const creditNote = document.getElementById("v2DistCreditNote");
     const cashRadio = document.querySelector('input[name="v2DistType"][value="cash"]');
     const balanceRadio = document.querySelector('input[name="v2DistType"][value="balance"]');
     if (balanceLabel && cashRadio && balanceRadio) {
-        if (category === "Кредит") {
+        if (hasCredit) {
             balanceLabel.style.display = "none";
             if (creditNote) creditNote.style.display = "block";
             cashRadio.checked = true;
@@ -6005,50 +6329,120 @@ window.updateV2DistAvailableSum = async function() {
         }
     }
 
-    if (!category) {
-        lbl.innerHTML = 'Сума за разпределяне';
-        return;
-    }
+    const cur = sessionStorage.getItem("currency_" + currentRouteKey) || "EUR";
 
     try {
-        const { collection, getDocs, query, where } = window.fb;
-        const db = window.db;
+        const balancesCents = {};
+        const allCategories = [
+            "РУП — надбавка чл. 51, ал. 5",
+            "Наем",
+            "Средства от бюджетни институции",
+            "Кредит",
+            "ВЕИ на ЕС",
+            "Дарения",
+            "Други",
+            "Фонд ремонт",
+            "maintenance"
+        ];
+        allCategories.forEach(c => { balancesCents[c] = 0; });
 
-        // Fetch distributions for this category
-        const qDist = query(collection(db, "distributionsV2"), where("routeKey", "==", currentRouteKey), where("category", "==", category));
-        const snapDist = await getDocs(qDist);
-        let totalDist = 0;
-        snapDist.forEach(d => totalDist += parseFloat(d.data().amount) || 0);
-
-        let totalCollected = 0;
-        if (category === "Фонд ремонт") {
-            const qApts = query(collection(db, "apartments"), where("buildingId", "==", currentRouteKey));
-            const snapApts = await getDocs(qApts);
-            snapApts.forEach(d => {
-                totalCollected += parseFloat(d.data().collectedTargetFund) || 0;
-            });
-        } else if (category === "Кредит") {
-            // Само НОВ кредит (платец = Външен източник) е налична сума за
-            // разпределяне. Погасявания от апартаменти НЕ участват тук —
-            // те само намаляват личния им кредитен остатък (виж
-            // creditLiabilitiesV2), не са "нови" пари за разпределяне.
-            const qInc = query(collection(db, "incomesV2"), where("routeKey", "==", currentRouteKey), where("category", "==", category));
-            const snapInc = await getDocs(qInc);
-            snapInc.forEach(d => {
-                const rec = d.data();
-                if (rec.apt === "EXTERNAL") {
-                    totalCollected += parseFloat(rec.amount) || 0;
-                }
-            });
-        } else {
-            const qInc = query(collection(db, "incomesV2"), where("routeKey", "==", currentRouteKey), where("category", "==", category));
-            const snapInc = await getDocs(qInc);
-            snapInc.forEach(d => totalCollected += parseFloat(d.data().amount) || 0);
+        // 1. Server authoritative balances (includes СО payments, Rent mapping, Repair Fund, Maintenance)
+        try {
+            const srvRes = await apiCall('getDistributableBalancesV2', { routeKey: currentRouteKey });
+            if (srvRes && srvRes.success && Array.isArray(srvRes.categories)) {
+                srvRes.categories.forEach(item => {
+                    const catKey = item && (item.key || item.category);
+                    if (catKey && Number.isFinite(item.availableCents)) {
+                        balancesCents[catKey] = Math.max(0, Math.round(item.availableCents));
+                    }
+                });
+            }
+        } catch (srvErr) {
+            console.warn("getDistributableBalancesV2 fallback to client calculation:", srvErr);
         }
 
-        const available = totalCollected - totalDist;
-        const cur = sessionStorage.getItem("currency_" + currentRouteKey) || "EUR";
-        lbl.innerHTML = `Сума за разпределяне <span style="color:#16a34a; font-size:12px;">(Налични: ${available.toFixed(2)} ${cur})</span>`;
+        // 2. Client Firestore reconciliation (for any client-direct incomesV2 / distributionsV2)
+        if (window.fb && window.fb.getDocs && window.db) {
+            const { collection, getDocs, query, where } = window.fb;
+            const db = window.db;
+            const [snapInc, snapDist, snapApts] = await Promise.all([
+                getDocs(query(collection(db, "incomesV2"), where("routeKey", "==", currentRouteKey))),
+                getDocs(query(collection(db, "distributionsV2"), where("routeKey", "==", currentRouteKey))),
+                getDocs(query(collection(db, "apartments"), where("buildingId", "==", currentRouteKey)))
+            ]);
+
+            const fbCollected = {};
+            const fbUsed = {};
+            allCategories.forEach(c => { fbCollected[c] = 0; fbUsed[c] = 0; });
+
+            snapApts.forEach(d => {
+                const v = Math.round((parseFloat(d.data().collectedTargetFund) || 0) * 100);
+                if (v > 0) fbCollected["Фонд ремонт"] += v;
+            });
+
+            snapInc.forEach(d => {
+                const rec = d.data() || {};
+                if (rec.paymentId && rec.settlementStatus && rec.settlementStatus !== 'APPLIED') return;
+                if (rec.extPaymentId) {
+                    if (rec.settlementStatus && rec.settlementStatus !== 'APPLIED' && rec.settlementStatus !== 'REVERSED') return;
+                    fbCollected["РУП — надбавка чл. 51, ал. 5"] += Number(rec.rupSurchargeCents || 0);
+                    fbCollected["Фонд ремонт"] += Number(rec.repairFundCents || 0);
+                    fbCollected["Наем"] += Number(rec.contractRentCents || 0);
+                    return;
+                }
+                const rawCat = String(rec.category || '').trim();
+                const normCat = rawCat === 'Наем на общи части' ? 'Наем' : rawCat;
+                const amtCents = Math.round((parseFloat(rec.amount) || 0) * 100);
+                if (normCat === 'Кредит') {
+                    if (rec.apt === 'EXTERNAL') fbCollected['Кредит'] += amtCents;
+                } else if (Object.prototype.hasOwnProperty.call(fbCollected, normCat)) {
+                    fbCollected[normCat] += amtCents;
+                }
+            });
+
+            snapDist.forEach(d => {
+                const dist = d.data() || {};
+                let breakdown = dist.sourceBreakdown;
+                if (typeof breakdown === 'string' && breakdown.trim()) {
+                    try { breakdown = JSON.parse(breakdown); } catch (e) { breakdown = null; }
+                }
+                if (Array.isArray(breakdown) && breakdown.length > 0) {
+                    breakdown.forEach(b => {
+                        const bCat = b.category === 'Наем на общи части' ? 'Наем' : b.category;
+                        const bCents = Number.isSafeInteger(b.amountCents) ? b.amountCents : Math.round((parseFloat(b.amount) || 0) * 100);
+                        if (Object.prototype.hasOwnProperty.call(fbUsed, bCat)) fbUsed[bCat] += bCents;
+                    });
+                } else {
+                    const dCat = dist.category === 'Наем на общи части' ? 'Наем' : dist.category;
+                    const dCents = Number.isSafeInteger(dist.amountCents) ? dist.amountCents : Math.round((parseFloat(dist.amount) || 0) * 100);
+                    if (Object.prototype.hasOwnProperty.call(fbUsed, dCat)) fbUsed[dCat] += dCents;
+                }
+            });
+
+            allCategories.forEach(c => {
+                if (c === 'maintenance') return;
+                const fbAvail = Math.max(0, fbCollected[c] - fbUsed[c]);
+                if (fbAvail > balancesCents[c] || balancesCents[c] === 0) {
+                    balancesCents[c] = fbAvail;
+                }
+            });
+        }
+
+        window._cachedV2DistBalancesByCatCents = balancesCents;
+        updateV2DistCategoryListBadges_(balancesCents, cur);
+
+        if (selectedCats.length === 1 && selectedCats[0] === 'maintenance' && typeof maintenanceUpdateAvailable_ === 'function') {
+            if (await maintenanceUpdateAvailable_()) return; // MAINTENANCE_AVAILABLE
+        }
+
+        if (selectedCats.length === 0) {
+            lbl.innerHTML = 'Сума за разпределяне <span style="color:#64748b; font-size:12px;">(Изберете категория/и)</span>';
+            return;
+        }
+
+        const totalSelectedCents = selectedCats.reduce((acc, c) => acc + (balancesCents[c] || 0), 0);
+        const totalSelectedEur = (totalSelectedCents / 100).toFixed(2);
+        lbl.innerHTML = `Сума за разпределяне <span style="color:#16a34a; font-size:12px;">(Налични по избраните (${selectedCats.length}): ${totalSelectedEur} ${cur})</span>`;
     } catch (e) {
         if (isStaleRouteRequestError(e)) return;
         console.error("Error updating available sum:", e);
@@ -6064,10 +6458,14 @@ window.v2DistSelectAll = function(selectAll) {
 };
 
 window.populateDistPeriods = function() {
+    const d = new Date();
+    const currentPeriod = String(d.getMonth() + 1).padStart(2, '0') + "." + d.getFullYear();
+    const autoLbl = document.getElementById("v2DistAutoPeriodLabel");
+    if (autoLbl) autoLbl.textContent = currentPeriod;
+
     const pEl = document.getElementById("v2DistPeriod");
     if (!pEl) return;
     if (pEl.options.length <= 1) {
-        const d = new Date();
         const year = d.getFullYear();
         const monthNames = [
             "Януари", "Февруари", "Март", "Април", "Май", "Юни",
@@ -6079,9 +6477,8 @@ window.populateDistPeriods = function() {
             const opt = new Option(`${name} ${year}`, val);
             pEl.appendChild(opt);
         });
-        const currentPeriod = String(d.getMonth() + 1).padStart(2, '0') + "." + d.getFullYear();
-        pEl.value = currentPeriod;
     }
+    pEl.value = currentPeriod;
 };
 
 window.loadDistributionsV2 = async function(operationContext) {
@@ -6136,15 +6533,19 @@ window.loadDistributionsV2 = async function(operationContext) {
         let html = "";
         records.forEach(r => {
             const dateStr = formatRegisterDate(r.timestamp);
-            const safeNote = (r.note || "").replace(/'/g, "\\'");
+            const displayCat = r.category === "Наем на общи части" ? "Наем" : (r.category || "");
+            const breakdownInfo = r.sourceBreakdownSummary
+                ? `<div style="font-size:10px; color:#1e40af; margin-top:2px;">Източници: ${r.sourceBreakdownSummary}</div>`
+                : "";
+            const periodInfo = r.period ? `<span style="color:#64748b; font-size:10px;">(${r.period})</span> ` : "";
 
             html += `
                 <tr>
                     <td style="padding: 8px; border-bottom: 1px solid #eee;">${dateStr}</td>
-                    <td style="padding: 8px; border-bottom: 1px solid #eee;">${r.category}</td>
+                    <td style="padding: 8px; border-bottom: 1px solid #eee;">${displayCat}${breakdownInfo}</td>
                     <td style="padding: 8px; border-bottom: 1px solid #eee;">${r.type === 'balance' ? 'На салдо' : 'На каса'}</td>
                     <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right; font-weight: bold; color: #3b82f6;">${parseFloat(r.amount).toFixed(2)}</td>
-                    <td style="padding: 8px; border-bottom: 1px solid #eee; font-size: 11px;">${r.note} <br><span style="color:#64748b">Апт: ${(r.apts || []).length}</span></td>
+                    <td style="padding: 8px; border-bottom: 1px solid #eee; font-size: 11px;">${periodInfo}${r.note || ""} <br><span style="color:#64748b">Апт: ${(r.apts || []).length}</span></td>
                 </tr>
             `;
         });
@@ -6158,18 +6559,30 @@ window.loadDistributionsV2 = async function(operationContext) {
 };
 
 window.submitDistributionV2 = async function() {
-    if(typeof submitMaintenanceDistributionIfSelected_==='function'&&await submitMaintenanceDistributionIfSelected_())return; // MAINTENANCE_SUBMIT
+    populateDistPeriods();
+    const selectedCats = getSelectedV2DistCategories_();
+    const note = (document.getElementById("v2DistNote")?.value || "").trim();
+    if (!note) {
+        showToast("Полето „Основание / Бележка“ е задължително при всяко разпределяне.", "error");
+        return;
+    }
+
+    if (selectedCats.length === 1 && selectedCats[0] === 'maintenance') {
+        const selEl = document.getElementById("v2DistCategory");
+        if (selEl) selEl.value = 'maintenance';
+        if(typeof submitMaintenanceDistributionIfSelected_==='function'&&await submitMaintenanceDistributionIfSelected_())return; // MAINTENANCE_SUBMIT
+    }
+
     const operationContext = captureFinancialOperationContext();
     const operationPin = sessionStorage.getItem("adminAuth_" + operationContext.routeKey);
     const period = document.getElementById("v2DistPeriod").value;
-    const category = document.getElementById("v2DistCategory").value;
+    const category = selectedCats.length === 1 ? selectedCats[0] : (selectedCats.length > 1 ? selectedCats.join(" + ") : document.getElementById("v2DistCategory").value);
     const amountStr = document.getElementById("v2DistAmount").value;
-    const note = document.getElementById("v2DistNote").value.trim();
     const typeRadio = document.querySelector('input[name="v2DistType"]:checked');
     const type = typeRadio ? typeRadio.value : 'cash';
 
-    if (!period || !category || !amountStr) {
-        showToast("Моля, попълнете Период, Категория и Сума.", "error");
+    if (!period || selectedCats.length === 0 || !amountStr) {
+        showToast("Моля, изберете поне една Категория и въведете Сума.", "error");
         return;
     }
 
@@ -6181,6 +6594,14 @@ window.submitDistributionV2 = async function() {
     const amount = parseFloat(amountStr);
     if (!Number.isFinite(amount) || amount <= 0) {
         showToast("Невалидна сума.", "error");
+        return;
+    }
+
+    const amountCents = Math.round(amount * 100);
+    const availMap = window._cachedV2DistBalancesByCatCents || {};
+    const totalAvailCents = selectedCats.reduce((acc, c) => acc + (Number(availMap[c]) || 0), 0);
+    if (totalAvailCents > 0 && amountCents > totalAvailCents) {
+        showToast(`Въведената сума (${amount.toFixed(2)} EUR) надвишава общата наличност по избраните категории (${(totalAvailCents / 100).toFixed(2)} EUR).`, "error");
         return;
     }
 
@@ -6233,6 +6654,60 @@ window.submitDistributionV2 = async function() {
             distributedDetails[allocation.apartment] = allocation.amount;
         });
 
+        // Build exact per-source breakdown in selection order
+        let remToDraw = amountCents;
+        const clientSourceBreakdown = [];
+        selectedCats.forEach(cat => {
+            if (remToDraw <= 0) return;
+            const catAvail = Number.isFinite(availMap[cat]) && availMap[cat] > 0 ? availMap[cat] : remToDraw;
+            const draw = Math.min(remToDraw, catAvail);
+            if (draw > 0) {
+                clientSourceBreakdown.push({
+                    category: cat,
+                    amountCents: draw,
+                    amount: Number((draw / 100).toFixed(2))
+                });
+                remToDraw -= draw;
+            }
+        });
+        const sourceBreakdownSummary = clientSourceBreakdown.map(b => `${b.category}: ${(b.amountCents / 100).toFixed(2)} EUR`).join(" + ");
+
+        // Authoritative server validation & multi-source distribution record
+        const distRequestId = (typeof newManualExpenseRequestId_ === 'function')
+            ? newManualExpenseRequestId_()
+            : ('dist_' + Date.now());
+        let serverDistSaved = false;
+        let serverDistResult = null;
+        try {
+            serverDistResult = await apiCall('distributeIncomeV2', {
+                routeKey: operationContext.routeKey,
+                pin: operationPin,
+                request: JSON.stringify({
+                    requestId: distRequestId,
+                    categories: selectedCats,
+                    amount: amount,
+                    type: type,
+                    note: note,
+                    apartments: allocationPlan.allocations.map(a => a.apartment),
+                    apts: allocationPlan.allocations.map(a => a.apartment),
+                    details: distributedDetails
+                })
+            }, operationContext);
+            assertFinancialOperationContextCurrent(operationContext);
+            if (serverDistResult && serverDistResult.success === false && serverDistResult.rejectedBeforeCommit) {
+                throw new Error(serverDistResult.error || "Разпределянето е отхвърлено от сървъра.");
+            }
+            if (serverDistResult && serverDistResult.success === true) {
+                serverDistSaved = true;
+            }
+        } catch (srvDistErr) {
+            if (isStaleRouteRequestError(srvDistErr)) throw srvDistErr;
+            if (serverDistResult && serverDistResult.rejectedBeforeCommit) {
+                throw srvDistErr;
+            }
+            console.warn("distributeIncomeV2 server call fallback:", srvDistErr);
+        }
+
         const completedBalancePayments = [];
         if (type === 'balance') {
             try {
@@ -6260,7 +6735,7 @@ window.submitDistributionV2 = async function() {
                         "Разпределението е частично изпълнено. Успешни плащания: " + completedText +
                             ". Пълният запис не е създаден; необходима е операторска проверка.",
                         "distribution-payments",
-                        { completedPayments: completedBalancePayments, distributionPersisted: false },
+                        { completedPayments: completedBalancePayments, distributionPersisted: serverDistSaved },
                         paymentError
                     );
                 }
@@ -6268,62 +6743,67 @@ window.submitDistributionV2 = async function() {
             }
         }
 
-        const recordData = {
-            routeKey: operationContext.routeKey,
-            period: period,
-            category: category,
-            amount: amount,
-            type: type,
-            note: note,
-            apts: Object.freeze(allocationPlan.allocations.map(allocation => allocation.apartment)),
-            details: distributedDetails,
-            timestamp: new Date().getTime()
-        };
+        if (!serverDistSaved) {
+            const recordData = {
+                routeKey: operationContext.routeKey,
+                period: period,
+                category: category,
+                amount: amount,
+                amountCents: amountCents,
+                type: type,
+                note: note,
+                apts: Object.freeze(allocationPlan.allocations.map(allocation => allocation.apartment)),
+                details: distributedDetails,
+                sourceBreakdown: JSON.stringify(clientSourceBreakdown),
+                sourceBreakdownSummary: sourceBreakdownSummary,
+                timestamp: new Date().getTime()
+            };
 
-        try {
-            assertFinancialOperationContextCurrent(operationContext);
-            await addDoc(mutationCollection("distributionsV2", operationContext.routeKey), recordData);
-            assertFinancialOperationContextCurrent(operationContext);
-        } catch (fbErr) {
-            if (isStaleRouteRequestError(fbErr)) throw fbErr;
-            assertFinancialOperationContextCurrent(operationContext, fbErr);
-            if (!isFirestorePermissionFallbackError(fbErr)) {
-                if (completedBalancePayments.length) {
-                    const completedText = completedBalancePayments.map(item =>
-                        item.apartment + " (" + item.amount.toFixed(2) + ")").join(", ");
-                    throw createFinancialPartialCompletionError_(
-                        "Плащанията са извършени за: " + completedText +
-                            ", но записът за разпределението не е създаден. Не повтаряйте операцията без операторска проверка.",
-                        "distribution-persistence",
-                        { completedPayments: completedBalancePayments, distributionPersisted: false },
-                        fbErr
-                    );
-                }
-                throw fbErr;
-            }
             try {
-                console.warn("Fallback to localStorage for distributionsV2", fbErr);
-                const storageKey = 'distributionsV2_' + operationContext.routeKey;
-                const local = readLocalFinancialRecords_(storageKey);
-                local.push({ ...recordData, id: 'loc_' + new Date().getTime() });
                 assertFinancialOperationContextCurrent(operationContext);
-                localStorage.setItem(storageKey, JSON.stringify(local));
+                await addDoc(mutationCollection("distributionsV2", operationContext.routeKey), recordData);
                 assertFinancialOperationContextCurrent(operationContext);
-            } catch (fallbackError) {
-                if (isStaleRouteRequestError(fallbackError)) throw fallbackError;
-                assertFinancialOperationContextCurrent(operationContext, fallbackError);
-                if (completedBalancePayments.length) {
-                    const completedText = completedBalancePayments.map(item =>
-                        item.apartment + " (" + item.amount.toFixed(2) + ")").join(", ");
-                    throw createFinancialPartialCompletionError_(
-                        "Плащанията са извършени за: " + completedText +
-                            ", но локалният запис за разпределението не е създаден. Не повтаряйте операцията без операторска проверка.",
-                        "distribution-local-persistence",
-                        { completedPayments: completedBalancePayments, distributionPersisted: false },
-                        fallbackError
-                    );
+            } catch (fbErr) {
+                if (isStaleRouteRequestError(fbErr)) throw fbErr;
+                assertFinancialOperationContextCurrent(operationContext, fbErr);
+                if (!isFirestorePermissionFallbackError(fbErr)) {
+                    if (completedBalancePayments.length) {
+                        const completedText = completedBalancePayments.map(item =>
+                            item.apartment + " (" + item.amount.toFixed(2) + ")").join(", ");
+                        throw createFinancialPartialCompletionError_(
+                            "Плащанията са извършени за: " + completedText +
+                                ", но записът за разпределението не е създаден. Не повтаряйте операцията без операторска проверка.",
+                            "distribution-persistence",
+                            { completedPayments: completedBalancePayments, distributionPersisted: false },
+                            fbErr
+                        );
+                    }
+                    throw fbErr;
                 }
-                throw fallbackError;
+                try {
+                    console.warn("Fallback to localStorage for distributionsV2", fbErr);
+                    const storageKey = 'distributionsV2_' + operationContext.routeKey;
+                    const local = readLocalFinancialRecords_(storageKey);
+                    local.push({ ...recordData, id: 'loc_' + new Date().getTime() });
+                    assertFinancialOperationContextCurrent(operationContext);
+                    localStorage.setItem(storageKey, JSON.stringify(local));
+                    assertFinancialOperationContextCurrent(operationContext);
+                } catch (fallbackError) {
+                    if (isStaleRouteRequestError(fallbackError)) throw fallbackError;
+                    assertFinancialOperationContextCurrent(operationContext, fallbackError);
+                    if (completedBalancePayments.length) {
+                        const completedText = completedBalancePayments.map(item =>
+                            item.apartment + " (" + item.amount.toFixed(2) + ")").join(", ");
+                        throw createFinancialPartialCompletionError_(
+                            "Плащанията са извършени за: " + completedText +
+                                ", но локалният запис за разпределението не е създаден. Не повтаряйте операцията без операторска проверка.",
+                            "distribution-local-persistence",
+                            { completedPayments: completedBalancePayments, distributionPersisted: false },
+                            fallbackError
+                        );
+                    }
+                    throw fallbackError;
+                }
             }
         }
 
@@ -6353,9 +6833,11 @@ window.submitDistributionV2 = async function() {
         document.getElementById("v2DistAmount").value = "";
         document.getElementById("v2DistNote").value = "";
         document.getElementById("v2DistCategory").value = "";
+        document.querySelectorAll('#v2DistCategoryList .v2-dist-cat-cb').forEach(cb => { cb.checked = false; });
         
         await loadDistributionsV2(operationContext);
         assertFinancialOperationContextCurrent(operationContext);
+        await updateV2DistAvailableSum();
         
     } catch (e) {
         if (isStaleRouteRequestError(e)) return;
@@ -6408,7 +6890,7 @@ function populateExternalUnitSelects_() {
     const incSel = document.getElementById('v2IncomeExtUnit');
     if (incSel) {
         const cur = incSel.value;
-        incSel.innerHTML = '<option value="">— Общ външен източник (без партида на обект) —</option>';
+        incSel.innerHTML = '<option value="">— Изберете самостоятелен обект —</option>';
         units.forEach(u => {
             incSel.appendChild(new Option(`${u.unitId} — ${u.name} (${u.documentedPurpose})`, u.unitId));
         });
@@ -6430,22 +6912,144 @@ function renderExternalUnitPaymentDueBadge_(unitId, category, lblEl) {
     if (!lblEl) return;
     const stmts = Array.isArray(window._cachedExternalUnitStatements) ? window._cachedExternalUnitStatements : [];
     const st = stmts.find(s => s.unitId === unitId);
-    if (!st || !st.summaryByBucket) {
+    if (!st) {
         lblEl.innerHTML = '';
         return;
     }
-    const bucketKey = category === 'Фонд ремонт' ? 'repairFund'
-        : category === 'Наем на общи части' ? 'contractRent'
-        : 'management';
-    const b = st.summaryByBucket[bucketKey] || { debtCents: 0, advanceCents: 0 };
-    if (b.debtCents > 0) {
-        lblEl.innerHTML = `(Дължимо по ${category}: <b style="color:#dc2626;">${(b.debtCents / 100).toFixed(2)} EUR</b>)`;
-    } else if (b.advanceCents > 0) {
-        lblEl.innerHTML = `(Аванс по ${category}: <b style="color:#16a34a;">+${(b.advanceCents / 100).toFixed(2)} EUR</b>)`;
+    const debtCents = Number(st.endingDebtCents !== undefined ? st.endingDebtCents : (st.totalDebtCents || 0));
+    const advCents = Number(st.endingAdvanceCents !== undefined ? st.endingAdvanceCents : (st.totalAdvanceCents || 0));
+    if (debtCents > 0) {
+        const b = st.summaryByComponent || st.summaryByBucket || {};
+        const parts = [];
+        if (b.rupBase && b.rupBase.debtCents > 0) parts.push(`РУП осн.: ${(b.rupBase.debtCents / 100).toFixed(2)}`);
+        if (b.rupSurcharge && b.rupSurcharge.debtCents > 0) parts.push(`Надбавка: ${(b.rupSurcharge.debtCents / 100).toFixed(2)}`);
+        if (b.repairFund && b.repairFund.debtCents > 0) parts.push(`Фонд ремонт: ${(b.repairFund.debtCents / 100).toFixed(2)}`);
+        if (b.contractRent && b.contractRent.debtCents > 0) parts.push(`Наем: ${(b.contractRent.debtCents / 100).toFixed(2)}`);
+        const detail = parts.length > 0 ? ` [${parts.join(' · ')}]` : '';
+        lblEl.innerHTML = `(Общо дължимо: <b style="color:#dc2626;">${(debtCents / 100).toFixed(2)} EUR</b>${detail})`;
+    } else if (advCents > 0) {
+        lblEl.innerHTML = `(Аванс по партида: <b style="color:#16a34a;">+${(advCents / 100).toFixed(2)} EUR</b>)`;
     } else {
-        lblEl.innerHTML = `(Салдо по ${category}: <b>0.00 EUR</b>)`;
+        lblEl.innerHTML = `(Салдо по партида: <b>0.00 EUR</b>)`;
     }
 }
+
+let _extPaymentPreviewTimer = null;
+let _extPaymentPreviewSeq = 0;
+
+window.onV2IncomeExtPaymentInputChanged = function() {
+    const apt = document.getElementById('v2IncomeApt')?.value || '';
+    const box = document.getElementById('extUnitPaymentPreviewBox');
+    const content = document.getElementById('extUnitPaymentPreviewContent');
+    if (!box || !content) return;
+
+    if (apt !== 'EXTERNAL_UNIT') {
+        box.style.display = 'none';
+        window._lastExtPaymentPreviewFingerprint = null;
+        return;
+    }
+
+    const unitId = document.getElementById('v2IncomeExtUnit')?.value || '';
+    const amountStr = (document.getElementById('v2IncomeAmount')?.value || '').trim();
+    const note = (document.getElementById('v2IncomeNote')?.value || '').trim();
+    const period = document.getElementById('v2IncomePeriod')?.value || getDefaultExternalUnitPeriod_();
+
+    if (!unitId || !amountStr || amountStr.includes(',')) {
+        box.style.display = 'none';
+        window._lastExtPaymentPreviewFingerprint = null;
+        return;
+    }
+    const amount = parseFloat(amountStr);
+    if (!Number.isFinite(amount) || amount <= 0) {
+        box.style.display = 'none';
+        window._lastExtPaymentPreviewFingerprint = null;
+        return;
+    }
+
+    window._currentExtPaymentId = null;
+    window._currentExtPaymentUnitId = null;
+
+    if (_extPaymentPreviewTimer) clearTimeout(_extPaymentPreviewTimer);
+    box.style.display = 'block';
+    content.innerHTML = '<div style="font-size:12px; color:#64748b;">Изчисляване на разпределението...</div>';
+
+    const seq = ++_extPaymentPreviewSeq;
+    _extPaymentPreviewTimer = setTimeout(async function() {
+        try {
+            const res = await apiCall('previewExternalUnitPaymentV1', {
+                routeKey: currentRouteKey,
+                pin: getStoredPin(),
+                request: JSON.stringify({
+                    unitId: unitId,
+                    period: period,
+                    amount: amount,
+                    basis: note,
+                    note: note
+                })
+            });
+            if (seq !== _extPaymentPreviewSeq) return;
+            if (!res || !res.success) {
+                window._lastExtPaymentPreviewFingerprint = null;
+                content.innerHTML = `<div style="font-size:12px; color:#dc2626;">⚠️ ${(res && res.error) || 'Неуспешен предварителен преглед.'}</div>`;
+                return;
+            }
+            window._lastExtPaymentPreviewFingerprint = res.expectedDebtFingerprint || null;
+            const c = res.components || res;
+            const cur = sessionStorage.getItem("currency_" + currentRouteKey) || "EUR";
+            const fmt = v => ((Number(v || 0)) / 100).toFixed(2) + ' ' + cur;
+            const explicitBadge = res.explicitComponent
+                ? `<div class="ext-unit-preview-note">Изрично основание: <b>${res.explicitComponentLabel || res.explicitComponent}</b> (остатъкът се разпределя по стандартния приоритет)</div>`
+                : '';
+            content.innerHTML = `
+                ${explicitBadge}
+                <div class="ext-unit-preview-row"><span>РУП (основа)</span><strong>${fmt(c.rupBaseCents)}</strong></div>
+                <div class="ext-unit-preview-row"><span>РУП (надбавка чл. 51, ал. 5)</span><strong>${fmt(c.rupSurchargeCents)}</strong></div>
+                <div class="ext-unit-preview-row"><span>Фонд ремонт</span><strong>${fmt(c.repairFundCents)}</strong></div>
+                <div class="ext-unit-preview-row"><span>Наем</span><strong>${fmt(c.contractRentCents)}</strong></div>
+                <div class="ext-unit-preview-row ext-unit-preview-advance"><span>Аванс</span><strong>${fmt(c.unallocatedAdvanceCents)}</strong></div>
+                <div class="ext-unit-preview-row ext-unit-preview-total"><span>Общо</span><strong>${fmt(res.amountCents)}</strong></div>
+            `;
+        } catch (e) {
+            if (seq !== _extPaymentPreviewSeq) return;
+            window._lastExtPaymentPreviewFingerprint = null;
+            content.innerHTML = '<div style="font-size:12px; color:#dc2626;">⚠️ Грешка при връзка за предварителен преглед.</div>';
+        }
+    }, 260);
+};
+
+window.reverseExternalUnitPaymentUI = async function(paymentId) {
+    if (!paymentId) return;
+    const reason = typeof window.prompt === 'function'
+        ? window.prompt("Въведете причина за сторниране на плащането (задължително):", "Корекция на грешно въведено плащане")
+        : "Корекция";
+    if (reason === null) return;
+    const cleanReason = String(reason || "").trim();
+    if (!cleanReason) {
+        showToast("Моля, въведете причина за сторниране.", "error");
+        return;
+    }
+    try {
+        const res = await apiCall('reverseExternalUnitPaymentV1', {
+            routeKey: currentRouteKey,
+            pin: getStoredPin(),
+            request: JSON.stringify({
+                reversesPaymentId: paymentId,
+                reversalPaymentId: 'rev_' + paymentId,
+                note: cleanReason
+            })
+        });
+        if (!res || !res.success) {
+            showToast((res && res.error) || "Сторнирането е отказано.", "error");
+            return;
+        }
+        showToast("Плащането е сторнирано успешно с компенсиращ запис.", "success");
+        if (typeof loadExternalUnitsData === 'function') await loadExternalUnitsData(true);
+        if (typeof loadIncomesV2 === 'function') await loadIncomesV2();
+        if (typeof updateV2DistAvailableSum === 'function') await updateV2DistAvailableSum();
+    } catch (e) {
+        showToast("Грешка при сторниране: " + (e.message || e), "error");
+    }
+};
 
 window.openExternalUnitsSettings = function() {
     const periodEl = document.getElementById('extUnitPeriod');
@@ -6508,7 +7112,8 @@ window.extUnitSelectionChanged = function() {
         document.getElementById('extUnitDocPurpose').value = 'Магазин';
         document.getElementById('extUnitActualUsage').value = 'Търговски обект';
         document.getElementById('extUnitArea').value = '';
-        document.getElementById('extUnitCadastre').value = '';
+        const cadElNew = document.getElementById('extUnitCadastre');
+        if (cadElNew) cadElNew.value = '';
         document.getElementById('extUnitMgmtPart').value = 'true';
         document.getElementById('extUnitOccupants').value = '1';
         document.getElementById('extUnitArt51Active').value = 'false';
@@ -6533,7 +7138,8 @@ window.extUnitSelectionChanged = function() {
     document.getElementById('extUnitDocPurpose').value = u.documentedPurpose || 'Магазин';
     document.getElementById('extUnitActualUsage').value = u.actualUsage || 'Търговски обект';
     document.getElementById('extUnitArea').value = u.areaSqm !== null && u.areaSqm !== undefined ? String(u.areaSqm) : '';
-    document.getElementById('extUnitCadastre').value = u.cadastralId || '';
+    const cadElExisting = document.getElementById('extUnitCadastre');
+    if (cadElExisting) cadElExisting.value = u.cadastralId || '';
     document.getElementById('extUnitMgmtPart').value = String(Boolean(u.managementParticipation));
     document.getElementById('extUnitOccupants').value = String(u.occupantsCount !== undefined ? u.occupantsCount : 1);
     document.getElementById('extUnitArt51Active').value = String(Boolean(u.art51Active));
@@ -6611,6 +7217,32 @@ function updateExternalIdealWarningBanner_() {
     }
 }
 
+window.navigateToExternalPayerForUnit = function(unitId) {
+    if (typeof window.clearMasterDirtyState === 'function') window.clearMasterDirtyState();
+    if (typeof window.switchAdminTab === 'function') window.switchAdminTab('incomes');
+    setTimeout(function() {
+        if (typeof populateExternalUnitSelects_ === 'function') populateExternalUnitSelects_();
+        const payerUnitSel = document.getElementById('v2PayerExtUnit');
+        if (payerUnitSel && unitId) {
+            payerUnitSel.value = unitId;
+        }
+        const payerTypeSel = document.getElementById('v2PayerType');
+        if (payerTypeSel) {
+            payerTypeSel.value = 'Наем';
+        }
+        const payerNameInput = document.getElementById('v2PayerName');
+        const payerSection = payerNameInput && typeof payerNameInput.closest === 'function'
+            ? payerNameInput.closest('.admin-section')
+            : payerUnitSel;
+        if (payerSection && typeof payerSection.scrollIntoView === 'function') {
+            payerSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+        if (payerNameInput && typeof payerNameInput.focus === 'function') {
+            payerNameInput.focus();
+        }
+    }, 80);
+};
+
 window.saveExternalUnitSettings = async function() {
     const requestContext = captureRouteRequestContext();
     const btn = document.getElementById('extUnitSaveBtn');
@@ -6623,7 +7255,8 @@ window.saveExternalUnitSettings = async function() {
     const documentedPurpose = document.getElementById('extUnitDocPurpose')?.value || 'Магазин';
     const actualUsage = document.getElementById('extUnitActualUsage')?.value || 'Търговски обект';
     const areaSqm = document.getElementById('extUnitArea')?.value.trim() || '';
-    const cadastralId = document.getElementById('extUnitCadastre')?.value.trim() || '';
+    const cadastreEl = document.getElementById('extUnitCadastre');
+    const cadastralId = cadastreEl ? cadastreEl.value.trim() : undefined;
     const managementParticipation = document.getElementById('extUnitMgmtPart')?.value === 'true';
     const occupantsStr = document.getElementById('extUnitOccupants')?.value.trim() || '0';
     const art51Active = accessType === 'COMMON_ENTRANCE' && document.getElementById('extUnitArt51Active')?.value === 'true';
@@ -6651,7 +7284,6 @@ window.saveExternalUnitSettings = async function() {
         documentedPurpose: documentedPurpose,
         actualUsage: actualUsage,
         areaSqm: areaSqm === '' ? null : areaSqm,
-        cadastralId: cadastralId === '' ? null : cadastralId,
         accessType: accessType,
         idealPartsStatus: idealPartsStatus,
         idealPartsPercent: idealPartsStatus === 'ESTABLISHED' ? idealPartsPercent : null,
@@ -6664,6 +7296,9 @@ window.saveExternalUnitSettings = async function() {
         effectiveFromPeriod: effectiveFromPeriod,
         active: true
     };
+    if (cadastralId !== undefined) {
+        payload.cadastralId = cadastralId === '' ? null : cadastralId;
+    }
 
     if (btn) btn.disabled = true;
     if (statusMsg) statusMsg.textContent = 'Записване...';
@@ -6685,13 +7320,17 @@ window.saveExternalUnitSettings = async function() {
             return;
         }
 
-        if (statusMsg) statusMsg.textContent = `Потвърдено за ${res.unit.unitId} (${res.unit.name}) от период ${res.unit.effectiveFromPeriod}.`;
+        if (typeof window.clearMasterDirtyState === 'function') window.clearMasterDirtyState();
+        const savedUnitId = res.unit && res.unit.unitId ? res.unit.unitId : '';
         showToast('Самостоятелният обект е записан успешно!', 'success');
         await loadExternalUnitsData(true);
         const sel = document.getElementById('extUnitSelect');
-        if (sel && res.unit && res.unit.unitId) {
-            sel.value = res.unit.unitId;
+        if (sel && savedUnitId) {
+            sel.value = savedUnitId;
             extUnitSelectionChanged();
+        }
+        if (statusMsg && res.unit) {
+            statusMsg.innerHTML = `✅ Потвърдено за <b>${res.unit.unitId} (${res.unit.name})</b> от период ${res.unit.effectiveFromPeriod}. &nbsp;🔗 <a href="#" class="ext-unit-epay-link" onclick="navigateToExternalPayerForUnit('${savedUnitId}'); return false;">За ePay: свържи обекта с платец</a>`;
         }
         if (typeof checkRemontEligibility === 'function') checkRemontEligibility();
     } catch (e) {
@@ -6822,9 +7461,10 @@ function renderPendingExternalPayments_() {
         <td style="padding: 6px; text-align:right;"><b>${Number(p.amount).toFixed(2)} EUR</b></td>
         <td style="padding: 6px;">
             <select id="pendingExtCat_${idx}" class="admin-input" style="font-size:11px; padding:4px; margin-bottom:4px;">
-                <option value="Управление и поддръжка">Управление и поддръжка</option>
+                <option value="Плащане за СО">Плащане за СО (автоматичен приоритет)</option>
+                <option value="Управление и поддръжка">Управление и поддръжка (РУП)</option>
                 <option value="Фонд ремонт">Фонд ремонт</option>
-                <option value="Наем на общи части">Наем на общи части</option>
+                <option value="Наем">Наем</option>
             </select>
             <button type="button" class="admin-btn primary" style="font-size:11px; padding:4px 8px;" onclick="resolvePendingExternalEpayPayment('${p.pendingId}', ${idx})">Потвърди</button>
         </td>
@@ -6835,7 +7475,8 @@ window.resolvePendingExternalEpayPayment = async function(pendingId, idx) {
     const pending = (window._cachedExternalPendingPayments || []).find(p => p.pendingId === pendingId);
     if (!pending) return;
     const catEl = document.getElementById('pendingExtCat_' + idx);
-    const category = catEl ? catEl.value : 'Управление и поддръжка';
+    const selectedCat = catEl ? catEl.value : 'Плащане за СО';
+    const explicitBasis = selectedCat === 'Плащане за СО' ? '' : selectedCat;
     try {
         const res = await apiCall('resolveExternalPendingPaymentV1', {
             routeKey: currentRouteKey,
@@ -6845,7 +7486,8 @@ window.resolvePendingExternalEpayPayment = async function(pendingId, idx) {
                 resolvePendingId: pending.pendingId,
                 unitId: pending.unitId,
                 period: pending.period,
-                category: category,
+                category: 'Плащане за СО',
+                basis: explicitBasis,
                 amount: pending.amount,
                 docNum: pending.ePayCode ? ('ePay ' + pending.ePayCode) : 'ePay',
                 note: 'Потвърдено ePay плащане. Наредител: ' + (pending.payerName || '') + '. Основание: ' + (pending.reasonFromEmail || ''),
@@ -6857,6 +7499,7 @@ window.resolvePendingExternalEpayPayment = async function(pendingId, idx) {
             showToast('Плащането е разпределено успешно!', 'success');
             await loadExternalUnitsData(true);
             if (typeof loadIncomesV2 === 'function') loadIncomesV2();
+            if (typeof updateV2DistAvailableSum === 'function') updateV2DistAvailableSum();
         } else {
             showToast((res && res.error) || 'Грешка при потвърждаване.', 'error');
         }

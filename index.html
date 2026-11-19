@@ -40,9 +40,9 @@
     <link
         href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;600;800&display=swap"
         rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=1795018800000">
+    <link rel="stylesheet" href="style.css?v=1795026000000">
         <script src="firestore-client.js"></script>
-        <script src="app.js?v=1795018800000" defer></script>
+        <script src="app.js?v=1795026000000" defer></script>
         <script src="recurring-expenses.js" defer></script>
         <script src="fin01-payment.js" defer></script>
         <script src="maintenance-ledger.js" defer></script>
@@ -438,15 +438,86 @@
                     </div>
                     <p id="v2DistCreditNote" style="display:none; font-size: 11px; color: #b45309; margin: -10px 0 15px;">ℹ️ За "Кредит" разпределянето е само "На каса" — сумата вече е начислена по апартаментите като кредитно задължение.</p>
 
-                    <label class="admin-label">Период (MM.YYYY)</label>
-                    <select id="v2DistPeriod" class="admin-input">
-                        <option value="">Избери...</option>
-                    </select>
+                    <div id="v2DistPeriodGroup" style="display:none;">
+                        <label class="admin-label">Период (MM.YYYY)</label>
+                        <select id="v2DistPeriod" class="admin-input">
+                            <option value="">Избери...</option>
+                        </select>
+                    </div>
+                    <div class="v2-dist-auto-period-bar" style="margin-bottom: 12px; padding: 8px 12px; background: #f1f5f9; border-radius: 6px; font-size: 12px; color: #334155;">
+                        📅 Отчетен период (автоматичен): <strong id="v2DistAutoPeriodLabel">—</strong>
+                    </div>
 
-                    <label class="admin-label">Категория по ЗУЕС (Източник)</label>
-                    <select id="v2DistCategory" class="admin-input" onchange="updateV2DistAvailableSum()">
+                    <label class="admin-label">Категория (Източник)</label>
+                    <div id="v2DistCategoryList" class="v2-dist-cat-list" role="group" aria-label="Категория (Източник)">
+                        <label class="v2-dist-cat-item">
+                            <span class="v2-dist-cat-left">
+                                <input type="checkbox" class="v2-dist-cat-cb" value="РУП — надбавка чл. 51, ал. 5" onchange="onV2DistCategoriesChanged()">
+                                <span class="v2-dist-cat-name">РУП — надбавка чл. 51, ал. 5</span>
+                            </span>
+                            <span class="v2-dist-cat-avail" data-avail-for="РУП — надбавка чл. 51, ал. 5">0.00 EUR</span>
+                        </label>
+                        <label class="v2-dist-cat-item">
+                            <span class="v2-dist-cat-left">
+                                <input type="checkbox" class="v2-dist-cat-cb" value="Наем" onchange="onV2DistCategoriesChanged()">
+                                <span class="v2-dist-cat-name">2. Наем</span>
+                            </span>
+                            <span class="v2-dist-cat-avail" data-avail-for="Наем">0.00 EUR</span>
+                        </label>
+                        <label class="v2-dist-cat-item">
+                            <span class="v2-dist-cat-left">
+                                <input type="checkbox" class="v2-dist-cat-cb" value="Средства от бюджетни институции" onchange="onV2DistCategoriesChanged()">
+                                <span class="v2-dist-cat-name">3. Средства от бюджетни институции</span>
+                            </span>
+                            <span class="v2-dist-cat-avail" data-avail-for="Средства от бюджетни институции">0.00 EUR</span>
+                        </label>
+                        <label class="v2-dist-cat-item">
+                            <span class="v2-dist-cat-left">
+                                <input type="checkbox" class="v2-dist-cat-cb" value="Кредит" onchange="onV2DistCategoriesChanged()">
+                                <span class="v2-dist-cat-name">4. Кредит</span>
+                            </span>
+                            <span class="v2-dist-cat-avail" data-avail-for="Кредит">0.00 EUR</span>
+                        </label>
+                        <label class="v2-dist-cat-item">
+                            <span class="v2-dist-cat-left">
+                                <input type="checkbox" class="v2-dist-cat-cb" value="ВЕИ на ЕС" onchange="onV2DistCategoriesChanged()">
+                                <span class="v2-dist-cat-name">5. ВЕИ на ЕС</span>
+                            </span>
+                            <span class="v2-dist-cat-avail" data-avail-for="ВЕИ на ЕС">0.00 EUR</span>
+                        </label>
+                        <label class="v2-dist-cat-item">
+                            <span class="v2-dist-cat-left">
+                                <input type="checkbox" class="v2-dist-cat-cb" value="Дарения" onchange="onV2DistCategoriesChanged()">
+                                <span class="v2-dist-cat-name">6. Дарения</span>
+                            </span>
+                            <span class="v2-dist-cat-avail" data-avail-for="Дарения">0.00 EUR</span>
+                        </label>
+                        <label class="v2-dist-cat-item">
+                            <span class="v2-dist-cat-left">
+                                <input type="checkbox" class="v2-dist-cat-cb" value="Други" onchange="onV2DistCategoriesChanged()">
+                                <span class="v2-dist-cat-name">7. Други</span>
+                            </span>
+                            <span class="v2-dist-cat-avail" data-avail-for="Други">0.00 EUR</span>
+                        </label>
+                        <label class="v2-dist-cat-item">
+                            <span class="v2-dist-cat-left">
+                                <input type="checkbox" class="v2-dist-cat-cb" value="Фонд ремонт" onchange="onV2DistCategoriesChanged()">
+                                <span class="v2-dist-cat-name">8. Фонд ремонт</span>
+                            </span>
+                            <span class="v2-dist-cat-avail" data-avail-for="Фонд ремонт">0.00 EUR</span>
+                        </label>
+                        <label class="v2-dist-cat-item">
+                            <span class="v2-dist-cat-left">
+                                <input type="checkbox" class="v2-dist-cat-cb" value="maintenance" onchange="onV2DistCategoriesChanged()">
+                                <span class="v2-dist-cat-name">9. Фонд Поддръжка</span>
+                            </span>
+                            <span class="v2-dist-cat-avail" data-avail-for="maintenance">0.00 EUR</span>
+                        </label>
+                    </div>
+                    <select id="v2DistCategory" class="admin-input" style="display:none;" onchange="updateV2DistAvailableSum()">
                         <option value="">Избери...</option>
-                        <option value="Наем на общи части">2. Наем на общи части</option>
+                        <option value="РУП — надбавка чл. 51, ал. 5">РУП — надбавка чл. 51, ал. 5</option>
+                        <option value="Наем">2. Наем</option>
                         <option value="Средства от бюджетни институции">3. Средства от бюджетни институции</option>
                         <option value="Кредит">4. Кредит</option>
                         <option value="ВЕИ на ЕС">5. ВЕИ на ЕС</option>
@@ -459,8 +530,8 @@
                     <label class="admin-label" id="lbl-v2DistAmount">Сума за разпределяне</label>
                     <input type="text" inputmode="decimal" id="v2DistAmount" class="admin-input" placeholder="0.00">
 
-                    <label class="admin-label">Основание / Бележка</label>
-                    <textarea id="v2DistNote" class="admin-input" placeholder="Кратко описание..." style="min-height: 60px;"></textarea>
+                    <label class="admin-label">Основание / Бележка <span style="color:#dc2626;">*</span></label>
+                    <textarea id="v2DistNote" class="admin-input" placeholder="Въведете задължително основание за разпределянето..." required style="min-height: 60px;"></textarea>
 
                     <button class="admin-btn" id="v2SubmitDistBtn" style="background: #3b82f6; color: white;" onclick="submitDistributionV2()">🧮 Разпредели сумата</button>
                 </div>
@@ -498,21 +569,22 @@
                     <select id="v2IncomeApt" class="admin-input" onchange="v2HandleAptChange()">
                         <option value="">Избери...</option>
                         <option value="EXTERNAL">Външен източник</option>
+                        <option value="EXTERNAL_UNIT">Самостоятелни обекти (извън A1–AN)</option>
                         <!-- options will be populated by JS -->
                     </select>
 
                     <div id="v2IncomeExtUnitGroup" style="display: none; margin-top: 6px; margin-bottom: 10px;">
                         <label class="admin-label" for="v2IncomeExtUnit">Самостоятелен обект (по избор)</label>
                         <select id="v2IncomeExtUnit" class="admin-input" onchange="v2HandleExtUnitChange()">
-                            <option value="">— Общ външен източник (без партида на обект) —</option>
+                            <option value="">— Изберете самостоятелен обект —</option>
                         </select>
                     </div>
 
-                    <label class="admin-label">Категория по ЗУЕС</label>
+                    <label class="admin-label">Категория</label>
                     <select id="v2IncomeCategory" class="admin-input" onchange="v2LoadPaymentDue()">
+                        <option value="Плащане за СО" style="display:none;">Плащане за СО</option>
                         <option value="Управление и поддръжка">1. Управление и поддръжка</option>
-                        <option value="Наем на общи части">2. Наем на общи части</option>
-                        <option value="Фонд ремонт">Фонд ремонт (Самостоятелен обект)</option>
+                        <option value="Наем">2. Наем</option>
                         <option value="Средства от бюджетни институции">3. Средства от бюджетни институции</option>
                         <option value="Кредит">4. Кредит</option>
                         <option value="ВЕИ на ЕС">5. ВЕИ на ЕС</option>
@@ -521,13 +593,18 @@
                     </select>
 
                     <label class="admin-label">Сума <span id="v2IncomeCurrentBal" class="charge-current" style="font-size: 11px; margin-left: 10px;"></span></label>
-                    <input type="text" inputmode="decimal" id="v2IncomeAmount" class="admin-input" placeholder="0.00">
+                    <input type="text" inputmode="decimal" id="v2IncomeAmount" class="admin-input" placeholder="0.00" oninput="onV2IncomeExtPaymentInputChanged()">
 
                     <label class="admin-label">Номер на документ (Опционално)</label>
                     <input type="text" id="v2IncomeDoc" class="admin-input" placeholder="напр. Разписка №123">
 
                     <label class="admin-label">Основание / Бележка</label>
-                    <textarea id="v2IncomeNote" class="admin-input" placeholder="Въведете кратко описание..." style="min-height: 60px;"></textarea>
+                    <textarea id="v2IncomeNote" class="admin-input" placeholder="Въведете кратко описание..." style="min-height: 60px;" oninput="onV2IncomeExtPaymentInputChanged()"></textarea>
+
+                    <div id="extUnitPaymentPreviewBox" class="ext-unit-payment-preview-box" style="display: none;" aria-live="polite">
+                        <div class="ext-unit-preview-title">📊 Предварителен преглед на разпределението (СО)</div>
+                        <div id="extUnitPaymentPreviewContent" class="ext-unit-preview-grid"></div>
+                    </div>
 
                     <!-- BEGIN FIN01 PAYMENT UX -->
                     <div id="fin01PaymentControls" hidden>
@@ -560,10 +637,11 @@
                     <h3 style="color: #1e3a8a;">👥 Регистър Външни платци</h3>
                     <p class="subtitle" style="font-size: 12px; margin-bottom: 15px;">Дефинирайте съответствие между името на Наредителя в ePay имейлите и съответния Вид платец.</p>
                     
-                    <label class="admin-label">Вид платец (Категория по ЗУЕС)</label>
+                    <label class="admin-label">Вид платец (Категория)</label>
                     <select id="v2PayerType" class="admin-input">
+                        <option value="Плащане за СО">Плащане за СО (Автоматично разпределяне)</option>
                         <option value="Управление и поддръжка">1. Управление и поддръжка (Самостоятелен обект)</option>
-                        <option value="Наем на общи части">2. Наем на общи части</option>
+                        <option value="Наем">2. Наем</option>
                         <option value="Фонд ремонт">Фонд ремонт (Самостоятелен обект)</option>
                         <option value="Средства от бюджетни институции">3. Средства от бюджетни институции</option>
                         <option value="Кредит">4. Кредит</option>
@@ -816,695 +894,724 @@
                 <h3 id="admin-section-master">📊 MASTER – Настройки</h3>
                 <p class="subtitle" style="font-size: 12px; margin-bottom: 15px;">Управлявайте статусите (Логика,
                     Обитатели, Чипове) за дълги периоди.</p>
-                <div style="display:flex;gap:6px;flex-wrap:wrap;margin:10px 0 14px;">
-                    <button class="master-tab active" onclick="switchMasterTab('logika',this)">📐 Логика</button>
-                    <button class="master-tab" onclick="switchMasterTab('uchastie',this)">🛗 Уч. Асансьор</button>
-                    <button class="master-tab" onclick="switchMasterTab('obitatel',this)">👥 Обитатели</button>
-                    <button class="master-tab" onclick="switchMasterTab('chipove',this)">🔑 Чипове</button>
-                    <button class="master-tab" onclick="switchMasterTab('idealni',this)">📊 Идеални Ч.</button>
-                    <button class="master-tab" onclick="switchMasterTab('info',this)">🏠 Инфо апарт.</button>
-                    <button class="master-tab" onclick="switchMasterTab('payment',this)">💳 Плащ.инфо</button>
-                    <button class="master-tab" onclick="switchMasterTab('notice',this)">📢 Съобщения</button>
-                    <button class="master-tab" onclick="switchMasterTab('imeil',this)">✉️ Имейл до апт.</button>
-                    <button class="master-tab" onclick="switchMasterTab('zues',this)">⚖️ ЗУЕС Мениджър</button>
-                </div>
-                <!-- Logic Tab Content -->
-                <!-- BEGIN ART51 UI -->
-                <details id="art51Settings" class="art51-details-container">
-                    <summary class="art51-summary" onclick="openArt51Settings()">Обекти с дейност с обществен достъп</summary>
-                    <p class="art51-header-text">Съгласно чл. 51, ал. 5 ЗУЕС. Обектите със самостоятелен вход по Чл. 51, ал. 6 — не активирайте тук</p>
-                    <div class="art51-card art51-form-card">
-                        <div class="art51-field-group">
-                            <label for="art51Apartment" class="admin-label">Апартамент</label>
-                            <div class="art51-apartment-row">
-                                <select id="art51Apartment" class="admin-input" onchange="art51ApartmentChanged()"></select>
-                                <div id="art51CurrentBadge" class="art51-badge"></div>
+                <div id="masterAccordionContainer" class="master-accordion-container">
+                    <!-- 1. Метод на разпределяне на разходи -->
+                    <div id="masterGroupDistribution" class="master-acc-group open">
+                        <button type="button" class="master-acc-group-btn active" onclick="toggleMasterAccordionGroup('distribution', this)" aria-expanded="true">
+                            <span>📐 Метод на разпределяне на разходи</span>
+                            <span class="master-acc-chevron">▾</span>
+                        </button>
+                        <div id="masterGroupBody_distribution" class="master-acc-group-body">
+                            <!-- Логика -->
+                            <div class="master-acc-item">
+                                <button type="button" class="master-tab active" data-master-tab="logika" onclick="switchMasterTab('logika',this)"><span>📐 Логика</span><span class="master-item-chevron">▾</span></button>
+                                <div id="master-tab-logika" class="master-panel" style="display:block;">
+                                    <label class="admin-label">Логика</label>
+                                    <select id="masterLogikaVal" class="admin-input">
+                                        <option value="Равно">Равно</option>
+                                        <option value="Обитатели">Обитатели</option>
+                                        <option value="Идеални части">Идеални части</option>
+                                    </select>
+                                    <label class="admin-label">От период (MM.YYYY)</label>
+                                    <select id="masterLogikaFrom" class="admin-input"></select>
+                                    <button class="admin-btn primary" onclick="submitMaster('Логика')">Запиши за напред</button>
+                                </div>
                             </div>
-                        </div>
-                        <div class="art51-field-group">
-                            <label for="art51Active" class="admin-label">Общ. достъп НЕ/ДА</label>
-                            <select id="art51Active" class="admin-input" onchange="art51ActiveChanged()">
-                                <option value="false">НЕ</option>
-                                <option value="true">ДА</option>
-                            </select>
-                        </div>
-                        <div class="art51-field-group">
-                            <label for="art51Period" class="admin-label">От период (MM.YYYY)</label>
-                            <input type="text" id="art51Period" class="admin-input" placeholder="MM.YYYY" maxlength="7">
-                        </div>
-                        <div class="art51-field-group" id="art51MultiplierGroup">
-                            <label for="art51Multiplier" class="admin-label">Множител (3–5)</label>
-                            <input type="number" id="art51Multiplier" class="admin-input" min="3" max="5" step="1" placeholder="3, 4 или 5">
-                        </div>
-                        <div class="art51-field-group" id="art51DecisionDateGroup">
-                            <label for="art51DecisionDate" class="admin-label">Решение на ОС — дата</label>
-                            <input type="date" id="art51DecisionDate" class="admin-input">
-                        </div>
-                        <div class="art51-field-group" id="art51ReferenceGroup">
-                            <label for="art51Reference" class="admin-label">Протокол / основание</label>
-                            <input type="text" id="art51Reference" class="admin-input" maxlength="256" placeholder="Незадължително">
-                        </div>
-                        <button type="button" id="art51SaveBtn" class="admin-btn primary art51-save-btn" onclick="saveArt51Settings()">ЗАПАЗИ</button>
-                        <p id="art51Status" class="art51-status-msg" role="status"></p>
-                        <!-- Hidden compatibility handles -->
-                        <input type="checkbox" id="art51Confirmed" style="display:none;" aria-hidden="true">
-                        <pre id="art51History" style="display:none;" aria-hidden="true"></pre>
-                    </div>
-                    <div id="art51ActionsCard" class="art51-card art51-actions-card">
-                        <h4 class="art51-actions-title">Регистър на действията</h4>
-                        <div class="art51-table-wrapper">
-                            <table id="art51ActionsTable" class="art51-table">
-                                <thead>
-                                    <tr>
-                                        <th>Дата и час</th>
-                                        <th>Апартамент</th>
-                                        <th>Предишно състояние</th>
-                                        <th>Ново състояние</th>
-                                        <th>Множител</th>
-                                        <th>От период</th>
-                                        <th>Решение на ОС</th>
-                                        <th>Протокол / основание</th>
-                                        <th>Администратор</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="art51ActionsBody">
-                                    <tr><td colspan="9" style="text-align: center; color: #64748b; padding: 14px;">Няма записани действия.</td></tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </details>
-                <!-- END ART51 UI -->
-                <!-- BEGIN EXTERNAL UNITS UI -->
-                <details id="externalUnitsSettings" class="art51-details-container ext-units-details-container">
-                    <summary class="art51-summary" onclick="openExternalUnitsSettings()">Самостоятелни обекти (извън A1–AN)</summary>
-                    <p class="art51-header-text">Регистър и конфигурация на външни самостоятелни обекти (магазини, гаражи, ателиета, офиси, кабинети) с двустепенно разпределение без промяна на формулите за апартаментите.</p>
 
-                    <div id="extUnitIdealWarning" class="ext-unit-warning-banner" style="display:none;" role="alert"></div>
-
-                    <div class="art51-card art51-form-card ext-unit-form-card">
-                        <div class="art51-field-group">
-                            <label for="extUnitSelect" class="admin-label">Избор на обект</label>
-                            <div class="art51-apartment-row">
-                                <select id="extUnitSelect" class="admin-input" onchange="extUnitSelectionChanged()">
-                                    <option value="">➕ Нов самостоятелен обект</option>
-                                </select>
-                                <div id="extUnitCurrentBadge" class="art51-badge"></div>
-                            </div>
-                        </div>
-
-                        <div class="ext-unit-grid-2">
-                            <div class="art51-field-group">
-                                <label for="extUnitName" class="admin-label">Наименование на обекта</label>
-                                <input type="text" id="extUnitName" class="admin-input" maxlength="120" placeholder="напр. Магазин 1 / Гараж №4">
-                            </div>
-                            <div class="art51-field-group">
-                                <label for="extUnitAccessType" class="admin-label">Вид достъп</label>
-                                <select id="extUnitAccessType" class="admin-input" onchange="extUnitAccessTypeChanged()">
-                                    <option value="SEPARATE_ENTRANCE">Самостоятелен вход (чл. 51, ал. 6)</option>
-                                    <option value="COMMON_ENTRANCE">Общ вход</option>
-                                </select>
-                            </div>
-                        </div>
-
-                        <div class="ext-unit-grid-2">
-                            <div class="art51-field-group">
-                                <label for="extUnitDocPurpose" class="admin-label">Предназначение по документи</label>
-                                <select id="extUnitDocPurpose" class="admin-input">
-                                    <option value="Магазин">Магазин</option>
-                                    <option value="Гараж">Гараж</option>
-                                    <option value="Офис">Офис</option>
-                                    <option value="Ателие">Ателие</option>
-                                    <option value="Кабинет">Кабинет</option>
-                                    <option value="Склад">Склад</option>
-                                    <option value="Друго">Друго</option>
-                                </select>
-                            </div>
-                            <div class="art51-field-group">
-                                <label for="extUnitActualUsage" class="admin-label">Фактическо използване</label>
-                                <select id="extUnitActualUsage" class="admin-input">
-                                    <option value="Търговски обект">Търговски обект</option>
-                                    <option value="Гараж">Гараж</option>
-                                    <option value="Офис / Кабинет">Офис / Кабинет</option>
-                                    <option value="Живеене">Живеене</option>
-                                    <option value="Склад">Склад</option>
-                                    <option value="Необитаем">Необитаем</option>
-                                    <option value="Друго">Друго</option>
-                                </select>
-                            </div>
-                        </div>
-
-                        <div class="ext-unit-grid-2">
-                            <div class="art51-field-group">
-                                <label for="extUnitArea" class="admin-label">Площ в кв.м (опционално)</label>
-                                <input type="text" inputmode="decimal" id="extUnitArea" class="admin-input" placeholder="пр. 24.50">
-                            </div>
-                            <div class="art51-field-group">
-                                <label for="extUnitCadastre" class="admin-label">Кадастрален идентификатор (опционално)</label>
-                                <input type="text" id="extUnitCadastre" class="admin-input" maxlength="120" placeholder="пр. 68134.100.1.1.50">
-                            </div>
-                        </div>
-
-                        <div class="ext-unit-grid-2">
-                            <div class="art51-field-group">
-                                <label for="extUnitMgmtPart" class="admin-label">Участие в разходите за Управление и поддръжка</label>
-                                <select id="extUnitMgmtPart" class="admin-input">
-                                    <option value="true">ДА (участва в разпределението)</option>
-                                    <option value="false">НЕ (изключен от автоматично начисляване)</option>
-                                </select>
-                            </div>
-                            <div class="art51-field-group">
-                                <label for="extUnitOccupants" class="admin-label">Брой обитатели / ползватели</label>
-                                <input type="number" id="extUnitOccupants" class="admin-input" min="0" step="1" value="1" placeholder="Мин. 1 при режим Обитатели">
-                            </div>
-                        </div>
-
-                        <div id="extUnitArt51Group" class="ext-unit-grid-2" style="display:none;">
-                            <div class="art51-field-group">
-                                <label for="extUnitArt51Active" class="admin-label">Дейност с обществен достъп (чл. 51, ал. 5)</label>
-                                <select id="extUnitArt51Active" class="admin-input" onchange="extUnitArt51ActiveChanged()">
-                                    <option value="false">НЕ (1x стандартен дял)</option>
-                                    <option value="true">ДА (коефициент 3–5x)</option>
-                                </select>
-                            </div>
-                            <div class="art51-field-group" id="extUnitMultiplierGroup" style="display:none;">
-                                <label for="extUnitMultiplier" class="admin-label">Коефициент по чл. 51 (3–5)</label>
-                                <input type="number" id="extUnitMultiplier" class="admin-input" min="3" max="5" step="1" value="3" placeholder="3, 4 или 5">
-                            </div>
-                        </div>
-
-                        <div class="ext-unit-grid-2">
-                            <div class="art51-field-group">
-                                <label for="extUnitIdealStatus" class="admin-label">Идеални части — статус</label>
-                                <select id="extUnitIdealStatus" class="admin-input" onchange="extUnitIdealStatusChanged()">
-                                    <option value="UNESTABLISHED">Неустановени</option>
-                                    <option value="ESTABLISHED">Установени (%)</option>
-                                </select>
-                            </div>
-                            <div class="art51-field-group" id="extUnitIdealPercentGroup" style="display:none;">
-                                <label for="extUnitIdealPercent" class="admin-label">Идеални части (%)</label>
-                                <input type="text" inputmode="decimal" id="extUnitIdealPercent" class="admin-input" placeholder="пр. 2.50">
-                            </div>
-                        </div>
-
-                        <div class="ext-unit-grid-2">
-                            <div class="art51-field-group">
-                                <label for="extUnitRepairPart" class="admin-label">Автоматично начисляване за Фонд ремонт</label>
-                                <select id="extUnitRepairPart" class="admin-input">
-                                    <option value="false">НЕ</option>
-                                    <option value="true">ДА (по установени ид. части)</option>
-                                </select>
-                            </div>
-                            <div class="art51-field-group">
-                                <label for="extUnitRentAmount" class="admin-label">Месечен наем по договор (EUR)</label>
-                                <input type="text" inputmode="decimal" id="extUnitRentAmount" class="admin-input" value="0" placeholder="0.00">
-                            </div>
-                        </div>
-
-                        <div class="art51-field-group">
-                            <label for="extUnitPeriod" class="admin-label">От период (MM.YYYY)</label>
-                            <input type="text" id="extUnitPeriod" class="admin-input" placeholder="MM.YYYY" maxlength="7">
-                        </div>
-
-                        <button type="button" id="extUnitSaveBtn" class="admin-btn primary art51-save-btn" onclick="saveExternalUnitSettings()">ЗАПАЗИ ОБЕКТ</button>
-                        <p id="extUnitStatusMsg" class="art51-status-msg" role="status"></p>
-                    </div>
-
-                    <div id="extUnitsRegistryCard" class="art51-card art51-actions-card">
-                        <h4 class="art51-actions-title">Регистър „Самостоятелни обекти“</h4>
-                        <div class="art51-table-wrapper">
-                            <table id="extUnitsRegistryTable" class="art51-table">
-                                <thead>
-                                    <tr>
-                                        <th>ID / Наименование</th>
-                                        <th>По док. / Факт.</th>
-                                        <th>Достъп / Коеф.</th>
-                                        <th>Ид. части / Обит.</th>
-                                        <th>Участие УП / Ремонт</th>
-                                        <th>Наем</th>
-                                        <th>От период</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="extUnitsRegistryBody">
-                                    <tr><td colspan="7" style="text-align: center; color: #64748b; padding: 14px;">Няма регистрирани самостоятелни обекти.</td></tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-
-                    <div id="extUnitsStatementCard" class="art51-card art51-actions-card">
-                        <div class="ext-unit-statement-header">
-                            <h4 class="art51-actions-title" style="margin:0;">Справка по периоди: Начислено, Платено, Аванс и Салдо</h4>
-                            <select id="extUnitStatementFilter" class="admin-input ext-unit-filter-select" onchange="renderExternalUnitsStatementView()">
-                                <option value="ALL">Всички самостоятелни обекти</option>
-                            </select>
-                        </div>
-                        <div class="art51-table-wrapper" style="margin-top: 10px;">
-                            <table id="extUnitsStatementTable" class="art51-table">
-                                <thead>
-                                    <tr>
-                                        <th>Обект / Период</th>
-                                        <th>Упр. и поддръжка (Нач./Плат.)</th>
-                                        <th>Фонд ремонт (Нач./Плат.)</th>
-                                        <th>Наем (Нач./Плат.)</th>
-                                        <th>Общо Начислено</th>
-                                        <th>Общо Платено</th>
-                                        <th>Аванс</th>
-                                        <th>Салдо (Дължимо)</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="extUnitsStatementBody">
-                                    <tr><td colspan="8" style="text-align: center; color: #64748b; padding: 14px;">Няма начисления за самостоятелни обекти.</td></tr>
-                                </tbody>
-                            </table>
-                        </div>
-
-                        <h4 class="art51-actions-title" style="margin-top: 16px;">Финансова сверка по периоди (MASTER + Външни обекти + Закръгляване)</h4>
-                        <div class="art51-table-wrapper">
-                            <table id="extUnitsReconciliationTable" class="art51-table">
-                                <thead>
-                                    <tr>
-                                        <th>Период</th>
-                                        <th>Разход по док.</th>
-                                        <th>База MASTER (A1–AN)</th>
-                                        <th>База Външни (1x)</th>
-                                        <th>Надбавка чл. 51</th>
-                                        <th>Закръгляване (MASTER)</th>
-                                        <th>Общо Вземания</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="extUnitsReconciliationBody">
-                                    <tr><td colspan="7" style="text-align: center; color: #64748b; padding: 12px;">Няма операции с двустепенно разпределение.</td></tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-
-                    <div id="extUnitActionsCard" class="art51-card art51-actions-card">
-                        <h4 class="art51-actions-title">Регистър на административните промени (Самостоятелни обекти)</h4>
-                        <div class="art51-table-wrapper">
-                            <table id="extUnitActionsTable" class="art51-table">
-                                <thead>
-                                    <tr>
-                                        <th>Дата и час</th>
-                                        <th>Обект</th>
-                                        <th>Участие УП</th>
-                                        <th>Предишно състояние</th>
-                                        <th>Ново състояние</th>
-                                        <th>От период</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="extUnitActionsBody">
-                                    <tr><td colspan="6" style="text-align: center; color: #64748b; padding: 14px;">Няма записани промени.</td></tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </details>
-                <!-- END EXTERNAL UNITS UI -->
-                <div id="master-tab-logika" class="master-panel">
-                    <label class="admin-label">Логика</label>
-                    <select id="masterLogikaVal" class="admin-input">
-                        <option value="Равно">Равно</option>
-                        <option value="Обитатели">Обитатели</option>
-                        <option value="Идеални части">Идеални части</option>
-                    </select>
-                    <label class="admin-label">От период (MM.YYYY)</label>
-                    <select id="masterLogikaFrom" class="admin-input"></select>
-                    <button class="admin-btn primary" onclick="submitMaster('Логика')">Запиши за напред</button>
-                </div>
-
-                <!-- Uchasite Tab Content -->
-                <div id="master-tab-uchastie" class="master-panel" style="display:none;">
-                    <label class="admin-label">Апартамент</label>
-                    <select id="masterUchApt" class="admin-input"></select>
-                    <label class="admin-label">Участва (Да/Не)</label>
-                    <select id="masterUchVal" class="admin-input">
-                        <option value="Да">Да</option>
-                        <option value="Не">Не</option>
-                    </select>
-                    <label class="admin-label">От период (MM.YYYY)</label>
-                    <select id="masterUchFrom" class="admin-input"></select>
-                    <button class="admin-btn primary" onclick="submitMaster('УЧАСТИЕ_АСАНСЬОР')">Запиши за напред</button>
-                </div>
-
-                <!-- Obitateli Tab Content -->
-                <div id="master-tab-obitatel" class="master-panel" style="display:none;">
-                    <label class="admin-label">Апартамент</label>
-                    <select id="masterObApt" class="admin-input"></select>
-                    <label class="admin-label">Брой обитатели</label>
-                    <input type="number" id="masterObVal" class="admin-input" placeholder="Напр. 2" min="1" step="1">
-                    <label class="admin-label">От период (MM.YYYY)</label>
-                    <select id="masterObFrom" class="admin-input"></select>
-                    <p style="font-size: 11px; color: #888; margin-top: 5px; margin-bottom: 12px; line-height: 1.4;">
-                        Записването променя стойността от избрания период <b>напред</b>. Историята се пази за коректни начисления за минали месеци.
-                    </p>
-                    <button class="admin-btn primary" onclick="submitMaster('ОБИТАТЕЛИ')">Запиши за напред</button>
-                </div>
-
-                <!-- Chipove Tab Content -->
-                <div id="master-tab-chipove" class="master-panel" style="display:none;">
-                    <label class="admin-label">Апартамент</label>
-                    <select id="masterChApt" class="admin-input"></select>
-                    <label class="admin-label">Брой чипове</label>
-                    <input type="number" id="masterChVal" class="admin-input" placeholder="Напр. 3" min="0" step="1">
-                    <label class="admin-label">От период (MM.YYYY)</label>
-                    <select id="masterChFrom" class="admin-input"></select>
-                    <button class="admin-btn primary" onclick="submitMaster('ЧИПОВЕ')">Запиши за напред</button>
-                </div>
-
-                <!-- Idealni Chasti Tab Content -->
-                <div id="master-tab-idealni" class="master-panel" style="display:none;">
-                    <div id="idealPartsCurrentStatus" style="margin-bottom: 12px; padding: 10px 12px; border-radius: 8px; background: rgba(0, 122, 255, 0.06); font-size: 12px; line-height: 1.5; display: none;"></div>
-
-                    <label class="admin-label">Апартамент</label>
-                    <select id="masterIdApt" class="admin-input" onchange="handleMasterIdAptChange()"></select>
-                    <label class="admin-label">Идеални части (%)</label>
-                    <input type="text" inputmode="decimal" id="masterIdVal" class="admin-input" placeholder="пр. 2.45">
-                    
-                    <div style="display:none;">
-                        <select id="masterIdFrom" class="admin-input"></select>
-                    </div>
-                    <p style="font-size: 11px; color: #888; margin-top: 5px; margin-bottom: 12px; line-height: 1.4;">
-                        Записването обновява <b>текущата</b> стойност на идеалните части. Тя се прилага автоматично за всички месеци за избрания апартамент.
-                    </p>
-                    
-                    <button class="admin-btn primary" onclick="submitMaster('ИДЕАЛНИ_ЧАСТИ')">Запиши стойност</button>
-
-                    <hr style="margin: 18px 0; border: none; border-top: 1px solid rgba(128,128,128,0.2);">
-
-                    <div id="masterIdBulkSection">
-                        <h4 style="margin: 0 0 8px 0; font-size: 14px;">🔄 Автоматично масово попълване на идеалните части</h4>
-                        <p style="font-size: 11px; color: #888; margin-top: 0; margin-bottom: 10px; line-height: 1.4;">
-                            Въведете идеалните части за първите N апартамента за етаж 1 (A1 до AN) и изберете бутона "Запиши стойност", след което посочете броя апартаменти на етаж и изберете бутона "Попълни автоматично", за да ги повторите автоматично до последния апартамент.
-                        </p>
-                        <label class="admin-label" for="masterIdPerFloor">Бр. апартаменти на етаж</label>
-                        <input type="number" id="masterIdPerFloor" class="admin-input" placeholder="пр. 3" min="1" step="1">
-                        <button type="button" class="admin-btn secondary" id="masterIdBulkPreviewBtn" onclick="previewBulkIdealParts()" style="margin-top: 6px;">Попълни автоматично</button>
-
-                        <div id="masterIdBulkPreviewContainer" style="display:none; margin-top: 14px; padding: 12px; border-radius: 8px; border: 1px solid rgba(128,128,128,0.25); background: rgba(0,0,0,0.02);">
-                            <div id="masterIdBulkSummary" style="font-size: 12px; line-height: 1.6; margin-bottom: 10px;"></div>
-                            <div id="masterIdBulkOverwriteWarning" style="display:none; margin-bottom: 10px; padding: 8px 10px; border-radius: 6px; background: rgba(255, 152, 0, 0.14); border-left: 3px solid #f57c00; color: #e65100; font-size: 12px; line-height: 1.4;"></div>
-                            <div id="masterIdBulkError" style="display:none; margin-bottom: 10px; padding: 8px 10px; border-radius: 6px; background: rgba(211, 47, 47, 0.12); border-left: 3px solid #d32f2f; color: #c62828; font-size: 12px; line-height: 1.4;"></div>
-                            <div style="max-height: 220px; overflow-y: auto; border: 1px solid rgba(128,128,128,0.2); border-radius: 6px; margin-bottom: 10px; background: var(--card-bg, #fff);">
-                                <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
-                                    <thead>
-                                        <tr style="background: rgba(0,0,0,0.05); text-align: left; position: sticky; top: 0;">
-                                            <th style="padding: 6px 8px;">Ап.</th>
-                                            <th style="padding: 6px 8px;">Шаблон</th>
-                                            <th style="padding: 6px 8px; text-align: right;">Текущо</th>
-                                            <th style="padding: 6px 8px; text-align: right;">Ново</th>
-                                            <th style="padding: 6px 8px;">Статус</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="masterIdBulkPreviewTableBody"></tbody>
-                                </table>
-                            </div>
-                            <label id="masterIdBulkConfirmLabel" style="display: flex; align-items: flex-start; gap: 8px; font-size: 12px; margin-bottom: 10px; cursor: pointer;">
-                                <input type="checkbox" id="masterIdBulkConfirmCheck" onchange="toggleBulkIdealPartsSubmitBtn()" style="margin-top: 2px;">
-                                <span>Потвърждавам масовото попълване на идеалните части за всички апартаменти съгласно предварителния преглед.</span>
-                            </label>
-                            <div style="display: flex; gap: 8px;">
-                                <button type="button" class="admin-btn primary" id="masterIdBulkSaveBtn" onclick="submitBulkIdealParts()" disabled style="flex: 1;">Потвърди и запиши масово</button>
-                                <button type="button" class="admin-btn secondary" id="masterIdBulkCancelBtn" onclick="cancelBulkIdealPartsPreview()" style="flex: 0 0 auto; width: auto; padding: 10px 16px;">Отказ</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Apartment Info Tab -->
-                <div id="master-tab-info" class="master-panel" style="display:none;">
-                    <label class="admin-label">Изберете апартамент за справка</label>
-                    <select id="masterInfoApt" class="admin-input" onchange="loadApartmentMasterSummary()"></select>
-                    <div id="aptMasterSummary" style="margin-top:20px; font-size: 14px; line-height: 1.8;">
-                        <p style="color:#666; font-style:italic;">Изберете апартамент, за да видите текущите му
-                            настройки в MASTER регистрите.</p>
-                    </div>
-                    <hr style="margin: 20px 0; border: none; border-top: 1px solid #eee;">
-                    <div id="aptNoticeEditor" style="display:none;">
-                        <label class="admin-label">📝 Лично съобщение до този апартамент</label>
-                        <textarea id="masterAptNoticeVal" class="admin-input" style="min-height: 80px;"
-                            placeholder="пр. Моля, свържете се с касиера за проверка на стария баланс..."></textarea>
-                        <button class="admin-btn primary small" onclick="submitAptNotice()">Запази съобщението</button>
-                    </div>
-                </div>
-
-                <!-- Notice Tab Content -->
-                <div id="master-tab-notice" class="master-panel" style="display:none;">
-                    <h3 class="admin-subtitle">📢 Съобщение до живущите</h3>
-                    <p class="subtitle" style="margin-bottom: 20px; font-size: 13px;">Това съобщение ще се вижда от
-                        всички апартаменти при влизане в платформата <strong>и ще се изпрати по имейл</strong> до всички
-                        с регистриран имейл адрес.</p>
-
-                    <div class="form-group">
-                        <label class="admin-label">Текст на съобщението</label>
-                        <textarea id="masterEntranceNotice" class="admin-input" style="min-height: 120px;"
-                            placeholder="Пример: Общо събрание на 15.03 от 19:00ч. пред входа..."></textarea>
-                    </div>
-
-                    <button class="admin-btn primary" onclick="submitMasterNotice()">Запази и изпрати до всички</button>
-
-                    <div
-                        style="margin-top: 20px; padding: 10px; background: rgba(0,0,0,0.02); border-radius: 8px; font-size: 12px; color: #666;">
-                        ℹ️ Можете да използвате това за важни съобщения, ремонти или обяви. За да го премахнете, просто
-                        изтрийте текста и запазете.
-                    </div>
-                </div>
-
-                <!-- Individual Apartment Email Tab -->
-                <div id="master-tab-imeil" class="master-panel" style="display:none;">
-                    <h3 class="admin-subtitle">✉️ Индивидуален имейл до апартамент</h3>
-                    <p class="subtitle" style="margin-bottom: 15px; font-size: 13px;">Изпратете персонализирано
-                        съобщение по имейл до конкретен апартамент (само ако е регистриран имейл).</p>
-
-                    <label class="admin-label">Апартамент</label>
-                    <select id="emailAptTarget" class="admin-input"></select>
-
-                    <label class="admin-label" style="margin-top: 12px;">Тема на имейла</label>
-                    <input type="text" id="emailAptSubject" class="admin-input"
-                        placeholder="пр. Важна информация за Вашия апартамент...">
-
-                    <label class="admin-label" style="margin-top: 12px;">Текст на съобщението</label>
-                    <textarea id="emailAptBody" class="admin-input" style="min-height: 120px;"
-                        placeholder="Въведете текста на вашето съобщение тук..."></textarea>
-
-                    <button class="admin-btn primary" style="margin-top: 12px;" onclick="sendAptEmail()">📤 Изпрати
-                        имейл</button>
-
-                    <div
-                        style="margin-top: 15px; padding: 10px; background: rgba(0,0,0,0.02); border-radius: 8px; font-size: 12px; color: #666;">
-                        ℹ️ Имейлът ще бъде изпратен само ако апартаментът има регистриран имейл адрес. Можете да
-                        проверите и регистрирате имейли в секцията "✉️ Имейл на апартамент".
-                    </div>
-                </div>
-
-                <!-- ⚖️ ЗУЕС Мениджър Section -->
-                <div id="master-tab-zues" class="master-panel" style="display: none;">
-                    <div
-                        style="display:flex;gap:6px;flex-wrap:wrap;margin:0 0 15px; border-bottom: 1px solid #eee; padding-bottom: 10px;">
-                        <button class="admin-btn secondary small" style="padding: 6px 10px; font-size: 11px;"
-                            onclick="switchZuesSubTab('z-book')">📖 Книга на ЕС</button>
-                        <button class="admin-btn secondary small" style="padding: 6px 10px; font-size: 11px;"
-                            onclick="switchZuesSubTab('z-fullbook')">📋 Цяла книга</button>
-                        <button class="admin-btn secondary small" style="padding: 6px 10px; font-size: 11px;"
-                            onclick="switchZuesSubTab('z-meeting')">🤝 Общо събрание</button>
-                        <button class="admin-btn secondary small" style="padding: 6px 10px; font-size: 11px;"
-                            onclick="switchZuesSubTab('z-docs')">📄 Декларации</button>
-                    </div>
-
-                    <!-- Sub-Tab: Book -->
-                    <div id="zub-z-book" class="zues-sub-panel">
-                        <h4 class="admin-subtitle">Книга на етажната собственост (Чл. 7)</h4>
-                        <div
-                            style="background: rgba(0,0,0,0.02); padding: 15px; border-radius: 12px; border: 1px solid rgba(0,0,0,0.05);">
-                            <label class="admin-label">Изберете Апартамент</label>
-                            <select id="masterBookApt" class="admin-input" onchange="loadBookData()"></select>
-
-                            <div id="book-fields-container" style="margin-top: 15px;">
-                                <label class="admin-label">Собственик / Собственици</label>
-                                <textarea id="book-Owner" class="admin-input" style="min-height:60px;"
-                                    placeholder="Един: Иван Иванов Иванов&#10;Няколко: Иван Иванов, Мария Иванова"></textarea>
-                                <p style="font-size:11px; color:#888; margin:-6px 0 10px; padding-left:2px;">ℹ️ При
-                                    няколко собственици — въведете имената разделени с запетая.</p>
-                                <label class="admin-label">Имейл</label>
-                                <input type="email" id="book-Email" class="admin-input">
-                                <label class="admin-label">Обитатели</label>
-                                <textarea id="book-Occupants" class="admin-input"
-                                    placeholder="Имена на всички обитатели, разделени с запетая"></textarea>
-                                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
-                                    <div>
-                                        <label class="admin-label">Дата вписване</label>
-                                        <input type="date" id="book-EntryDate" class="admin-input">
+                            <!-- Ап. с обществен достъп -->
+                            <div class="master-acc-item">
+                                <button type="button" class="master-tab" data-master-tab="art51" onclick="switchMasterTab('art51',this)"><span>🏢 Ап. с обществен достъп</span><span class="master-item-chevron">▸</span></button>
+                                <!-- BEGIN ART51 UI -->
+                                <div id="master-tab-art51" class="master-panel" style="display:none;">
+                                    <div id="art51Settings" class="art51-details-container">
+                                        <div class="art51-summary" style="cursor:default;">Обекти с дейност с обществен достъп</div>
+                                        <p class="art51-header-text">Съгласно чл. 51, ал. 5 ЗУЕС. Обектите със самостоятелен вход по Чл. 51, ал. 6 — не активирайте тук</p>
+                                        <div class="art51-card art51-form-card">
+                                            <div class="art51-field-group">
+                                                <label for="art51Apartment" class="admin-label">Апартамент</label>
+                                                <div class="art51-apartment-row">
+                                                    <select id="art51Apartment" class="admin-input" onchange="art51ApartmentChanged()"></select>
+                                                    <div id="art51CurrentBadge" class="art51-badge"></div>
+                                                </div>
+                                            </div>
+                                            <div class="art51-field-group">
+                                                <label for="art51Active" class="admin-label">Общ. достъп НЕ/ДА</label>
+                                                <select id="art51Active" class="admin-input" onchange="art51ActiveChanged()">
+                                                    <option value="false">НЕ</option>
+                                                    <option value="true">ДА</option>
+                                                </select>
+                                            </div>
+                                            <div class="art51-field-group">
+                                                <label for="art51Period" class="admin-label">От период (MM.YYYY)</label>
+                                                <input type="text" id="art51Period" class="admin-input" placeholder="MM.YYYY" maxlength="7">
+                                            </div>
+                                            <div class="art51-field-group" id="art51MultiplierGroup">
+                                                <label for="art51Multiplier" class="admin-label">Множител (3–5)</label>
+                                                <input type="number" id="art51Multiplier" class="admin-input" min="3" max="5" step="1" placeholder="3, 4 или 5">
+                                            </div>
+                                            <div class="art51-field-group" id="art51DecisionDateGroup">
+                                                <label for="art51DecisionDate" class="admin-label">Решение на ОС — дата</label>
+                                                <input type="date" id="art51DecisionDate" class="admin-input">
+                                            </div>
+                                            <div class="art51-field-group" id="art51ReferenceGroup">
+                                                <label for="art51Reference" class="admin-label">Протокол / основание</label>
+                                                <input type="text" id="art51Reference" class="admin-input" maxlength="256" placeholder="Незадължително">
+                                            </div>
+                                            <button type="button" id="art51SaveBtn" class="admin-btn primary art51-save-btn" onclick="saveArt51Settings()">ЗАПАЗИ</button>
+                                            <p id="art51Status" class="art51-status-msg" role="status"></p>
+                                            <!-- Hidden compatibility handles -->
+                                            <input type="checkbox" id="art51Confirmed" style="display:none;" aria-hidden="true">
+                                            <pre id="art51History" style="display:none;" aria-hidden="true"></pre>
+                                        </div>
+                                        <div id="art51ActionsCard" class="art51-card art51-actions-card">
+                                            <h4 class="art51-actions-title">Регистър на действията</h4>
+                                            <div class="art51-table-wrapper">
+                                                <table id="art51ActionsTable" class="art51-table">
+                                                    <thead>
+                                                        <tr>
+                                                            <th>Дата и час</th>
+                                                            <th>Апартамент</th>
+                                                            <th>Предишно състояние</th>
+                                                            <th>Ново състояние</th>
+                                                            <th>Множител</th>
+                                                            <th>От период</th>
+                                                            <th>Решение на ОС</th>
+                                                            <th>Протокол / основание</th>
+                                                            <th>Администратор</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody id="art51ActionsBody">
+                                                        <tr><td colspan="9" style="text-align: center; color: #64748b; padding: 14px;">Няма записани действия.</td></tr>
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <label class="admin-label">Предназначение</label>
-                                        <select id="book-Purpose" class="admin-input">
-                                            <option value="Жилищно">Жилищно</option>
-                                            <option value="Офис">Офис</option>
-                                            <option value="Търговско">Търговско</option>
+                                </div>
+                                <!-- END ART51 UI -->
+                            </div>
+
+                            <!-- Обитатели -->
+                            <div class="master-acc-item">
+                                <button type="button" class="master-tab" data-master-tab="obitatel" onclick="switchMasterTab('obitatel',this)"><span>👥 Обитатели</span><span class="master-item-chevron">▸</span></button>
+                                <div id="master-tab-obitatel" class="master-panel" style="display:none;">
+                                    <label class="admin-label">Апартамент</label>
+                                    <select id="masterObApt" class="admin-input"></select>
+                                    <label class="admin-label">Брой обитатели</label>
+                                    <input type="number" id="masterObVal" class="admin-input" placeholder="Напр. 2" min="1" step="1">
+                                    <label class="admin-label">От период (MM.YYYY)</label>
+                                    <select id="masterObFrom" class="admin-input"></select>
+                                    <p style="font-size: 11px; color: #888; margin-top: 5px; margin-bottom: 12px; line-height: 1.4;">
+                                        Записването променя стойността от избрания период <b>напред</b>. Историята се пази за коректни начисления за минали месеци.
+                                    </p>
+                                    <button class="admin-btn primary" onclick="submitMaster('ОБИТАТЕЛИ')">Запиши за напред</button>
+                                </div>
+                            </div>
+
+                            <!-- Идеални Ч. -->
+                            <div class="master-acc-item">
+                                <button type="button" class="master-tab" data-master-tab="idealni" onclick="switchMasterTab('idealni',this)"><span>📊 Идеални Ч.</span><span class="master-item-chevron">▸</span></button>
+                                <div id="master-tab-idealni" class="master-panel" style="display:none;">
+                                    <div id="idealPartsCurrentStatus" style="margin-bottom: 12px; padding: 10px 12px; border-radius: 8px; background: rgba(0, 122, 255, 0.06); font-size: 12px; line-height: 1.5; display: none;"></div>
+
+                                    <label class="admin-label">Апартамент</label>
+                                    <select id="masterIdApt" class="admin-input" onchange="handleMasterIdAptChange()"></select>
+                                    <label class="admin-label">Идеални части (%)</label>
+                                    <input type="text" inputmode="decimal" id="masterIdVal" class="admin-input" placeholder="пр. 2.45">
+                                    
+                                    <div style="display:none;">
+                                        <select id="masterIdFrom" class="admin-input"></select>
+                                    </div>
+                                    <p style="font-size: 11px; color: #888; margin-top: 5px; margin-bottom: 12px; line-height: 1.4;">
+                                        Записването обновява <b>текущата</b> стойност на идеалните части. Тя се прилага автоматично за всички месеци за избрания апартамент.
+                                    </p>
+                                    
+                                    <button class="admin-btn primary" onclick="submitMaster('ИДЕАЛНИ_ЧАСТИ')">Запиши стойност</button>
+
+                                    <hr style="margin: 18px 0; border: none; border-top: 1px solid rgba(128,128,128,0.2);">
+
+                                    <div id="masterIdBulkSection">
+                                        <h4 style="margin: 0 0 8px 0; font-size: 14px;">🔄 Автоматично масово попълване на идеалните части</h4>
+                                        <p style="font-size: 11px; color: #888; margin-top: 0; margin-bottom: 10px; line-height: 1.4;">
+                                            Въведете идеалните части за първите N апартамента за етаж 1 (A1 до AN) и изберете бутона "Запиши стойност", след което посочете броя апартаменти на етаж и изберете бутона "Попълни автоматично", за да ги повторите автоматично до последния апартамент.
+                                        </p>
+                                        <label class="admin-label" for="masterIdPerFloor">Бр. апартаменти на етаж</label>
+                                        <input type="number" id="masterIdPerFloor" class="admin-input" placeholder="пр. 3" min="1" step="1">
+                                        <button type="button" class="admin-btn secondary" id="masterIdBulkPreviewBtn" onclick="previewBulkIdealParts()" style="margin-top: 6px;">Попълни автоматично</button>
+
+                                        <div id="masterIdBulkPreviewContainer" style="display:none; margin-top: 14px; padding: 12px; border-radius: 8px; border: 1px solid rgba(128,128,128,0.25); background: rgba(0,0,0,0.02);">
+                                            <div id="masterIdBulkSummary" style="font-size: 12px; line-height: 1.6; margin-bottom: 10px;"></div>
+                                            <div id="masterIdBulkOverwriteWarning" style="display:none; margin-bottom: 10px; padding: 8px 10px; border-radius: 6px; background: rgba(255, 152, 0, 0.14); border-left: 3px solid #f57c00; color: #e65100; font-size: 12px; line-height: 1.4;"></div>
+                                            <div id="masterIdBulkError" style="display:none; margin-bottom: 10px; padding: 8px 10px; border-radius: 6px; background: rgba(211, 47, 47, 0.12); border-left: 3px solid #d32f2f; color: #c62828; font-size: 12px; line-height: 1.4;"></div>
+                                            <div style="max-height: 220px; overflow-y: auto; border: 1px solid rgba(128,128,128,0.2); border-radius: 6px; margin-bottom: 10px; background: var(--card-bg, #fff);">
+                                                <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+                                                    <thead>
+                                                        <tr style="background: rgba(0,0,0,0.05); text-align: left; position: sticky; top: 0;">
+                                                            <th style="padding: 6px 8px;">Ап.</th>
+                                                            <th style="padding: 6px 8px;">Шаблон</th>
+                                                            <th style="padding: 6px 8px; text-align: right;">Текущо</th>
+                                                            <th style="padding: 6px 8px; text-align: right;">Ново</th>
+                                                            <th style="padding: 6px 8px;">Статус</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody id="masterIdBulkPreviewTableBody"></tbody>
+                                                </table>
+                                            </div>
+                                            <label id="masterIdBulkConfirmLabel" style="display: flex; align-items: flex-start; gap: 8px; font-size: 12px; margin-bottom: 10px; cursor: pointer;">
+                                                <input type="checkbox" id="masterIdBulkConfirmCheck" onchange="toggleBulkIdealPartsSubmitBtn()" style="margin-top: 2px;">
+                                                <span>Потвърждавам масовото попълване на идеалните части за всички апартаменти съгласно предварителния преглед.</span>
+                                            </label>
+                                            <div style="display: flex; gap: 8px;">
+                                                <button type="button" class="admin-btn primary" id="masterIdBulkSaveBtn" onclick="submitBulkIdealParts()" disabled style="flex: 1;">Потвърди и запиши масово</button>
+                                                <button type="button" class="admin-btn secondary" id="masterIdBulkCancelBtn" onclick="cancelBulkIdealPartsPreview()" style="flex: 0 0 auto; width: auto; padding: 10px 16px;">Отказ</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Уч. Асансьор -->
+                            <div class="master-acc-item">
+                                <button type="button" class="master-tab" data-master-tab="uchastie" onclick="switchMasterTab('uchastie',this)"><span>🛗 Уч. Асансьор</span><span class="master-item-chevron">▸</span></button>
+                                <div id="master-tab-uchastie" class="master-panel" style="display:none;">
+                                    <label class="admin-label">Апартамент</label>
+                                    <select id="masterUchApt" class="admin-input"></select>
+                                    <label class="admin-label">Участва (Да/Не)</label>
+                                    <select id="masterUchVal" class="admin-input">
+                                        <option value="Да">Да</option>
+                                        <option value="Не">Не</option>
+                                    </select>
+                                    <label class="admin-label">От период (MM.YYYY)</label>
+                                    <select id="masterUchFrom" class="admin-input"></select>
+                                    <button class="admin-btn primary" onclick="submitMaster('УЧАСТИЕ_АСАНСЬОР')">Запиши за напред</button>
+                                </div>
+                            </div>
+
+                            <!-- Чипове -->
+                            <div class="master-acc-item">
+                                <button type="button" class="master-tab" data-master-tab="chipove" onclick="switchMasterTab('chipove',this)"><span>🔑 Чипове</span><span class="master-item-chevron">▸</span></button>
+                                <div id="master-tab-chipove" class="master-panel" style="display:none;">
+                                    <label class="admin-label">Апартамент</label>
+                                    <select id="masterChApt" class="admin-input"></select>
+                                    <label class="admin-label">Брой чипове</label>
+                                    <input type="number" id="masterChVal" class="admin-input" placeholder="Напр. 3" min="0" step="1">
+                                    <label class="admin-label">От период (MM.YYYY)</label>
+                                    <select id="masterChFrom" class="admin-input"></select>
+                                    <button class="admin-btn primary" onclick="submitMaster('ЧИПОВЕ')">Запиши за напред</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 2. Инфо/Съобщения -->
+                    <div id="masterGroupInfo" class="master-acc-group">
+                        <button type="button" class="master-acc-group-btn" onclick="toggleMasterAccordionGroup('info', this)" aria-expanded="false">
+                            <span>📢 Инфо/Съобщения</span>
+                            <span class="master-acc-chevron">▸</span>
+                        </button>
+                        <div id="masterGroupBody_info" class="master-acc-group-body" style="display:none;">
+                            <!-- Плащ.инфо -->
+                            <div class="master-acc-item">
+                                <button type="button" class="master-tab" data-master-tab="payment" onclick="switchMasterTab('payment',this)"><span>💳 Плащ.инфо</span><span class="master-item-chevron">▸</span></button>
+                                <div id="master-tab-payment" class="master-panel" style="display:none;">
+                                    <label class="admin-label">Инструкции за плащане към ЕС</label>
+                                    <textarea id="masterPaymentText" class="admin-input" style="min-height: 120px; font-size: 14px;"
+                                        placeholder="Въведете ePay КИН, IBAN, REVTAG или друг способ за получаване на плащания към ЕС"></textarea>
+                                    <button class="admin-btn primary" style="margin-top: 15px;"
+                                        onclick="submitMaster('PAYMENT_INFO')">Запази глобалните данни</button>
+                                </div>
+                            </div>
+
+                            <!-- Инфо апарт. -->
+                            <div class="master-acc-item">
+                                <button type="button" class="master-tab" data-master-tab="info" onclick="switchMasterTab('info',this)"><span>🏠 Инфо апарт.</span><span class="master-item-chevron">▸</span></button>
+                                <div id="master-tab-info" class="master-panel" style="display:none;">
+                                    <label class="admin-label">Изберете апартамент за справка</label>
+                                    <select id="masterInfoApt" class="admin-input" onchange="loadApartmentMasterSummary()"></select>
+                                    <div id="aptMasterSummary" style="margin-top:20px; font-size: 14px; line-height: 1.8;">
+                                        <p style="color:#666; font-style:italic;">Изберете апартамент, за да видите текущите му
+                                            настройки в MASTER регистрите.</p>
+                                    </div>
+                                    <hr style="margin: 20px 0; border: none; border-top: 1px solid #eee;">
+                                    <div id="aptNoticeEditor" style="display:none;">
+                                        <label class="admin-label">📝 Лично съобщение до този апартамент</label>
+                                        <textarea id="masterAptNoticeVal" class="admin-input" style="min-height: 80px;"
+                                            placeholder="пр. Моля, свържете се с касиера за проверка на стария баланс..."></textarea>
+                                        <button class="admin-btn primary small" onclick="submitAptNotice()">Запази съобщението</button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Съобщения -->
+                            <div class="master-acc-item">
+                                <button type="button" class="master-tab" data-master-tab="notice" onclick="switchMasterTab('notice',this)"><span>📢 Съобщения</span><span class="master-item-chevron">▸</span></button>
+                                <div id="master-tab-notice" class="master-panel" style="display:none;">
+                                    <h3 class="admin-subtitle">📢 Съобщение до живущите</h3>
+                                    <p class="subtitle" style="margin-bottom: 20px; font-size: 13px;">Това съобщение ще се вижда от
+                                        всички апартаменти при влизане в платформата <strong>и ще се изпрати по имейл</strong> до всички
+                                        с регистриран имейл адрес.</p>
+
+                                    <div class="form-group">
+                                        <label class="admin-label">Текст на съобщението</label>
+                                        <textarea id="masterEntranceNotice" class="admin-input" style="min-height: 120px;"
+                                            placeholder="Пример: Общо събрание на 15.03 от 19:00ч. пред входа..."></textarea>
+                                    </div>
+
+                                    <button class="admin-btn primary" onclick="submitMasterNotice()">Запази и изпрати до всички</button>
+
+                                    <div
+                                        style="margin-top: 20px; padding: 10px; background: rgba(0,0,0,0.02); border-radius: 8px; font-size: 12px; color: #666;">
+                                        ℹ️ Можете да използвате това за важни съобщения, ремонти или обяви. За да го премахнете, просто
+                                        изтрийте текста и запазете.
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Имейл до ап. -->
+                            <div class="master-acc-item">
+                                <button type="button" class="master-tab" data-master-tab="imeil" onclick="switchMasterTab('imeil',this)"><span>✉️ Имейл до ап.</span><span class="master-item-chevron">▸</span></button>
+                                <div id="master-tab-imeil" class="master-panel" style="display:none;">
+                                    <h3 class="admin-subtitle">✉️ Индивидуален имейл до апартамент</h3>
+                                    <p class="subtitle" style="margin-bottom: 15px; font-size: 13px;">Изпратете персонализирано
+                                        съобщение по имейл до конкретен апартамент (само ако е регистриран имейл).</p>
+
+                                    <label class="admin-label">Апартамент</label>
+                                    <select id="emailAptTarget" class="admin-input"></select>
+
+                                    <label class="admin-label" style="margin-top: 12px;">Тема на имейла</label>
+                                    <input type="text" id="emailAptSubject" class="admin-input"
+                                        placeholder="пр. Важна информация за Вашия апартамент...">
+
+                                    <label class="admin-label" style="margin-top: 12px;">Текст на съобщението</label>
+                                    <textarea id="emailAptBody" class="admin-input" style="min-height: 120px;"
+                                        placeholder="Въведете текста на вашето съобщение тук..."></textarea>
+
+                                    <button class="admin-btn primary" style="margin-top: 12px;" onclick="sendAptEmail()">📤 Изпрати
+                                        имейл</button>
+
+                                    <div
+                                        style="margin-top: 15px; padding: 10px; background: rgba(0,0,0,0.02); border-radius: 8px; font-size: 12px; color: #666;">
+                                        ℹ️ Имейлът ще бъде изпратен само ако апартаментът има регистриран имейл адрес. Можете да
+                                        проверите и регистрирате имейли в секцията "✉️ Имейл на апартамент".
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Външни документи -->
+                            <div class="master-acc-item">
+                                <button type="button" class="master-tab" data-master-tab="extdocs" onclick="switchMasterTab('extdocs',this)"><span>📂 Външни документи</span><span class="master-item-chevron">▸</span></button>
+                                <div id="master-tab-extdocs" class="master-panel" style="display:none;">
+                                    <div style="padding: 12px; background: rgba(0,0,0,0.03); border-radius: 8px;">
+                                        <label class="admin-label" style="color: var(--primary);">📂 Външни документи (Линкове)</label>
+                                        <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 8px;">
+                                            Поставете линкове към Google Drive папка или друго хранилище, за да могат живущите да виждат фактурите.
+                                        </p>
+                                        <label class="admin-label" style="font-size: 12px;">Линк за "Фактури/Документи"</label>
+                                        <input type="url" id="masterLinkElectric" class="admin-input" placeholder="https://drive.google.com/...">
+                                    </div>
+                                    <button class="admin-btn primary" style="margin-top: 15px;"
+                                        onclick="submitMaster('PAYMENT_INFO')">Запази глобалните данни</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 3. Самостоятелни бутони -->
+                    <!-- Самостоятелни обекти (извън A1–AN) -->
+                    <div class="master-acc-item master-acc-standalone">
+                        <button type="button" class="master-tab master-standalone-btn" data-master-tab="extunits" onclick="switchMasterTab('extunits',this)">
+                            <span>🏪 Самостоятелни обекти (извън A1–AN)</span>
+                            <span class="master-item-chevron">▸</span>
+                        </button>
+                        <!-- BEGIN EXTERNAL UNITS UI -->
+                        <div id="master-tab-extunits" class="master-panel" style="display:none;">
+                            <div id="externalUnitsSettings" class="art51-details-container ext-units-details-container">
+                                <p class="art51-header-text" style="margin-top:0;">Регистър и конфигурация на външни самостоятелни обекти (магазини, гаражи, ателиета, офиси, кабинети) с двустепенно разпределение без промяна на формулите за апартаментите.</p>
+
+                                <div id="extUnitIdealWarning" class="ext-unit-warning-banner" style="display:none;" role="alert"></div>
+
+                                <div class="art51-card art51-form-card ext-unit-form-card">
+                                    <div class="art51-field-group">
+                                        <label for="extUnitSelect" class="admin-label">Избор на обект</label>
+                                        <div class="art51-apartment-row">
+                                            <select id="extUnitSelect" class="admin-input" onchange="extUnitSelectionChanged()">
+                                                <option value="">➕ Нов самостоятелен обект</option>
+                                            </select>
+                                            <div id="extUnitCurrentBadge" class="art51-badge"></div>
+                                        </div>
+                                    </div>
+
+                                    <div class="ext-unit-grid-2">
+                                        <div class="art51-field-group">
+                                            <label for="extUnitName" class="admin-label">Наименование на обекта</label>
+                                            <input type="text" id="extUnitName" class="admin-input" maxlength="120" placeholder="напр. Магазин 1 / Гараж №4">
+                                        </div>
+                                        <div class="art51-field-group">
+                                            <label for="extUnitAccessType" class="admin-label">Вид достъп</label>
+                                            <select id="extUnitAccessType" class="admin-input" onchange="extUnitAccessTypeChanged()">
+                                                <option value="SEPARATE_ENTRANCE">Самостоятелен вход (чл. 51, ал. 6)</option>
+                                                <option value="COMMON_ENTRANCE">Общ вход</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div class="ext-unit-grid-2">
+                                        <div class="art51-field-group">
+                                            <label for="extUnitDocPurpose" class="admin-label">Предназначение по документи</label>
+                                            <select id="extUnitDocPurpose" class="admin-input">
+                                                <option value="Магазин">Магазин</option>
+                                                <option value="Гараж">Гараж</option>
+                                                <option value="Офис">Офис</option>
+                                                <option value="Ателие">Ателие</option>
+                                                <option value="Кабинет">Кабинет</option>
+                                                <option value="Склад">Склад</option>
+                                                <option value="Друго">Друго</option>
+                                            </select>
+                                        </div>
+                                        <div class="art51-field-group">
+                                            <label for="extUnitActualUsage" class="admin-label">Фактическо използване</label>
+                                            <select id="extUnitActualUsage" class="admin-input">
+                                                <option value="Търговски обект">Търговски обект</option>
+                                                <option value="Гараж">Гараж</option>
+                                                <option value="Офис / Кабинет">Офис / Кабинет</option>
+                                                <option value="Живеене">Живеене</option>
+                                                <option value="Склад">Склад</option>
+                                                <option value="Необитаем">Необитаем</option>
+                                                <option value="Друго">Друго</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div class="art51-field-group">
+                                        <label for="extUnitArea" class="admin-label">Площ в кв.м (опционално)</label>
+                                        <input type="text" inputmode="decimal" id="extUnitArea" class="admin-input" placeholder="пр. 24.50">
+                                    </div>
+
+                                    <div class="ext-unit-grid-2">
+                                        <div class="art51-field-group">
+                                            <label for="extUnitMgmtPart" class="admin-label">Участие в разходите за Управление и поддръжка</label>
+                                            <select id="extUnitMgmtPart" class="admin-input">
+                                                <option value="true">ДА (участва в разпределението)</option>
+                                                <option value="false">НЕ (изключен от автоматично начисляване)</option>
+                                            </select>
+                                        </div>
+                                        <div class="art51-field-group">
+                                            <label for="extUnitOccupants" class="admin-label">Брой обитатели / ползватели</label>
+                                            <input type="number" id="extUnitOccupants" class="admin-input" min="0" step="1" value="1" placeholder="Мин. 1 при режим Обитатели">
+                                        </div>
+                                    </div>
+
+                                    <div id="extUnitArt51Group" class="ext-unit-grid-2" style="display:none;">
+                                        <div class="art51-field-group">
+                                            <label for="extUnitArt51Active" class="admin-label">Дейност с обществен достъп (чл. 51, ал. 5)</label>
+                                            <select id="extUnitArt51Active" class="admin-input" onchange="extUnitArt51ActiveChanged()">
+                                                <option value="false">НЕ (1x стандартен дял)</option>
+                                                <option value="true">ДА (коефициент 3–5x)</option>
+                                            </select>
+                                        </div>
+                                        <div class="art51-field-group" id="extUnitMultiplierGroup" style="display:none;">
+                                            <label for="extUnitMultiplier" class="admin-label">Коефициент по чл. 51 (3–5)</label>
+                                            <input type="number" id="extUnitMultiplier" class="admin-input" min="3" max="5" step="1" value="3" placeholder="3, 4 или 5">
+                                        </div>
+                                    </div>
+
+                                    <div class="ext-unit-grid-2">
+                                        <div class="art51-field-group">
+                                            <label for="extUnitIdealStatus" class="admin-label">Идеални части — статус</label>
+                                            <select id="extUnitIdealStatus" class="admin-input" onchange="extUnitIdealStatusChanged()">
+                                                <option value="UNESTABLISHED">Неустановени</option>
+                                                <option value="ESTABLISHED">Установени (%)</option>
+                                            </select>
+                                        </div>
+                                        <div class="art51-field-group" id="extUnitIdealPercentGroup" style="display:none;">
+                                            <label for="extUnitIdealPercent" class="admin-label">Идеални части (%)</label>
+                                            <input type="text" inputmode="decimal" id="extUnitIdealPercent" class="admin-input" placeholder="пр. 2.50">
+                                        </div>
+                                    </div>
+
+                                    <div class="ext-unit-grid-2">
+                                        <div class="art51-field-group">
+                                            <label for="extUnitRepairPart" class="admin-label">Автоматично начисляване за Фонд ремонт</label>
+                                            <select id="extUnitRepairPart" class="admin-input">
+                                                <option value="false">НЕ</option>
+                                                <option value="true">ДА (по установени ид. части)</option>
+                                            </select>
+                                        </div>
+                                        <div class="art51-field-group">
+                                            <label for="extUnitRentAmount" class="admin-label">Месечен наем по договор (EUR)</label>
+                                            <input type="text" inputmode="decimal" id="extUnitRentAmount" class="admin-input" value="0" placeholder="0.00">
+                                        </div>
+                                    </div>
+
+                                    <div class="art51-field-group">
+                                        <label for="extUnitPeriod" class="admin-label">От период (MM.YYYY)</label>
+                                        <input type="text" id="extUnitPeriod" class="admin-input" placeholder="MM.YYYY" maxlength="7">
+                                    </div>
+
+                                    <button type="button" id="extUnitSaveBtn" class="admin-btn primary art51-save-btn" onclick="saveExternalUnitSettings()">ЗАПАЗИ ОБЕКТ</button>
+                                    <p id="extUnitStatusMsg" class="art51-status-msg" role="status"></p>
+                                </div>
+
+                                <div id="extUnitsRegistryCard" class="art51-card art51-actions-card">
+                                    <h4 class="art51-actions-title">Регистър „Самостоятелни обекти“</h4>
+                                    <div class="art51-table-wrapper">
+                                        <table id="extUnitsRegistryTable" class="art51-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>ID / Наименование</th>
+                                                    <th>По док. / Факт.</th>
+                                                    <th>Достъп / Коеф.</th>
+                                                    <th>Ид. части / Обит.</th>
+                                                    <th>Участие УП / Ремонт</th>
+                                                    <th>Наем</th>
+                                                    <th>От период</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="extUnitsRegistryBody">
+                                                <tr><td colspan="7" style="text-align: center; color: #64748b; padding: 14px;">Няма регистрирани самостоятелни обекти.</td></tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+
+                                <div id="extUnitsStatementCard" class="art51-card art51-actions-card">
+                                    <div class="ext-unit-statement-header">
+                                        <h4 class="art51-actions-title" style="margin:0;">Справка по периоди: Начислено, Платено, Аванс и Салдо</h4>
+                                        <select id="extUnitStatementFilter" class="admin-input ext-unit-filter-select" onchange="renderExternalUnitsStatementView()">
+                                            <option value="ALL">Всички самостоятелни обекти</option>
                                         </select>
                                     </div>
+                                    <div class="art51-table-wrapper" style="margin-top: 10px;">
+                                        <table id="extUnitsStatementTable" class="art51-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Обект / Период</th>
+                                                    <th>РУП основа / надбавка (Нач./Плат.)</th>
+                                                    <th>Фонд ремонт (Нач./Плат.)</th>
+                                                    <th>Наем (Нач./Плат.)</th>
+                                                    <th>Общо Начислено</th>
+                                                    <th>Общо Платено</th>
+                                                    <th>Аванс</th>
+                                                    <th>Салдо (Дължимо)</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="extUnitsStatementBody">
+                                                <tr><td colspan="8" style="text-align: center; color: #64748b; padding: 14px;">Няма начисления за самостоятелни обекти.</td></tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+
+                                    <h4 class="art51-actions-title" style="margin-top: 16px;">Финансова сверка по периоди (MASTER + Външни обекти + Закръгляване)</h4>
+                                    <div class="art51-table-wrapper">
+                                        <table id="extUnitsReconciliationTable" class="art51-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Период</th>
+                                                    <th>Разход по док.</th>
+                                                    <th>База MASTER (A1–AN)</th>
+                                                    <th>База Външни (1x)</th>
+                                                    <th>Надбавка чл. 51</th>
+                                                    <th>Закръгляване (MASTER)</th>
+                                                    <th>Общо Вземания</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="extUnitsReconciliationBody">
+                                                <tr><td colspan="7" style="text-align: center; color: #64748b; padding: 12px;">Няма операции с двустепенно разпределение.</td></tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
                                 </div>
-                                <label class="admin-label">Домашни любимци</label>
-                                <input type="text" id="book-Pets" class="admin-input" placeholder="пр. куче, котка...">
+
+                                <div id="extUnitActionsCard" class="art51-card art51-actions-card">
+                                    <h4 class="art51-actions-title">Регистър на административните промени (Самостоятелни обекти)</h4>
+                                    <div class="art51-table-wrapper">
+                                        <table id="extUnitActionsTable" class="art51-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Дата и час</th>
+                                                    <th>Обект</th>
+                                                    <th>Участие УП</th>
+                                                    <th>Предишно състояние</th>
+                                                    <th>Ново състояние</th>
+                                                    <th>От период</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="extUnitActionsBody">
+                                                <tr><td colspan="6" style="text-align: center; color: #64748b; padding: 14px;">Няма записани промени.</td></tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
                             </div>
-                            <button id="book-save-btn" class="admin-btn primary" style="width:100%; margin-top:20px;"
-                                onclick="submitBookData()">Запиши Промените</button>
                         </div>
+                        <!-- END EXTERNAL UNITS UI -->
                     </div>
 
-                    <!-- Sub-Tab: Full Book View -->
-                    <div id="zub-z-fullbook" class="zues-sub-panel" style="display:none;">
-                        <div
-                            style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
-                            <h4 class="admin-subtitle" style="margin:0;">📋 Домова книга — всички апартаменти</h4>
-                            <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                                <input type="text" id="bookSearchInput" class="admin-input"
-                                    style="max-width:180px; padding:7px 12px; font-size:13px;" placeholder="🔍 Търси..."
-                                    oninput="filterBookTable()">
-                                <button class="admin-btn small"
-                                    style="background:#3b6edc; color:white; padding:7px 12px; font-size:12px; margin-top:0;"
-                                    onclick="loadFullBook()">↺ Обнови</button>
-                                <button class="admin-btn small"
-                                    style="background:#2e9e4f; color:white; padding:7px 12px; font-size:12px; margin-top:0;"
-                                    onclick="printFullBook()">🖨️ Печат</button>
-                            </div>
-                        </div>
-
-                        <div id="fullBookStatus" style="font-size:13px; color:#888; margin-bottom:8px;"></div>
-
-                        <div style="overflow-x:auto; border-radius:8px; border:1px solid #eee;">
-                            <table id="fullBookTable"
-                                style="width:100%; border-collapse:collapse; font-size:13px; min-width:700px;">
-                                <thead>
-                                    <tr style="background:#f4f5f9; text-align:left;">
-                                        <th
-                                            style="padding:10px 12px; font-weight:700; color:#444; border-bottom:2px solid #e0e4ec;">
-                                            Апт.</th>
-                                        <th
-                                            style="padding:10px 12px; font-weight:700; color:#444; border-bottom:2px solid #e0e4ec;">
-                                            Собственик/ци</th>
-                                        <th
-                                            style="padding:10px 12px; font-weight:700; color:#444; border-bottom:2px solid #e0e4ec;">
-                                            Имейл</th>
-                                        <th
-                                            style="padding:10px 12px; font-weight:700; color:#444; border-bottom:2px solid #e0e4ec;">
-                                            Обитатели</th>
-                                        <th
-                                            style="padding:10px 12px; font-weight:700; color:#444; border-bottom:2px solid #e0e4ec;">
-                                            Предназн.</th>
-                                        <th
-                                            style="padding:10px 12px; font-weight:700; color:#444; border-bottom:2px solid #e0e4ec;">
-                                            Дата вписв.</th>
-                                        <th
-                                            style="padding:10px 12px; font-weight:700; color:#444; border-bottom:2px solid #e0e4ec;">
-                                            Домашни</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="fullBookBody">
-                                    <tr>
-                                        <td colspan="7" style="padding:20px; text-align:center; color:#aaa;">Натиснете
-                                            „↺ Обнови" за зареждане</td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-
-                        <p style="font-size:11px; color:#aaa; margin-top:10px; text-align:right;">
-                            Данните отразяват текущото състояние на лист „КНИГА_ОБИТАТЕЛИ" в MASTER таблицата.
-                        </p>
-                    </div>
-
-                    <!-- Sub-Tab: Meeting -->
-                    <div id="zub-z-meeting" class="zues-sub-panel" style="display:none;">
-                        <h4 class="admin-subtitle">🤝 Общо събрание</h4>
-                        <div style="background: #fdfdfd; padding: 12px; border: 1px solid #eee; border-radius: 8px;">
-                            <label class="admin-label">Вид на решението (определя кворума)</label>
-                            <select id="meetingDecisionType" class="admin-input" onchange="calculateQuorum()" style="margin-bottom: 10px;">
-                                <option value="100">Надстрояване, пристрояване, промяна предназначението (100%)</option>
-                                <option value="75_violator">Изваждане на собственик за срок до 3 години (75% без нарушителя)</option>
-                                <option value="75">Кредити, полезни разходи, опрощаване на дългове (75%)</option>
-                                <option value="67">Учредяване на Сдружение на собствениците (67%)</option>
-                                <option value="51">Основен ремонт, обновяване, еврофондове (51%)</option>
-                                <option value="50_plus" selected>Избор на органи, разходи за управление, вътрешен ред (>50%)</option>
-                            </select>
-
-                            <label class="admin-label">Дневен ред (кратко)</label>
-                            <textarea id="meetingAgenda" class="admin-input"
-                                placeholder="1. Приемане на отчет; 2. Избор на домоуправител..."></textarea>
-
-                            <div id="quorum-box"
-                                style="margin-top:10px; padding:10px; background: #eefbff; border-radius:6px; border: 1px solid #bdeaff;">
-                                <div
-                                    style="display:flex; justify-content: space-between; font-weight: 600; font-size: 13px;">
-                                    <span>Представени ид.части:</span>
-                                    <span id="quorum-percent">0.00%</span>
-                                </div>
-                                <div id="quorum-status" style="font-size: 12px; margin: 8px 0 0; color: #666; font-weight: 500; line-height: 1.4;"></div>
-                            </div>
-
+                    <!-- ⚖ ЗУЕС Мениджър -->
+                    <div class="master-acc-item master-acc-standalone">
+                        <button type="button" class="master-tab master-standalone-btn" data-master-tab="zues" onclick="switchMasterTab('zues',this)">
+                            <span>⚖ ЗУЕС Мениджър</span>
+                            <span class="master-item-chevron">▸</span>
+                        </button>
+                        <div id="master-tab-zues" class="master-panel" style="display: none;">
                             <div
-                                style="margin-top:15px; max-height: 250px; overflow-y: auto; border: 1px solid #eee; border-radius: 6px;">
-                                <table style="width:100%; font-size: 12px; border-collapse: collapse;">
-                                    <thead style="background:#f5f5f5; position:sticky; top:0;">
-                                        <tr>
-                                            <th style="padding:6px; text-align:left;">Апт.</th>
-                                            <th style="padding:6px; text-align:center;">Присъства</th>
-                                            <th style="padding:6px; text-align:right;">Ид.ч. %</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="meeting-attendance-list">
-                                        <!-- Попълва се динамично -->
-                                    </tbody>
-                                </table>
+                                style="display:flex;gap:6px;flex-wrap:wrap;margin:0 0 15px; border-bottom: 1px solid #eee; padding-bottom: 10px;">
+                                <button class="admin-btn secondary small" style="padding: 6px 10px; font-size: 11px;"
+                                    onclick="switchZuesSubTab('z-book')">📖 Книга на ЕС</button>
+                                <button class="admin-btn secondary small" style="padding: 6px 10px; font-size: 11px;"
+                                    onclick="switchZuesSubTab('z-fullbook')">📋 Цяла книга</button>
+                                <button class="admin-btn secondary small" style="padding: 6px 10px; font-size: 11px;"
+                                    onclick="switchZuesSubTab('z-meeting')">🤝 Общо събрание</button>
+                                <button class="admin-btn secondary small" style="padding: 6px 10px; font-size: 11px;"
+                                    onclick="switchZuesSubTab('z-docs')">📄 Декларации</button>
                             </div>
 
-                            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-top:15px;">
-                                <button class="admin-btn secondary" onclick="printAttendanceList()"
-                                    style="font-size: 11px;">🖨️ Списък за подписи</button>
-                                <button class="admin-btn primary" onclick="generateMeetingMinutes()"
-                                    style="font-size: 11px;">📋 Чернова на Протокол</button>
+                            <!-- Sub-Tab: Book -->
+                            <div id="zub-z-book" class="zues-sub-panel">
+                                <h4 class="admin-subtitle">Книга на етажната собственост (Чл. 7)</h4>
+                                <div
+                                    style="background: rgba(0,0,0,0.02); padding: 15px; border-radius: 12px; border: 1px solid rgba(0,0,0,0.05);">
+                                    <label class="admin-label">Изберете Апартамент</label>
+                                    <select id="masterBookApt" class="admin-input" onchange="loadBookData()"></select>
+
+                                    <div id="book-fields-container" style="margin-top: 15px;">
+                                        <label class="admin-label">Собственик / Собственици</label>
+                                        <textarea id="book-Owner" class="admin-input" style="min-height:60px;"
+                                            placeholder="Един: Иван Иванов Иванов&#10;Няколко: Иван Иванов, Мария Иванова"></textarea>
+                                        <p style="font-size:11px; color:#888; margin:-6px 0 10px; padding-left:2px;">ℹ️ При
+                                            няколко собственици — въведете имената разделени с запетая.</p>
+                                        <label class="admin-label">Имейл</label>
+                                        <input type="email" id="book-Email" class="admin-input">
+                                        <label class="admin-label">Обитатели</label>
+                                        <textarea id="book-Occupants" class="admin-input"
+                                            placeholder="Имена на всички обитатели, разделени с запетая"></textarea>
+                                        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+                                            <div>
+                                                <label class="admin-label">Дата вписване</label>
+                                                <input type="date" id="book-EntryDate" class="admin-input">
+                                            </div>
+                                            <div>
+                                                <label class="admin-label">Предназначение</label>
+                                                <select id="book-Purpose" class="admin-input">
+                                                    <option value="Жилищно">Жилищно</option>
+                                                    <option value="Офис">Офис</option>
+                                                    <option value="Търговско">Търговско</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <label class="admin-label">Домашни любимци</label>
+                                        <input type="text" id="book-Pets" class="admin-input" placeholder="пр. куче, котка...">
+                                    </div>
+                                    <button id="book-save-btn" class="admin-btn primary" style="width:100%; margin-top:20px;"
+                                        onclick="submitBookData()">Запиши Промените</button>
+                                </div>
+                            </div>
+
+                            <!-- Sub-Tab: Full Book View -->
+                            <div id="zub-z-fullbook" class="zues-sub-panel" style="display:none;">
+                                <div
+                                    style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
+                                    <h4 class="admin-subtitle" style="margin:0;">📋 Домова книга — всички апартаменти</h4>
+                                    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                                        <input type="text" id="bookSearchInput" class="admin-input"
+                                            style="max-width:180px; padding:7px 12px; font-size:13px;" placeholder="🔍 Търси..."
+                                            oninput="filterBookTable()">
+                                        <button class="admin-btn small"
+                                            style="background:#3b6edc; color:white; padding:7px 12px; font-size:12px; margin-top:0;"
+                                            onclick="loadFullBook()">↺ Обнови</button>
+                                        <button class="admin-btn small"
+                                            style="background:#2e9e4f; color:white; padding:7px 12px; font-size:12px; margin-top:0;"
+                                            onclick="printFullBook()">🖨️ Печат</button>
+                                    </div>
+                                </div>
+
+                                <div id="fullBookStatus" style="font-size:13px; color:#888; margin-bottom:8px;"></div>
+
+                                <div style="overflow-x:auto; border-radius:8px; border:1px solid #eee;">
+                                    <table id="fullBookTable"
+                                        style="width:100%; border-collapse:collapse; font-size:13px; min-width:700px;">
+                                        <thead>
+                                            <tr style="background:#f4f5f9; text-align:left;">
+                                                <th style="padding:10px 12px; font-weight:700; color:#444; border-bottom:2px solid #e0e4ec;">Апт.</th>
+                                                <th style="padding:10px 12px; font-weight:700; color:#444; border-bottom:2px solid #e0e4ec;">Собственик/ци</th>
+                                                <th style="padding:10px 12px; font-weight:700; color:#444; border-bottom:2px solid #e0e4ec;">Имейл</th>
+                                                <th style="padding:10px 12px; font-weight:700; color:#444; border-bottom:2px solid #e0e4ec;">Обитатели</th>
+                                                <th style="padding:10px 12px; font-weight:700; color:#444; border-bottom:2px solid #e0e4ec;">Предназн.</th>
+                                                <th style="padding:10px 12px; font-weight:700; color:#444; border-bottom:2px solid #e0e4ec;">Дата вписв.</th>
+                                                <th style="padding:10px 12px; font-weight:700; color:#444; border-bottom:2px solid #e0e4ec;">Домашни</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="fullBookBody">
+                                            <tr>
+                                                <td colspan="7" style="padding:20px; text-align:center; color:#aaa;">Натиснете „↺ Обнови" за зареждане</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                <p style="font-size:11px; color:#aaa; margin-top:10px; text-align:right;">
+                                    Данните отразяват текущото състояние на лист „КНИГА_ОБИТАТЕЛИ" в MASTER таблицата.
+                                </p>
+                            </div>
+
+                            <!-- Sub-Tab: Meeting -->
+                            <div id="zub-z-meeting" class="zues-sub-panel" style="display:none;">
+                                <h4 class="admin-subtitle">🤝 Общо събрание</h4>
+                                <div style="background: #fdfdfd; padding: 12px; border: 1px solid #eee; border-radius: 8px;">
+                                    <label class="admin-label">Вид на решението (определя кворума)</label>
+                                    <select id="meetingDecisionType" class="admin-input" onchange="calculateQuorum()" style="margin-bottom: 10px;">
+                                        <option value="100">Надстрояване, пристрояване, промяна предназначението (100%)</option>
+                                        <option value="75_violator">Изваждане на собственик за срок до 3 години (75% без нарушителя)</option>
+                                        <option value="75">Кредити, полезни разходи, опрощаване на дългове (75%)</option>
+                                        <option value="67">Учредяване на Сдружение на собствениците (67%)</option>
+                                        <option value="51">Основен ремонт, обновяване, еврофондове (51%)</option>
+                                        <option value="50_plus" selected>Избор на органи, разходи за управление, вътрешен ред (>50%)</option>
+                                    </select>
+
+                                    <label class="admin-label">Дневен ред (кратко)</label>
+                                    <textarea id="meetingAgenda" class="admin-input"
+                                        placeholder="1. Приемане на отчет; 2. Избор на домоуправител..."></textarea>
+
+                                    <div id="quorum-box"
+                                        style="margin-top:10px; padding:10px; background: #eefbff; border-radius:6px; border: 1px solid #bdeaff;">
+                                        <div style="display:flex; justify-content: space-between; font-weight: 600; font-size: 13px;">
+                                            <span>Представени ид.части:</span>
+                                            <span id="quorum-percent">0.00%</span>
+                                        </div>
+                                        <div id="quorum-status" style="font-size: 12px; margin: 8px 0 0; color: #666; font-weight: 500; line-height: 1.4;"></div>
+                                    </div>
+
+                                    <div style="margin-top:15px; max-height: 250px; overflow-y: auto; border: 1px solid #eee; border-radius: 6px;">
+                                        <table style="width:100%; font-size: 12px; border-collapse: collapse;">
+                                            <thead style="background:#f5f5f5; position:sticky; top:0;">
+                                                <tr>
+                                                    <th style="padding:6px; text-align:left;">Апт.</th>
+                                                    <th style="padding:6px; text-align:center;">Присъства</th>
+                                                    <th style="padding:6px; text-align:right;">Ид.ч. %</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="meeting-attendance-list"></tbody>
+                                        </table>
+                                    </div>
+
+                                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-top:15px;">
+                                        <button class="admin-btn secondary" onclick="printAttendanceList()" style="font-size: 11px;">🖨️ Списък за подписи</button>
+                                        <button class="admin-btn primary" onclick="generateMeetingMinutes()" style="font-size: 11px;">📋 Чернова на Протокол</button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Sub-Tab: Declarations -->
+                            <div id="zub-z-docs" class="zues-sub-panel" style="display:none;">
+                                <h4 class="admin-subtitle">📄 Генериране на документи</h4>
+                                <div style="padding:10px; background: rgba(0,0,0,0.02); border-radius:8px;">
+                                    <p style="font-size: 12px; color: #666; margin-bottom: 10px;">Изберете апартамент за декларация за вписване (Чл. 7, ал. 3).</p>
+                                    <select id="docAptSelect" class="admin-input"></select>
+                                    <button class="admin-btn blue" style="width:100%; margin-top:10px;" onclick="printOwnerDeclaration()">🖨️ Генерирай Декларация</button>
+                                </div>
                             </div>
                         </div>
                     </div>
-
-                    <!-- Sub-Tab: Declarations -->
-                    <div id="zub-z-docs" class="zues-sub-panel" style="display:none;">
-                        <h4 class="admin-subtitle">📄 Генериране на документи</h4>
-                        <div style="padding:10px; background: rgba(0,0,0,0.02); border-radius:8px;">
-                            <p style="font-size: 12px; color: #666; margin-bottom: 10px;">Изберете апартамент за
-                                декларация за вписване (Чл. 7, ал. 3).</p>
-                            <select id="docAptSelect" class="admin-input"></select>
-                            <button class="admin-btn blue" style="width:100%; margin-top:10px;"
-                                onclick="printOwnerDeclaration()">🖨️ Генерирай Декларация</button>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Payment Info Tab Content -->
-                <div id="master-tab-payment" class="master-panel" style="display:none;">
-                    <label class="admin-label">Инструкции за плащане към ЕС</label>
-                    <textarea id="masterPaymentText" class="admin-input" style="min-height: 120px; font-size: 14px;"
-                        placeholder="Въведете ePay КИН, IBAN, REVTAG или друг способ за получаване на плащания към ЕС"></textarea>
-
-
-
-                    <div style="margin-top: 15px; padding: 12px; background: rgba(0,0,0,0.03); border-radius: 8px;">
-                        <label class="admin-label" style="color: var(--primary);">📂 Външни документи
-                            (Линкове)</label>
-                        <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 8px;">
-                            Поставете линкове към Google Drive папка или друго хранилище, за да могат живущите да
-                            виждат
-                            фактурите.
-                        </p>
-
-                        <label class="admin-label" style="font-size: 12px;">Линк за "Фактури/Документи"</label>
-                        <input type="url" id="masterLinkElectric" class="admin-input"
-                            placeholder="https://drive.google.com/...">
-                    </div>
-
-                    <button class="admin-btn primary" style="margin-top: 15px;"
-                        onclick="submitMaster('PAYMENT_INFO')">Запази глобалните данни</button>
                 </div>
 
                 <div class="admin-divider" style="margin-top: 20px;"></div>
@@ -1904,7 +2011,7 @@
                         <p>Платформата съдържа отделни модули за всяка част от управлението на входа:</p>
                         <ul>
                             <li><strong>Начисления и разходи</strong> — асансьор (ток и абонамент), осветление, охрана, почистване, поддръжка, фонд „Ремонт“.</li>
-                            <li><strong>Плащания</strong> — регистриране на вноски от апартаменти, външни платци и приходи от други източници като наем на общи части, дарения или кредити.</li>
+                            <li><strong>Плащания</strong> — регистриране на вноски от апартаменти, външни платци и приходи от други източници като наем, дарения или кредити.</li>
                             <li><strong>Разпределяне на приходи</strong> — по идеални части, на каса или на салдо, според вида приход.</li>
                             <li><strong>ЗУЕС Мениджър</strong> — електронна книга на етажната собственост с данни за обитатели, идеални части, чипове и участие в разходите за асансьор.</li>
                             <li><strong>Общо събрание</strong> — калкулатор за необходимия кворум според вида решение, генериране на присъствен списък и чернова на протокол.</li>
