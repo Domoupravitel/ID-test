@@ -1254,9 +1254,10 @@ window.enterEntrance = async function () {
             sessionStorage.setItem("currency_" + currentRouteKey, info.currency);
         }
 
-        // Запазваме статуса на абонамента за проверка при зареждане на апартамент
+        // Запазваме статуса на абонамента за проверка при зареждане на апартамент и табло
         sessionStorage.setItem("isSoftBlocked_" + currentRouteKey, info.isSoftBlocked ? "true" : "false");
         sessionStorage.setItem("isHardBlocked_" + currentRouteKey, info.isHardBlocked ? "true" : "false");
+        sessionStorage.setItem("subscriptionStatus_" + currentRouteKey, info.subscriptionStatus || "");
 
         if (info.paymentInfo) {
             document.getElementById('payment-instructions').innerHTML = linkifyText(info.paymentInfo);
@@ -1519,16 +1520,20 @@ async function loadDashboardData() {
     if(typeof maintenanceRefreshSummary_==='function')maintenanceRefreshSummary_(); // MAINTENANCE_HOME
     const requestContext = captureRouteRequestContext();
     try {
-        // Hard block — не зареждаме Firebase данни
-        if (sessionStorage.getItem("isHardBlocked_" + currentRouteKey) === "true") {
+        // Hard block или Soft block (за неавтентикирани живущи) — не зареждаме финансови данни от Firebase
+        const isHardBlockedDash = sessionStorage.getItem("isHardBlocked_" + currentRouteKey) === "true";
+        const isSoftBlockedDash = sessionStorage.getItem("isSoftBlocked_" + currentRouteKey) === "true";
+        const isAdminLoggedDash = Boolean(sessionStorage.getItem("adminPin_" + currentRouteKey));
+        if (isHardBlockedDash || (isSoftBlockedDash && !isAdminLoggedDash)) {
+            const label = isHardBlockedDash ? "Достъпът е спрян" : "Скрит (неплатен абонамент)";
             document.getElementById('dash-debts').textContent = "—";
             document.getElementById('dash-balance').textContent = "—";
             if (document.getElementById('dash-maintenance-balance')) document.getElementById('dash-maintenance-balance').textContent = "—";
             if (document.getElementById('dash-credit-balance')) document.getElementById('dash-credit-balance').textContent = "—";
-            if (document.getElementById('dash-debts-trend')) document.getElementById('dash-debts-trend').textContent = "Достъпът е спрян";
-            if (document.getElementById('dash-balance-trend')) document.getElementById('dash-balance-trend').textContent = "Достъпът е спрян";
-            if (document.getElementById('maintenanceSourceSummary')) document.getElementById('maintenanceSourceSummary').textContent = "Достъпът е спрян";
-            if (document.getElementById('dash-credit-trend')) document.getElementById('dash-credit-trend').textContent = "Достъпът е спрян";
+            if (document.getElementById('dash-debts-trend')) document.getElementById('dash-debts-trend').textContent = label;
+            if (document.getElementById('dash-balance-trend')) document.getElementById('dash-balance-trend').textContent = label;
+            if (document.getElementById('maintenanceSourceSummary')) document.getElementById('maintenanceSourceSummary').textContent = label;
+            if (document.getElementById('dash-credit-trend')) document.getElementById('dash-credit-trend').textContent = label;
             return;
         }
         const result = await loadDashboardFromFirebase(currentRouteKey);
@@ -3788,16 +3793,27 @@ async function loadSuperAdminEntrances() {
 
         result.registry.forEach(ent => {
             if (select) select.appendChild(new Option(ent.name + " (" + ent.id + ")", ent.id));
+            const st = ent.subscriptionStatus || (ent.validUntil === '2000-01-01' ? 'HARD_BLOCKED' : 'PAID_ACTIVE');
+            const stColor = st === 'HARD_BLOCKED' ? '#fa5252' : (st === 'TRIAL_ADMIN_GRACE' || st === 'PAID_GRACE_7D' ? '#f59e0b' : '#4ade80');
+            const stLabelMap = {
+                TRIAL_FULL: 'Пробен (1–30)',
+                TRIAL_ADMIN_GRACE: 'Гратис (31–90)',
+                PAID_ACTIVE: 'Активен',
+                PAID_GRACE_7D: 'Гратис (7 дн.)',
+                HARD_BLOCKED: 'Спрян',
+                LIFETIME: 'Безсрочен'
+            };
+            const stLabel = stLabelMap[st] || st;
             const tr = document.createElement("tr");
             tr.innerHTML = `
                 <td style="padding: 8px;"><b>${ent.name}</b></td>
                 <td style="padding: 8px; font-family: monospace;">${ent.id}</td>
-                <td style="padding: 8px; color: ${ent.validUntil === '2000-01-01' ? 'red' : 'inherit'};">
+                <td style="padding: 8px; color: ${st === 'HARD_BLOCKED' ? 'red' : 'inherit'};">
                     ${ent.validUntil === '2000-01-01' ? 'Блокиран' : (ent.validUntil || '---')}
                 </td>
                 <td style="padding: 8px;">
-                    <span class="status-badge" style="background:${ent.validUntil === '2000-01-01' ? '#fa5252' : '#4ade80'}; color:white; padding: 2px 6px; border-radius: 4px; font-size: 11px;">
-                        ${ent.validUntil === '2000-01-01' ? 'Спрян' : 'Активен'}
+                    <span class="status-badge" style="background:${stColor}; color:white; padding: 2px 6px; border-radius: 4px; font-size: 11px;">
+                        ${stLabel}
                     </span>
                 </td>
                 <td style="padding: 8px;">
