@@ -972,6 +972,7 @@ async function apiCall(action, params = {}, operationContext) {
         const response = (action === 'distributeMaintenanceV1' || action === 'fin01Preview' || action === 'fin01Settle' || action === 'addChargesV2' || action === 'saveRecurringExpenseV1' || action === 'previewExternalUnitPaymentV1' || action === 'recordExternalUnitPaymentV1' || action === 'reverseExternalUnitPaymentV1' || action === 'distributeIncomeV2') ? // SLICE5_RECURRING_UI // FIN01_POST // MAINTENANCE_POST
             await fetch(SCRIPT_URL, {method: 'POST', body: new URLSearchParams(params)}) :
             await fetch(`${SCRIPT_URL}?${queryParams}`);
+        if (!response.ok) throw new Error('HTTP_' + response.status);
         const result = await response.json();
         throwIfStaleRouteRequestContext(owner);
         if (operationContext) assertFinancialOperationContextCurrent(operationContext);
@@ -2470,11 +2471,44 @@ window.loadCurrentCharges = async function () {
 // BEGIN SLICE4 MANUAL EXPENSE UX
 // Presentation mapping only: keys/order mirror EXPENSE_SCHEMA; no allocation rules here.
 const manualExpenseStates_ = new Map();
+function manualExpensePendingKey_(route) { return 'manualExpensePendingV2_' + route; }
+function manualExpensePersistPending_(route, pending) {
+    try {
+        if (!route) return;
+        if (pending && pending.request && pending.raw) {
+            sessionStorage.setItem(manualExpensePendingKey_(route), JSON.stringify({
+                request: pending.request, raw: pending.raw, draft: pending.draft,
+                confirmedCategories: pending.confirmedCategories || [], uncertainHistory: !!pending.uncertainHistory
+            }));
+        } else {
+            sessionStorage.removeItem(manualExpensePendingKey_(route));
+        }
+    } catch (e) {}
+}
 function manualExpenseState_() {
     if (!manualExpenseStates_.has(currentRouteKey)) {
         const draft = Object.create(null);
         chargeLabelsMap.forEach(c => { draft[c.key] = {amount: '', note: ''}; });
-        manualExpenseStates_.set(currentRouteKey, {draft, pending: null, inFlight: false, message: ''});
+        let restored = null;
+        try {
+            const saved = sessionStorage.getItem(manualExpensePendingKey_(currentRouteKey));
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                if (parsed && parsed.request && typeof parsed.request.requestId === 'string' && Array.isArray(parsed.request.operations) && parsed.request.operations.length) {
+                    if (parsed.draft) chargeLabelsMap.forEach(c => { if (parsed.draft[c.key]) draft[c.key] = {...parsed.draft[c.key]}; });
+                    restored = Object.freeze({
+                        request: Object.freeze(parsed.request), raw: parsed.raw,
+                        context: {routeKey: currentRouteKey}, draft: parsed.draft || draft,
+                        confirmedCategories: Object.freeze(parsed.confirmedCategories || []),
+                        uncertainHistory: !!parsed.uncertainHistory
+                    });
+                }
+            }
+        } catch (e) {}
+        manualExpenseStates_.set(currentRouteKey, {
+            draft, pending: restored, inFlight: false,
+            message: restored ? 'Възстановена е непотвърдена заявка за разходи. Използвайте „Повтори същия запис“.' : ''
+        });
     }
     return manualExpenseStates_.get(currentRouteKey);
 }
@@ -2617,6 +2651,7 @@ window.submitCharges = async function () {
             const draft = Object.freeze(Object.fromEntries(chargeLabelsMap.map(c => [c.key, Object.freeze({...state.draft[c.key]})])));
             state.pending = Object.freeze({request, raw: JSON.stringify(request), context, draft,
                 confirmedCategories: Object.freeze([]), uncertainHistory: false});
+            manualExpensePersistPending_(context.routeKey, state.pending);
         } catch (error) {
             // Only our bounded validation messages enter the ordinary UI.
             state.message = error instanceof Error && /^(Изберете|Проверете|Въведете|Добавете|Използвайте)/.test(error.message) ?
@@ -2645,12 +2680,15 @@ window.submitCharges = async function () {
             if (draft.amount === original.amount && draft.note === original.note) state.draft[item.category] = {amount: '', note: ''};
         });
         state.pending = null;
+        manualExpensePersistPending_(snapshot.context.routeKey, null);
         state.message = 'Всички въведени начисления са записани успешно.';
     } else if (classification === 'NOT_ADMITTED' && !history.uncertainHistory && !history.confirmedCategories.length) {
         state.pending = null;
+        manualExpensePersistPending_(snapshot.context.routeKey, null);
         state.message = 'Заявката не е допусната за обработка. Проверете данните и достъпа; след корекция изпратете нов запис.';
     } else {
         state.pending = history;
+        manualExpensePersistPending_(snapshot.context.routeKey, history);
         state.message = manualExpenseFailureMessage_(response, history, classification);
     }
     if (!isFinancialOperationContextCurrent(attemptContext)) return;

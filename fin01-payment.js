@@ -1,8 +1,29 @@
 // Pending payment identity is retained per entrance until confirmed or rejected before commit.
 const fin01PaymentViews_ = new Map();
 const fin01PaymentLabels_ = Object.freeze({management:'Управление и поддръжка',repairFund:'Фонд ремонт',loan:'Кредит'});
+function fin01PendingKey_(route) { return 'fin01PendingV1_' + route; }
+function fin01PersistPending_(route, pending) {
+    try {
+        if (!route) return;
+        if (pending && (pending.phase === 'commit' || pending.committed)) {
+            sessionStorage.setItem(fin01PendingKey_(route), JSON.stringify({request: pending.request, raw: pending.raw, phase: pending.phase, committed: !!pending.committed}));
+        } else {
+            sessionStorage.removeItem(fin01PendingKey_(route));
+        }
+    } catch (e) {}
+}
 function fin01PaymentView_() {
-    if(!fin01PaymentViews_.has(currentRouteKey))fin01PaymentViews_.set(currentRouteKey,{pending:null,inFlight:false,rejected:false,message:''});
+    if(!fin01PaymentViews_.has(currentRouteKey)){
+        let restored = null;
+        try {
+            const saved = sessionStorage.getItem(fin01PendingKey_(currentRouteKey));
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                if (parsed && parsed.request && typeof parsed.request.paymentId === 'string') restored = parsed;
+            }
+        } catch (e) {}
+        fin01PaymentViews_.set(currentRouteKey,{pending:restored,inFlight:false,rejected:false,message:restored?'Възстановена е непотвърдена заявка за плащане. Използвайте „Повтори същото плащане“.':''});
+    }
     return fin01PaymentViews_.get(currentRouteKey);
 }
 function fin01PaymentFields_() { return ['v2IncomeApt','v2IncomeCategory','v2IncomeAmount','v2IncomeDoc','v2IncomeNote','fin01Basis','fin01Management','fin01RepairFund','fin01Loan']; }
@@ -30,7 +51,7 @@ function fin01UiAmount_(text) {
 }
 function cancelRejectedFin01Payment() {
     const state=fin01PaymentView_();if(!state.rejected||state.inFlight)return;
-    state.pending=null;state.rejected=false;state.message='Записът е отменен преди финансово изпълнение.';
+    state.pending=null;fin01PersistPending_(currentRouteKey,null);state.rejected=false;state.message='Записът е отменен преди финансово изпълнение.';
     const dialog=document.getElementById('fin01PaymentDialog');if(dialog.open)dialog.close();fin01RenderPayment_();
 }
 function fin01ShowRejected_(state,error,unallocatedCents) {
@@ -82,21 +103,23 @@ async function submitApartmentFin01IfActive_() {
             }
             if(preview.paymentId!==pending.request.paymentId||typeof preview.expectedDebtFingerprint!=='string'||!/^[0-9a-f]{64}$/.test(preview.expectedDebtFingerprint))throw Error('unconfirmed');
             pending.request=Object.freeze({...pending.request,expectedDebtFingerprint:preview.expectedDebtFingerprint});pending.raw=JSON.stringify(pending.request);pending.phase='commit';
+            fin01PersistPending_(context.routeKey,pending);
         }
         const result=await apiCall('fin01Settle',{routeKey:context.routeKey,pin:getStoredPin(),request:pending.raw},context);
         if(!isFinancialOperationContextCurrent(context))return true;
-        if(result&&result.error==='FIN01_STALE_PREVIEW'&&result.rejectedBeforeCommit===true){fin01ShowRejected_(state,result.error);return true;}
+        if(result&&result.error==='FIN01_STALE_PREVIEW'&&result.rejectedBeforeCommit===true){fin01PersistPending_(context.routeKey,null);fin01ShowRejected_(state,result.error);return true;}
         if(!fin01UiSuccess_(result,pending.request))throw Error('unconfirmed');
         if(result.projectionStatus!=='COMPLETE'){
-            pending.committed=true;
+            pending.committed=true;fin01PersistPending_(context.routeKey,pending);
             state.message='Плащането е потвърдено. Обновяването на отчета не е завършило. Използвайте „Обнови отчета“ за същия запис.';
             return true;
         }
-        state.pending=null;state.message='Плащането е потвърдено. '+result.allocations.map(l=>fin01PaymentLabels_[l.bucket]+': '+(l.amountCents/100).toFixed(2)+' EUR').join('; ');
+        state.pending=null;fin01PersistPending_(context.routeKey,null);state.message='Плащането е потвърдено. '+result.allocations.map(l=>fin01PaymentLabels_[l.bucket]+': '+(l.amountCents/100).toFixed(2)+' EUR').join('; ');
         for(const id of ['v2IncomeAmount','v2IncomeDoc','v2IncomeNote','fin01Basis','fin01Management','fin01RepairFund','fin01Loan'])document.getElementById(id).value='';
     }catch(error){
         if(isFinancialOperationContextCurrent(context))state.message=state.pending?.committed?
-            'Плащането е потвърдено. Обновяването на отчета не е потвърдено. Използвайте „Обнови отчета“ за същия запис.':state.pending?
+            'Плащането е потвърдено. Обновяването на отчета не е потвърдено. Използвайте „Обнови отчета“ за същия запис.':state.pending?.phase==='preview'?
+            'Връзката прекъсна при проверка преди запис. Не е извършено плащане. Натиснете „Повтори същото плащане“.':state.pending?
             'Резултатът не е потвърден. Възможно е част от плащането да е записана. Повторете само същата заявка; не презареждайте страницата.':
             'Плащането не може да бъде проверено. Проверете сумата и опитайте отново.';
     }finally{state.inFlight=false;if(isFinancialOperationContextCurrent(context))fin01RenderPayment_();}
