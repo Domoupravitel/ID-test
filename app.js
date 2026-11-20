@@ -2443,24 +2443,54 @@ window.loadCurrentCharges = async function () {
     setChargeLabelsLoading();
 
     try {
-        // Четем директно от Firebase колекция buildingCharges — мигновено
-        const { routeDoc, getDoc } = window.fb;
+        // Четем buildingCharges (MASTER) и chargesV2 (брутни начислени суми) паралелно от Firebase.
+        // При наличие на външни самостоятелни обекти (EXT_k), MASTER пази само апартаментния дял,
+        // докато „Текущо“ трябва да показва общия действително въведен разход за категорията и периода.
+        const { routeDoc, getDoc, collection, getDocs, query, where } = window.fb;
         const db = window.db;
 
-        // Опитваме да вземем конкретния документ по ID
         const docId = currentRouteKey + "_" + period;
         const docRef = routeDoc(db, "buildingCharges", docId, currentRouteKey);
-        const snap = await getDoc(docRef);
+        const chargesQuery = query(collection(db, "chargesV2"), where("routeKey", "==", currentRouteKey));
+
+        const [snap, chargesSnap] = await Promise.all([
+            getDoc(docRef),
+            getDocs(chargesQuery).catch(() => null)
+        ]);
         throwIfStaleRouteRequestContext(requestContext);
 
-        if (snap.exists()) {
-            const data = snap.data();
-            chargeLabelsMap.forEach(c => updateChargeLabel(c.labelId, c.name,
-                Object.prototype.hasOwnProperty.call(data, c.key) ? data[c.key] : data[c.legacyKey]));
-        } else {
-            // Няма записани глобални начисления за този период
-            chargeLabelsMap.forEach(c => updateChargeLabel(c.labelId, c.name, null));
+        // Изчисляваме точните брутни сборове в центове по категория за избрания период от chargesV2
+        const grossCentsByCategory = Object.create(null);
+        const hasGrossByCategory = Object.create(null);
+        if (chargesSnap && typeof chargesSnap.forEach === 'function') {
+            const rawDocs = [];
+            chargesSnap.forEach(d => rawDocs.push({ id: d.id, ...d.data() }));
+            let validRows = [];
+            try {
+                validRows = typeof reportChargeRows_ === 'function' ? reportChargeRows_(rawDocs) : rawDocs;
+            } catch (valErr) {
+                validRows = [];
+            }
+            validRows.forEach(r => {
+                if (r.period !== period || !r.category) return;
+                const cents = Math.round(Number(r.amount) * 100);
+                if (!Number.isSafeInteger(cents)) return;
+                grossCentsByCategory[r.category] = (grossCentsByCategory[r.category] || 0) + cents;
+                hasGrossByCategory[r.category] = true;
+            });
         }
+
+        const data = snap.exists() ? snap.data() : null;
+        chargeLabelsMap.forEach(c => {
+            if (hasGrossByCategory[c.key]) {
+                updateChargeLabel(c.labelId, c.name, grossCentsByCategory[c.key] / 100);
+            } else if (data) {
+                updateChargeLabel(c.labelId, c.name,
+                    Object.prototype.hasOwnProperty.call(data, c.key) ? data[c.key] : data[c.legacyKey]);
+            } else {
+                updateChargeLabel(c.labelId, c.name, null);
+            }
+        });
     } catch (e) {
         if (isStaleRouteRequestError(e)) return;
         console.error('loadCurrentCharges error:', e);
@@ -5996,8 +6026,17 @@ function reportValidateCharge_(r) {
        typeof o.note!=='string' || typeof o.createdAt!=='string' || !Number.isFinite(Date.parse(o.createdAt)) || new Date(o.createdAt).toISOString()!==o.createdAt ||
        typeof o.period!=='string' || !/^(0[1-9]|1[0-2])\.\d{4}$/.test(o.period) ||
        !(data.beforeValue===null ? data.contractVersion===3 : typeof data.beforeValue==='number' && Number.isFinite(data.beforeValue) && !Object.is(data.beforeValue,-0)) ||
-       typeof data.afterValue!=='number' || !Number.isFinite(data.afterValue) || Object.is(data.afterValue,-0) ||
-       data.afterValue!==(data.beforeValue===null ? 0 : data.beforeValue)+o.signedAmount) fail();
+       typeof data.afterValue!=='number' || !Number.isFinite(data.afterValue) || Object.is(data.afterValue,-0)) fail();
+    const beforeNum = data.beforeValue === null ? 0 : data.beforeValue;
+    const masterDeltaCents = Math.round((data.afterValue - beforeNum) * 100);
+    const signedCents = Math.round(o.signedAmount * 100);
+    const exactFullMatch = Math.abs((beforeNum + o.signedAmount) - data.afterValue) < 1e-6;
+    const validExternalSplit = o.source === 'manual' && (
+        (signedCents === 0 && masterDeltaCents === 0) ||
+        (signedCents > 0 && masterDeltaCents >= 0 && masterDeltaCents <= signedCents) ||
+        (signedCents < 0 && masterDeltaCents <= 0 && masterDeltaCents >= signedCents)
+    );
+    if (!exactFullMatch && !validExternalSplit) fail();
     const hash=reportChargeHash_, route=data.routeKey;
     if(o.source==='manual') {
         if(!['elevator','subscription','light','security','cleaning','maintenance','repairFund','water','platformSubscription'].includes(o.category) ||
