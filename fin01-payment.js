@@ -116,6 +116,8 @@ async function submitApartmentFin01IfActive_() {
         }
         state.pending=null;fin01PersistPending_(context.routeKey,null);state.message='Плащането е потвърдено. '+result.allocations.map(l=>fin01PaymentLabels_[l.bucket]+': '+(l.amountCents/100).toFixed(2)+' EUR').join('; ');
         for(const id of ['v2IncomeAmount','v2IncomeDoc','v2IncomeNote','fin01Basis','fin01Management','fin01RepairFund','fin01Loan'])document.getElementById(id).value='';
+        if(typeof loadIncomesV2==='function')Promise.resolve(loadIncomesV2(context)).catch(()=>{});
+        if(typeof loadDashboardData==='function')Promise.resolve(loadDashboardData()).catch(()=>{});
     }catch(error){
         if(isFinancialOperationContextCurrent(context))state.message=state.pending?.committed?
             'Плащането е потвърдено. Обновяването на отчета не е потвърдено. Използвайте „Обнови отчета“ за същия запис.':state.pending?.phase==='preview'?

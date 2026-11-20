@@ -2696,6 +2696,7 @@ window.submitCharges = async function () {
     if (classification === 'APPLIED') {
         // The V2 reconciler has already published the aggregate; refresh by reading only.
         Promise.resolve(loadCurrentCharges()).catch(() => {});
+        if (typeof loadChargesV2Register === 'function') Promise.resolve(loadChargesV2Register()).catch(() => {});
     }
 };
 // END SLICE4 MANUAL EXPENSE UX
