@@ -1056,23 +1056,22 @@ window.showToast = function (msg, type, durationMs) {
 // ползва се при Начисления, Разпределение и Приходи в админ панела.
 const SAVED_SYNC_TOAST_MSG = '<strong style="color:#2e9e4f; font-weight:800;">Записано!</strong> <span style="color:#d32f2f; font-weight:400;">Ще се отрази реално до минута</span>';
 
-// --- SAVING STATE (Задача 8: визуална индикация при запис) ---
-window.showSaving = function (btn, text = "⏳ Записване...") {
+// --- SAVING STATE (Unified circular spinner + truthful status) ---
+window.showSaving = function (btn, text = "Обработва се…") {
     if (!btn) return;
-    btn._originalText = btn.innerHTML;
-    btn.innerHTML = `<span style="display:inline-flex;align-items:center;gap:7px;">
-        <span style="display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,0.4);border-top-color:#fff;border-radius:50%;animation:spin 0.7s linear infinite;"></span>
-        ${text}
-    </span>`;
+    if (btn._originalText === undefined || !btn.disabled) {
+        btn._originalText = btn.innerHTML;
+    }
+    btn.innerHTML = `<span style="display:inline-flex;align-items:center;gap:6px;"><span class="btn-spinner" aria-hidden="true"></span><span>${text}</span></span>`;
     btn.disabled = true;
-    btn.style.opacity = "0.8";
-}
+    btn.style.opacity = "0.85";
+};
 window.hideSaving = function (btn, originalText) {
     if (!btn) return;
     btn.innerHTML = originalText || btn._originalText || "Запази";
     btn.disabled = false;
     btn.style.opacity = "";
-}
+};
 
 window.refreshCurrentView = function () {
     console.log("Refreshing current view data...");
@@ -1537,13 +1536,37 @@ async function loadDashboardData() {
             if (document.getElementById('dash-credit-trend')) document.getElementById('dash-credit-trend').textContent = label;
             return;
         }
-        const result = await loadDashboardFromFirebase(currentRouteKey);
+        const [result, extStmtRes] = await Promise.all([
+            loadDashboardFromFirebase(currentRouteKey),
+            bgApiCall('getExternalUnitsStatementV1', { routeKey: currentRouteKey }).catch(() => null)
+        ]);
         throwIfStaleRouteRequestContext(requestContext);
         if (result && result.success && result.dashboard) {
             const d = result.dashboard;
             const cur = sessionStorage.getItem("currency_" + currentRouteKey) || "EUR";
-
-            document.getElementById('dash-debts').textContent = `${d.totalDebts} ${cur}`;
+            const aptDebtsCents = Math.round((parseFloat(d.totalDebts) || 0) * 100);
+            let extDebtsCents = 0;
+            let hasExtUnits = false;
+            if (extStmtRes && extStmtRes.success && Array.isArray(extStmtRes.unitStatements) && extStmtRes.unitStatements.length > 0) {
+                hasExtUnits = true;
+                extStmtRes.unitStatements.forEach(us => {
+                    extDebtsCents += Math.max(0, Number(us.endingDebtCents || 0));
+                });
+            }
+            const combinedDebtsCents = aptDebtsCents + extDebtsCents;
+            document.getElementById('dash-debts').textContent = `${(combinedDebtsCents / 100).toFixed(2)} ${cur}`;
+            const breakdownEl = document.getElementById('dash-debts-breakdown');
+            if (breakdownEl) {
+                if (hasExtUnits) {
+                    breakdownEl.innerHTML =
+                        `Апартаменти: <b>${(aptDebtsCents / 100).toFixed(2)} ${cur}</b><br>` +
+                        `Самостоятелни обекти: <b>${(extDebtsCents / 100).toFixed(2)} ${cur}</b><br>` +
+                        `Общо за входа: <b>${(combinedDebtsCents / 100).toFixed(2)} ${cur}</b>`;
+                    breakdownEl.style.display = "block";
+                } else {
+                    breakdownEl.style.display = "none";
+                }
+            }
             
             const collected = parseFloat(d.totalBalance) || 0;
             const target = parseFloat(d.totalTargetFund) || 0;
@@ -1967,10 +1990,65 @@ async function loadApartmentData(apartment) {
         } catch (eArt) {
             if (art51Box) art51Box.style.display = "none";
         }
+
+        // --- САМОСТОЯТЕЛНИ ОБЕКТИ (ПОЯСНЕНИЕ + ПУБЛИЧНА СПРАВКА) ---
+        try {
+            const extNote = document.getElementById("individualAptExtUnitsNote");
+            const extSect = document.getElementById("publicExternalUnitsSection");
+            const isBlockedPub = sessionStorage.getItem("isHardBlocked_" + currentRouteKey) === "true" ||
+                (sessionStorage.getItem("isSoftBlocked_" + currentRouteKey) === "true" && !sessionStorage.getItem("adminPin_" + currentRouteKey));
+            if (isBlockedPub) {
+                if (extNote) extNote.style.display = "none";
+                if (extSect) extSect.style.display = "none";
+            } else {
+                const extStmt = await bgApiCall('getExternalUnitsStatementV1', { routeKey: currentRouteKey }).catch(() => null);
+                const units = (extStmt && extStmt.success && Array.isArray(extStmt.unitStatements)) ? extStmt.unitStatements : [];
+                const hasPart = units.some(us => us && us.unit && us.unit.managementParticipation);
+                if (extNote) extNote.style.display = hasPart ? "block" : "none";
+                if (extSect && units.length > 0) {
+                    window._publicExtUnitStatements_ = units;
+                    const sel = document.getElementById("publicExtUnitSelect");
+                    if (sel) {
+                        sel.innerHTML = units.map((us, idx) => {
+                            const u = us.unit || {};
+                            return `<option value="${idx}">${reportEscape_(u.unitId || us.unitId || '')} — ${reportEscape_(u.name || '')}</option>`;
+                        }).join('');
+                    }
+                    extSect.style.display = "block";
+                    if (typeof window.renderPublicExternalUnitCard_ === 'function') window.renderPublicExternalUnitCard_();
+                } else if (extSect) {
+                    extSect.style.display = "none";
+                }
+            }
+        } catch (eExtPub) {}
     } else {
         showToast("Грешка при зареждане на данните", "error");
     }
 }
+
+window.renderPublicExternalUnitCard_ = function () {
+    const units = window._publicExtUnitStatements_ || [];
+    const sel = document.getElementById("publicExtUnitSelect");
+    const box = document.getElementById("publicExtUnitDetails");
+    if (!sel || !box || !units.length) return;
+    const us = units[Number(sel.value) || 0];
+    if (!us) return;
+    const u = us.unit || {};
+    const idealTxt = u.idealPartsStatus === 'ESTABLISHED'
+        ? `${Number(u.idealPartsPercent || 0).toFixed(2)}% (Установени)`
+        : 'Неустановени';
+    const partTxt = u.managementParticipation ? 'Участва в управление и поддръжка' : 'Не участва в управление и поддръжка';
+    const artTxt = (u.art51Active && Number(u.art51Multiplier || 1) > 1) ? `Да (${u.art51Multiplier}×)` : 'Не';
+    const debtEur = (Number(us.endingDebtCents || 0) / 100).toFixed(2);
+    const advEur = (Number(us.endingAdvanceCents || 0) / 100).toFixed(2);
+    const chgEur = (Number(us.totalChargedCents || 0) / 100).toFixed(2);
+    const paidEur = (Number(us.totalPaidCents || 0) / 100).toFixed(2);
+    box.innerHTML =
+        `<div><strong>Статус:</strong> ${partTxt} | <strong>Ид. части:</strong> ${idealTxt} | <strong>чл. 51, ал. 5:</strong> ${artTxt}</div>` +
+        `<div style="margin-top:4px;"><strong>Общо начислено:</strong> ${chgEur} EUR | <strong>Платено:</strong> ${paidEur} EUR | ` +
+        `<strong>Задължение:</strong> <span style="color:${Number(debtEur) > 0 ? '#b91c1c' : '#047857'};font-weight:700;">${debtEur} EUR</span>` +
+        (Number(advEur) > 0 ? ` | <strong>Аванс:</strong> <span style="color:#047857;font-weight:700;">${advEur} EUR</span>` : '') + `</div>`;
+};
 
 // ==============================================
 // ADMIN PANEL LOGIC 
@@ -2571,9 +2649,21 @@ function renderManualExpenseState_() {
     document.getElementById('chargesPeriod').disabled = !!state.pending;
     const button = document.getElementById('chargesBtn');
     button.disabled = state.inFlight;
-    button.textContent = state.inFlight ? 'Записване…' : state.pending ? 'Повтори същия запис' : 'Запиши начисление (+/-)';
+    if (state.inFlight) {
+        button.innerHTML = '<span style="display:inline-flex;align-items:center;gap:6px;"><span class="btn-spinner" aria-hidden="true"></span><span>Обработва се…</span></span>';
+    } else {
+        button.textContent = state.pending ? 'Повтори същия запис' : 'Запиши начисление (+/-)';
+    }
     const feedback = document.getElementById('chargesFeedback');
-    feedback.textContent = state.message;
+    feedback.className = 'save-status-indicator ' + (
+        state.inFlight ? 'state-pending' :
+        state.pending ? 'state-verifying' :
+        state.message && state.message.includes('успешно') ? 'state-success' :
+        state.message ? 'state-error' : ''
+    );
+    feedback.innerHTML = state.inFlight
+        ? '<span class="btn-spinner" aria-hidden="true"></span><span>' + reportEscape_(state.message || 'Изпращане…') + '</span>'
+        : reportEscape_(state.message);
     feedback.hidden = state.message === '';
 }
 function resetManualExpenseView_() {
@@ -2724,9 +2814,24 @@ window.submitCharges = async function () {
     if (!isFinancialOperationContextCurrent(attemptContext)) return;
     resetManualExpenseView_();
     if (classification === 'APPLIED') {
-        // The V2 reconciler has already published the aggregate; refresh by reading only.
+        const appliedPeriod = snapshot.request.operations && snapshot.request.operations[0] ? snapshot.request.operations[0].period : '';
         Promise.resolve(loadCurrentCharges()).catch(() => {});
         if (typeof loadChargesV2Register === 'function') Promise.resolve(loadChargesV2Register()).catch(() => {});
+        // Keep monthlyReports and apartments in Firestore in sync immediately after expense writes.
+        // If post-commit sync fails, report it separately and NEVER re-submit addChargesV2.
+        bgApiCall('forceSync', { routeKey: snapshot.context.routeKey, pin: getStoredPin(), period: appliedPeriod }).then((syncRes) => {
+            if (!isFinancialOperationContextCurrent(attemptContext)) return;
+            if (syncRes && syncRes.success === false) {
+                console.warn('Post-expense forceSync returned error:', syncRes.error);
+                showToast('Разходът е записан успешно, но обновяването на справките се забави. Не повтаряйте записа.', 'warning');
+                return;
+            }
+            refreshCurrentView();
+        }).catch((syncErr) => {
+            if (isStaleRouteRequestError(syncErr)) return;
+            console.warn('Post-expense forceSync failed:', syncErr);
+            showToast('Разходът е записан успешно, но синхронизацията на справките временно не успя. Не повтаряйте записа.', 'warning');
+        });
     }
 };
 // END SLICE4 MANUAL EXPENSE UX
@@ -4589,7 +4694,10 @@ async function loadMonthlyReportFromFirebase(routeKey, period) {
     where("periodId", "==", period)
   );
 
-  const snapshot = await getDocs(q);
+  const [snapshot, v3Summary] = await Promise.all([
+    getDocs(q),
+    bgApiCall('getMonthlyReportSummaryV3', { routeKey: routeKey, period: period }).catch(() => null)
+  ]);
 
   let totalInvoiced = 0;
   let totalCollected = 0;
@@ -4624,8 +4732,24 @@ async function loadMonthlyReportFromFirebase(routeKey, period) {
 
     rows.push(d);
   });
-  
-  invoicedCounts.total = totalInvoiced;
+
+  // Authoritative V3 gross category totals (exact integer eurocents) override incomplete/stale breakdown sums
+  const hasV3 = Boolean(v3Summary && v3Summary.success && v3Summary.reconciliation);
+  if (hasV3 && v3Summary.grossByCategoryCents) {
+    const g = v3Summary.grossByCategoryCents;
+    invoicedCounts.elevator = Number(g.elevator || 0) / 100;
+    invoicedCounts.subscription = Number(g.subscription || 0) / 100;
+    invoicedCounts.light = Number(g.light || 0) / 100;
+    invoicedCounts.security = Number(g.security || 0) / 100;
+    invoicedCounts.cleaning = Number(g.cleaning || 0) / 100;
+    invoicedCounts.podrajka = Number(g.maintenance || 0) / 100;
+    invoicedCounts.remont = Number(g.repairFund || 0) / 100;
+    invoicedCounts.water = Number(g.water || 0) / 100;
+    invoicedCounts.platformSubscription = Number(g.platformSubscription || 0) / 100;
+    invoicedCounts.total = Number(v3Summary.reconciliation.grossExpenseCents || 0) / 100;
+  } else {
+    invoicedCounts.total = totalInvoiced;
+  }
 
   // Външни приходи (V2) за същия период
   let incomesV2 = [];
@@ -4666,23 +4790,37 @@ async function loadMonthlyReportFromFirebase(routeKey, period) {
     distributionsV2 = local.filter(r => r.period === period);
   }
 
+  const art51Map = (hasV3 && v3Summary.art51ByApartment) ? v3Summary.art51ByApartment : {};
   return {
     success: true,
     data: {
       invoiced: invoicedCounts,
+      apartmentTotalDueCents: Math.round(totalInvoiced * 100),
       collected: totalCollected,
-      logic: rows[0] ? (rows[0].logic || 'Равно') : 'Равно', // Взимаме логиката от първия запис
+      logic: rows[0] ? (rows[0].logic || 'Равно') : 'Равно',
       incomesV2: incomesV2,
       distributionsV2: distributionsV2,
+      v3Summary: hasV3 ? v3Summary : null,
       apartments: rows.map(r => {
         const d = r.details || {};
+        const aptId = r.apartmentId || r.apt || '?';
+        const authArt51 = art51Map[aptId] || (r.art51Active ? {
+          active: true,
+          multiplier: Number(r.art51Multiplier || 1),
+          effectiveFromPeriod: r.art51EffectiveFromPeriod || '',
+          decisionDate: r.art51DecisionDate || '',
+          decisionReference: r.art51DecisionReference || ''
+        } : null);
         return {
-          apt: r.apartmentId || r.apt || '?',
+          apt: aptId,
           occupants: d["Обитатели"] !== undefined ? d["Обитатели"] : (r.occupants || 0),
           chips: d["Чипове"] !== undefined ? d["Чипове"] : (r.chips || 0),
           participation: d["Участие"] !== undefined ? d["Участие"] : (r.participation || 'Да'),
           idealParts: d["Ид. части"] !== undefined ? d["Ид. части"] : (r.idealParts || 0),
-          art51Multiplier: d["Коефициент 3-5"] || d["чл. 51"] || d["Обществен достъп"] || (r.art51 ? r.art51.multiplier : null) || null,
+          art51Multiplier: (authArt51 && authArt51.active && authArt51.multiplier > 1)
+            ? authArt51.multiplier
+            : (d["Коефициент 3-5"] || d["чл. 51"] || d["Обществен достъп"] || (r.art51 ? r.art51.multiplier : null) || null),
+          art51Info: authArt51,
           due: Number(r.totalDue || r.due || 0)
         };
       }).sort((a, b) => {
@@ -4740,6 +4878,35 @@ window.generateReport = async function () {
             }
 
             document.getElementById("report-total-invoiced").textContent = d.invoiced.total.toFixed(2) + " EUR";
+
+            // Render V3 4-component balance reconciliation (A: Gross Expense, B: Apt Base, C: Ext Base, D: Art.51 Surcharges)
+            const recBox = document.getElementById("report-reconciliation-v3");
+            if (recBox) {
+                if (d.v3Summary && d.v3Summary.reconciliation) {
+                    const rec = d.v3Summary.reconciliation;
+                    const fmtE = c => (Number(c || 0) / 100).toFixed(2) + " EUR";
+                    const aptDueCents = Number(d.apartmentTotalDueCents || 0);
+                    const aptArt51SurchargeCents = Math.max(0, aptDueCents - Number(rec.apartmentBaseCents || 0) - Number(rec.masterRoundingResidualCents || 0));
+                    const extMgmtTotalCents = Number(rec.externalBaseCents || 0) + Number(rec.externalSurchargeCents || 0) + Number(rec.externalRepairFundCents || 0);
+                    const totalMgmtReceivablesCents = aptDueCents + extMgmtTotalCents;
+                    const rentCents = Number(rec.externalContractRentCents || 0);
+                    recBox.innerHTML = `
+                        <div style="font-weight:700; margin-bottom:6px; color:#0f172a;">Разпределение и балансово равенство (в евроцентове)</div>
+                        <div class="report-reconciliation-row"><span>A. Реално въведен общ разход за входа</span><strong>${fmtE(rec.grossExpenseCents)}</strong></div>
+                        <div class="report-reconciliation-row"><span>B. Разпределен базов дял на апартаментите (A1–A${d.v3Summary.apartmentCount || d.apartments.length})</span><span>${fmtE(rec.apartmentBaseCents)}</span></div>
+                        <div class="report-reconciliation-row"><span>C. Разпределен базов дял на външните самостоятелни обекти</span><span>${fmtE(rec.externalBaseCents)}</span></div>
+                        ${rec.masterRoundingResidualCents ? `<div class="report-reconciliation-row"><span>Корекция от закръгляване (MASTER)</span><span>${fmtE(rec.masterRoundingResidualCents)}</span></div>` : ''}
+                        <div class="report-reconciliation-row"><span>D1. Допълнителни начисления по чл. 51, ал. 5 ЗУЕС (апартаменти)</span><span>${fmtE(aptArt51SurchargeCents)}</span></div>
+                        <div class="report-reconciliation-row"><span>D2. Допълнителни начисления по чл. 51, ал. 5 ЗУЕС (самостоятелни обекти)</span><span>${fmtE(rec.externalSurchargeCents)}</span></div>
+                        ${rec.externalRepairFundCents ? `<div class="report-reconciliation-row"><span>Фонд ремонт (самостоятелни обекти)</span><span>${fmtE(rec.externalRepairFundCents)}</span></div>` : ''}
+                        <div class="report-reconciliation-row strong"><span>Общо начислени вземания за управление и поддръжка</span><span>${fmtE(totalMgmtReceivablesCents)}</span></div>
+                        ${rentCents > 0 ? `<div class="report-reconciliation-row"><span>Договорен наем от самостоятелни обекти (отделно от разходите)</span><span>${fmtE(rentCents)}</span></div>` : ''}
+                    `;
+                    recBox.style.display = "block";
+                } else {
+                    recBox.style.display = "none";
+                }
+            }
 
             // Populate V2 Incomes table in Section II
             const collectedRows = document.getElementById("report-collected-rows");
@@ -4830,6 +4997,12 @@ window.generateReport = async function () {
             if (d.apartments && d.apartments.length > 0) {
                 d.apartments.forEach(a => {
                     summaryTotalDue += a.due;
+                    let art51Cell = 'Не';
+                    if (a.art51Multiplier && a.art51Multiplier > 1) {
+                        const info = a.art51Info || {};
+                        const basis = [info.decisionReference, info.decisionDate].filter(Boolean).join(' / ');
+                        art51Cell = `<strong>${a.art51Multiplier}×</strong>` + (basis ? `<div style="font-size:10px;color:#475569;">ОС ${reportEscape_(basis)}</div>` : '');
+                    }
                     aptRowsHTML += `
                         <tr style="text-align: center; border-bottom: 1px dashed #eee;">
                             <td style="padding: 6px 0;"><strong>${a.apt}</strong></td>
@@ -4837,13 +5010,66 @@ window.generateReport = async function () {
                             <td style="padding: 6px 0;">${a.chips}</td>
                             <td style="padding: 6px 0;">${a.participation}</td>
                             <td style="padding: 6px 0;">${a.idealParts}%</td>
-                            <td style="padding: 6px 0;">${a.art51Multiplier && a.art51Multiplier > 1 ? (a.art51Multiplier + '×') : 'Не'}</td>
+                            <td style="padding: 6px 0;">${art51Cell}</td>
                             <td style="padding: 6px 0; font-weight: bold;">${a.due.toFixed(2)} EUR</td>
                         </tr>
                     `;
                 });
             } else {
                 aptRowsHTML = `<tr><td colspan="7" style="padding: 10px; text-align: center;">Няма налични детайлни данни</td></tr>`;
+            }
+
+            // Section V: Самостоятелни обекти (извън апартаментите)
+            let extSectionHTML = "";
+            const extUnits = (d.v3Summary && Array.isArray(d.v3Summary.externalUnits)) ? d.v3Summary.externalUnits : [];
+            if (extUnits.length > 0) {
+                const fmtE = c => (Number(c || 0) / 100).toFixed(2);
+                const extRows = extUnits.map(u => {
+                    const partLabel = u.managementParticipation ? 'Да' : 'Не';
+                    const idealLabel = u.idealPartsStatus === 'ESTABLISHED' ? `${Number(u.idealPartsPercent || 0).toFixed(2)}%` : 'Неустановени';
+                    const artLabel = (u.art51Active && u.art51Multiplier > 1) ? `${u.art51Multiplier}×` : '—';
+                    const balLabel = u.endingAdvanceCents > 0
+                        ? `Аванс ${fmtE(u.endingAdvanceCents)} EUR`
+                        : `${fmtE(u.endingDebtCents)} EUR`;
+                    return `
+                        <tr style="text-align: center; border-bottom: 1px dashed #eee;">
+                            <td style="padding: 6px 4px; text-align:left;"><strong>${reportEscape_(u.unitId)}</strong> — ${reportEscape_(u.name)}<div style="font-size:10px;color:#64748b;">Ид. части: ${idealLabel}</div></td>
+                            <td style="padding: 6px 4px;">${partLabel}</td>
+                            <td style="padding: 6px 4px;">${fmtE(u.baseManagementCents)}</td>
+                            <td style="padding: 6px 4px;">${fmtE(u.surchargeCents)} <span style="font-size:10px;color:#64748b;">(${artLabel})</span></td>
+                            <td style="padding: 6px 4px;">${fmtE(u.repairFundCents)}</td>
+                            <td style="padding: 6px 4px;">${fmtE(u.contractRentCents)}</td>
+                            <td style="padding: 6px 4px; font-weight:bold;">${fmtE(u.totalChargedPeriodCents)}</td>
+                            <td style="padding: 6px 4px;">${fmtE(u.paidPeriodCents)}</td>
+                            <td style="padding: 6px 4px; font-weight:bold;">${balLabel}</td>
+                        </tr>
+                    `;
+                }).join('');
+                extSectionHTML = `
+                    <div id="monthly-report-external-units-box" style="margin-top: 26px; padding-top: 15px; border-top: 1px solid #ddd; page-break-inside: avoid;">
+                        <h4 style="margin: 0 0 8px; font-size: 14px; text-transform: uppercase;">
+                            V. Самостоятелни обекти (извън апартаментите)
+                        </h4>
+                        <div style="overflow-x:auto;">
+                            <table style="width: 100%; font-size: 11.5px; color: #333; border-collapse: collapse;">
+                                <thead>
+                                    <tr style="background: #f8f9fa; border-bottom: 1px solid #ccc; text-align: center;">
+                                        <th style="padding: 7px 4px; text-align:left; border-bottom: 2px solid #ddd;">Обект</th>
+                                        <th style="padding: 7px 4px; border-bottom: 2px solid #ddd;">Участие РУП</th>
+                                        <th style="padding: 7px 4px; border-bottom: 2px solid #ddd;">База (EUR)</th>
+                                        <th style="padding: 7px 4px; border-bottom: 2px solid #ddd;">Надбавка чл. 51 (EUR)</th>
+                                        <th style="padding: 7px 4px; border-bottom: 2px solid #ddd;">Фонд ремонт (EUR)</th>
+                                        <th style="padding: 7px 4px; border-bottom: 2px solid #ddd;">Наем (EUR)</th>
+                                        <th style="padding: 7px 4px; border-bottom: 2px solid #ddd;">Общо начислено (EUR)</th>
+                                        <th style="padding: 7px 4px; border-bottom: 2px solid #ddd;">Платено (EUR)</th>
+                                        <th style="padding: 7px 4px; border-bottom: 2px solid #ddd;">Салдо / Аванс</th>
+                                    </tr>
+                                </thead>
+                                <tbody>${extRows}</tbody>
+                            </table>
+                        </div>
+                    </div>
+                `;
             }
 
             statsSect.innerHTML = `
@@ -4869,6 +5095,7 @@ window.generateReport = async function () {
                         </tbody>
                     </table>
                 </div>
+                ${extSectionHTML}
             `;
 
             document.getElementById("report-content").style.display = "block";

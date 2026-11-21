@@ -2665,5 +2665,88 @@ body {
   }
 }
 
+/* ===== FINANCIAL REPORTS V3 & UNIFIED WRITE SPINNER ===== */
+@keyframes agyBtnSpin {
+  to { transform: rotate(360deg); }
+}
+
+.btn-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: agyBtnSpin 0.7s linear infinite;
+  vertical-align: -2px;
+  margin-right: 6px;
+}
+
+.save-status-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.save-status-indicator[hidden] { display: none !important; }
+.save-status-indicator.state-pending {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}
+.save-status-indicator.state-pending .btn-spinner {
+  border-color: rgba(29, 78, 216, 0.25);
+  border-top-color: #1d4ed8;
+}
+.save-status-indicator.state-success {
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid #a7f3d0;
+}
+.save-status-indicator.state-error {
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+}
+.save-status-indicator.state-verifying {
+  background: #fffbeb;
+  color: #b45309;
+  border: 1px solid #fde68a;
+}
+
+.report-reconciliation-box {
+  margin-top: 14px;
+  padding: 12px 14px;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 12.5px;
+}
+.report-reconciliation-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 0;
+  border-bottom: 1px dashed #e2e8f0;
+}
+.report-reconciliation-row:last-child { border-bottom: none; }
+.report-reconciliation-row.strong {
+  font-weight: 700;
+  color: #0f172a;
+  padding-top: 6px;
+  border-top: 1px solid #cbd5e1;
+}
+.dash-debts-breakdown {
+  margin-top: 6px;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: #475569;
+}
+
+
 
 

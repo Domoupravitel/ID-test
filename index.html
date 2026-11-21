@@ -2259,7 +2259,7 @@
 
                 <!-- Individual Apartment Art 51 Info Box -->
                 <div id="individualAptArt51Box"
-                    style="display:none; margin-bottom: 20px; background: #eff6ff; border: 1px solid #93c5fd; border-radius: 12px; padding: 14px 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.03);">
+                    style="display:none; margin-bottom: 14px; background: #eff6ff; border: 1px solid #93c5fd; border-radius: 12px; padding: 14px 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.03);">
                     <div style="display: flex; align-items: flex-start; gap: 12px;">
                         <span style="font-size: 22px;">🏢</span>
                         <div>
@@ -2267,6 +2267,19 @@
                             <div id="individualAptArt51Text" style="font-size: 12px; color: #1e3a8a; line-height: 1.5;"></div>
                         </div>
                     </div>
+                </div>
+
+                <!-- External Units Allocation Note & Public Statement Box -->
+                <div id="individualAptExtUnitsNote"
+                    style="display:none; margin-bottom: 16px; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 10px; padding: 10px 14px; font-size: 12.5px; color: #334155;">
+                    ℹ️ Общите разходи за управление и поддръжка за входа се разпределят между апартаментите и участващите самостоятелни обекти (извън апартаментите).
+                </div>
+                <div id="publicExternalUnitsSection" class="card" style="display:none; margin-bottom: 16px; padding: 14px 16px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:10px;">
+                        <strong style="font-size: 13.5px; color: #0f172a;">🏪 Справка за самостоятелни обекти (извън апартаментите)</strong>
+                        <select id="publicExtUnitSelect" onchange="renderPublicExternalUnitCard_()" style="padding:6px 10px; border-radius:8px; border:1px solid #cbd5e1; font-size:13px;"></select>
+                    </div>
+                    <div id="publicExtUnitDetails" style="font-size: 12.5px; color: #334155; line-height: 1.6;"></div>
                 </div>
 
                 <div class="card">
@@ -2319,6 +2332,7 @@
                                 <span class="label">Общи неплатени задължения</span>
                                 <h3 class="value" id="dash-debts">0.00 EUR</h3>
                                 <span class="trend" id="dash-debts-trend">Очаква данни</span>
+                                <div id="dash-debts-breakdown" class="dash-debts-breakdown" style="display:none;"></div>
                             </div>
                         </div>
 
@@ -2417,12 +2431,13 @@
                                     </tbody>
                                     <tfoot>
                                         <tr style="font-weight: bold; border-top: 1px solid #333;">
-                                            <td style="padding: 10px 0;">ОБЩО НАЧИСЛЕНИ РАЗХОДИ:</td>
+                                            <td id="report-total-invoiced-label" style="padding: 10px 0;">ОБЩ ВЪВЕДЕН РАЗХОД ЗА ВХОДА:</td>
                                             <td id="report-total-invoiced" style="text-align: right; padding: 10px 0;">
                                                 0.00 EUR</td>
                                         </tr>
                                     </tfoot>
                                 </table>
+                                <div id="report-reconciliation-v3" class="report-reconciliation-box" style="display:none;"></div>
                             </div>
 
                             <div style="margin-bottom: 20px;">
