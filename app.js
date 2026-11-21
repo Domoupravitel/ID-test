@@ -1258,6 +1258,9 @@ window.enterEntrance = async function () {
         sessionStorage.setItem("isSoftBlocked_" + currentRouteKey, info.isSoftBlocked ? "true" : "false");
         sessionStorage.setItem("isHardBlocked_" + currentRouteKey, info.isHardBlocked ? "true" : "false");
         sessionStorage.setItem("subscriptionStatus_" + currentRouteKey, info.subscriptionStatus || "");
+        if (info.currentActivePeriod && /^(0[1-9]|1[0-2])\.\d{4}$/.test(String(info.currentActivePeriod).trim())) {
+            window._serverCurrentActivePeriod = String(info.currentActivePeriod).trim();
+        }
 
         if (info.paymentInfo) {
             document.getElementById('payment-instructions').innerHTML = linkifyText(info.paymentInfo);
@@ -1742,6 +1745,72 @@ function initChart(data) {
 }
 
 // ==============================================
+// CENTRALIZED FRONTEND PERIOD POLICY (Europe/Sofia) & ASYNC SECTION STATES (V3.1)
+// ==============================================
+
+function periodToSortableUI(period) {
+    if (!period) return 0;
+    const parts = String(period).trim().split('.');
+    if (parts.length !== 2) return 0;
+    return (parseInt(parts[1], 10) || 0) * 100 + (parseInt(parts[0], 10) || 0);
+}
+
+function getActiveSofiaPeriod(optNow) {
+    if (!optNow && window._serverCurrentActivePeriod && /^(0[1-9]|1[0-2])\.\d{4}$/.test(window._serverCurrentActivePeriod)) {
+        return window._serverCurrentActivePeriod;
+    }
+    const now = optNow instanceof Date ? optNow : new Date();
+    try {
+        const parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Sofia', year: 'numeric', month: '2-digit' }).formatToParts(now);
+        const mm = (parts.find(p => p.type === 'month') || {}).value;
+        const yyyy = (parts.find(p => p.type === 'year') || {}).value;
+        if (mm && yyyy) return `${mm}.${yyyy}`;
+    } catch (e) {}
+    return String(now.getMonth() + 1).padStart(2, '0') + '.' + now.getFullYear();
+}
+
+function isFutureTechnicalPeriodUI(period, optNow) {
+    const pOrd = periodToSortableUI(period);
+    if (!pOrd) return false;
+    return pOrd > periodToSortableUI(getActiveSofiaPeriod(optNow));
+}
+
+window.getActiveSofiaPeriod = getActiveSofiaPeriod;
+window.isFutureTechnicalPeriodUI = isFutureTechnicalPeriodUI;
+
+/**
+ * Explicit async section state renderer: 'LOADING' | 'READY' | 'EMPTY' | 'ERROR'
+ * Never shows fictitious zeros or premature empty messages while loading; supports isolated per-section Retry.
+ */
+function setSectionAsyncState_(target, state, opts) {
+    const el = typeof target === 'string' ? document.getElementById(target) : target;
+    if (!el) return;
+    const options = opts || {};
+    const colspan = options.colspan || 0;
+    el.setAttribute('data-async-state', state);
+
+    const wrap = (innerHtml) => colspan > 0
+        ? `<tr><td colspan="${colspan}" style="text-align:center; padding:16px;">${innerHtml}</td></tr>`
+        : innerHtml;
+
+    if (state === 'LOADING') {
+        const msg = options.loadingText || 'Зареждане на данните…';
+        el.innerHTML = wrap(`<span style="display:inline-flex; align-items:center; gap:8px; color:#475569; font-weight:500;"><span class="btn-spinner" style="border-color:rgba(37,99,235,0.25); border-top-color:#2563eb;"></span>${msg}</span>`);
+    } else if (state === 'EMPTY') {
+        const msg = options.emptyText || 'Няма налични данни.';
+        el.innerHTML = wrap(`<span style="color:#64748b;">${msg}</span>`);
+    } else if (state === 'ERROR') {
+        const msg = options.errorText || 'Грешка при зареждане на секцията.';
+        const retryFnName = options.retryAction || '';
+        const retryHtml = retryFnName
+            ? ` <button type="button" class="btn-secondary" style="margin-left:8px; padding:4px 10px; font-size:0.85em;" onclick="${retryFnName}">↻ Опитай отново</button>`
+            : '';
+        el.innerHTML = wrap(`<span style="color:#dc2626; font-weight:600;">⚠️ ${msg}</span>${retryHtml}`);
+    }
+}
+window.setSectionAsyncState_ = setSectionAsyncState_;
+
+// ==============================================
 // APARTMENT DATA
 // ==============================================
 
@@ -1773,7 +1842,11 @@ async function loadApartmentFromFirebase(routeKey, apartmentId) {
 
   const rawPeriods = [];
   snapPeriods.forEach(doc => {
-    rawPeriods.push(doc.data());
+    const data = doc.data();
+    const pid = data.periodId || data.period || "";
+    // PERIOD INTEGRITY (P0): Exclude future technical reserve periods from public financial statements
+    if (isFutureTechnicalPeriodUI(pid)) return;
+    rawPeriods.push(data);
   });
 
   rawPeriods.sort((a, b) => {
@@ -1784,19 +1857,32 @@ async function loadApartmentFromFirebase(routeKey, apartmentId) {
     return dA - dB;
   });
 
+  const pickNullableNum = (...vals) => {
+    for (const v of vals) {
+      if (v !== undefined && v !== null && v !== '') {
+        const n = Number(v);
+        if (Number.isFinite(n)) return n;
+      }
+    }
+    return null;
+  };
+
   result.periods = rawPeriods.map(p => {
     const d = p.details || {};
+    const incomplete = p.breakdownStatus === 'INCOMPLETE';
     return {
       period: p.periodId || p.period,
-      elevator: Number(d["Асансьор ел."] || d["Асансьор"] || p.elevator || 0),
-      subscription: Number(d["Асансьор абон. и др."] || d["Абонамент"] || p.subscription || 0),
-      light: Number(d["Етажно ел."] || d["Ток"] || d["Осветление"] || p.light || 0),
-      security: Number(d["Охрана"] || d["Вход"] || p.security || 0),
-      cleaning: Number(d["Почистване"] || d["Чистач"] || p.cleaning || 0),
-      podrajka: Number(d["Фонд Поддръжка"] || d["Поддръжка"] || p.podrajka || 0),
-      remont: Number(d["Фонд ремонт"] || d["Ремонтен фонд"] || d["Ремонт"] || p.remont || 0),
-      water: Number(d["ВиК"] || d["ВиК ЕС"] || p.water || 0),
-      platformSubscription: Number(d["Управление"] || d["Абонамент Платформа"] || p.platformSubscription || 0),
+      breakdownStatus: p.breakdownStatus || 'COMPLETE',
+      breakdownReason: p.breakdownReason || '',
+      elevator: pickNullableNum(d["Асансьор ел."], d["Асансьор"], p.elevator, incomplete ? null : 0),
+      subscription: pickNullableNum(d["Асансьор абон. и др."], d["Абонамент"], p.subscription, incomplete ? null : 0),
+      light: pickNullableNum(d["Етажно ел."], d["Ток"], d["Осветление"], p.light, incomplete ? null : 0),
+      security: pickNullableNum(d["Охрана"], d["Вход"], p.security, incomplete ? null : 0),
+      cleaning: pickNullableNum(d["Почистване"], d["Чистач"], p.cleaning, incomplete ? null : 0),
+      podrajka: pickNullableNum(d["Фонд Поддръжка"], d["Поддръжка"], p.podrajka, p.maintenance, incomplete ? null : 0),
+      remont: pickNullableNum(d["Фонд ремонт"], d["Ремонтен фонд"], d["Ремонт"], p.remont, p.repairFund, incomplete ? null : 0),
+      water: pickNullableNum(d["ВиК"], d["ВиК ЕС"], p.water, incomplete ? null : 0),
+      platformSubscription: pickNullableNum(d["Управление"], d["Абонамент Платформа"], p.platformSubscription, incomplete ? null : 0),
       due: Number(p.totalDue || p.due || 0),
       paid: Number(p.receivedPaid ?? p.totalPaid ?? p.paid ?? 0),
       credit: Number(d["Кредит"] || p.credit || 0)
@@ -1886,47 +1972,52 @@ async function loadApartmentData(apartment) {
             let sumPodr = 0, sumRemont = 0, sumWater = 0, sumPlat = 0;
             let sumDue = 0, sumPaid = 0, sumSaldo = 0, sumCredit = 0;
 
+            let hasIncompleteBreakdown = false;
+            const fmtCat = (val) => (val === null || val === undefined) ? '<span style="color:#b45309;" title="Непълна разбивка по пера">—</span>' : Number(val).toFixed(2);
+
             (result.periods || []).forEach((r) => {
                 const tr = document.createElement("tr");
-                const rowElevator = Number(r.elevator || 0);
-                const rowSub = Number(r.subscription || 0);
-                const rowLight = Number(r.light || 0);
-                const rowSec = Number(r.security || 0);
-                const rowClean = Number(r.cleaning || 0);
-                const rowPodr = Number(r.podrajka || 0);
-                const rowRemont = Number(r.remont || 0);
-                const rowWater = Number(r.water || 0);
-                const rowPlat = Number(r.platformSubscription || 0);
+                const isInc = r.breakdownStatus === 'INCOMPLETE';
+                if (isInc) hasIncompleteBreakdown = true;
+                const rowElevator = r.elevator === null ? null : Number(r.elevator);
+                const rowSub = r.subscription === null ? null : Number(r.subscription);
+                const rowLight = r.light === null ? null : Number(r.light);
+                const rowSec = r.security === null ? null : Number(r.security);
+                const rowClean = r.cleaning === null ? null : Number(r.cleaning);
+                const rowPodr = r.podrajka === null ? null : Number(r.podrajka);
+                const rowRemont = r.remont === null ? null : Number(r.remont);
+                const rowWater = r.water === null ? null : Number(r.water);
+                const rowPlat = r.platformSubscription === null ? null : Number(r.platformSubscription);
                 const rowDue = Number(r.due || 0);
                 const rowPaid = Number(r.paid || 0);
                 const rowSaldo = rowDue - rowPaid;
                 const rowCredit = Number(r.credit || 0);
 
-                sumElevator += rowElevator;
-                sumSub += rowSub;
-                sumLight += rowLight;
-                sumSec += rowSec;
-                sumClean += rowClean;
-                sumPodr += rowPodr;
-                sumRemont += rowRemont;
-                sumWater += rowWater;
-                sumPlat += rowPlat;
+                if (rowElevator !== null) sumElevator += rowElevator;
+                if (rowSub !== null) sumSub += rowSub;
+                if (rowLight !== null) sumLight += rowLight;
+                if (rowSec !== null) sumSec += rowSec;
+                if (rowClean !== null) sumClean += rowClean;
+                if (rowPodr !== null) sumPodr += rowPodr;
+                if (rowRemont !== null) sumRemont += rowRemont;
+                if (rowWater !== null) sumWater += rowWater;
+                if (rowPlat !== null) sumPlat += rowPlat;
                 sumDue += rowDue;
                 sumPaid += rowPaid;
                 sumSaldo += rowSaldo;
                 sumCredit += rowCredit;
 
                 tr.innerHTML = `
-                <td>${r.period}</td>
-                <td>${rowElevator.toFixed(2)}</td>
-                <td>${rowSub.toFixed(2)}</td>
-                <td>${rowLight.toFixed(2)}</td>
-                <td>${rowSec.toFixed(2)}</td>
-                <td>${rowClean.toFixed(2)}</td>
-                <td>${rowPodr.toFixed(2)}</td>
-                <td>${rowRemont.toFixed(2)}</td>
-                <td>${rowWater.toFixed(2)}</td>
-                <td>${rowPlat.toFixed(2)}</td>
+                <td>${r.period}${isInc ? ' <span title="Непълна разбивка по пера" style="color:#b45309;">⚠️</span>' : ''}</td>
+                <td>${fmtCat(rowElevator)}</td>
+                <td>${fmtCat(rowSub)}</td>
+                <td>${fmtCat(rowLight)}</td>
+                <td>${fmtCat(rowSec)}</td>
+                <td>${fmtCat(rowClean)}</td>
+                <td>${fmtCat(rowPodr)}</td>
+                <td>${fmtCat(rowRemont)}</td>
+                <td>${fmtCat(rowWater)}</td>
+                <td>${fmtCat(rowPlat)}</td>
                 <td>${rowDue.toFixed(2)}</td>
                 <td>${rowPaid.toFixed(2)}</td>
                 <td>${rowSaldo.toFixed(2)}</td>
@@ -1934,6 +2025,11 @@ async function loadApartmentData(apartment) {
             `;
                 tBody.appendChild(tr);
             });
+            if (hasIncompleteBreakdown) {
+                const warnTr = document.createElement("tr");
+                warnTr.innerHTML = '<td colspan="14" style="background:#fffbeb; color:#92400e; text-align:left; font-size:0.85em; padding:8px 10px;">⚠️ За един или повече периоди разбивката по пера е непълна (маркирана с „—“). Общата дължима сума е взета от MASTER; необходима е синхронизация.</td>';
+                tBody.appendChild(warnTr);
+            }
 
             const totalTr = document.createElement("tr");
             totalTr.className = "total-row";
@@ -2150,30 +2246,31 @@ function showAdminContent() {
 }
 
 function autoFillCurrentPeriod() {
-    const d = new Date();
-    const currentPeriod = String(d.getMonth() + 1).padStart(2, '0') + "." + d.getFullYear();
+    const currentPeriod = getActiveSofiaPeriod();
+    const curYear = parseInt(currentPeriod.split('.')[1], 10) || new Date().getFullYear();
 
-    const periodFields = [
-        "adminPeriod", "chargesPeriod", "v2IncomePeriod",
-        "masterLogikaFrom", "masterUchFrom",
-        "masterObFrom", "masterChFrom", "masterIdFrom"
+    // Financial transaction selectors: ONLY historical & current active periods (NEVER future reserve periods)
+    const financialPeriodFields = ["adminPeriod", "chargesPeriod", "v2IncomePeriod"];
+    // Technical config selectors: allow future periods for forward-effective settings
+    const technicalConfigFields = ["masterLogikaFrom", "masterUchFrom", "masterObFrom", "masterChFrom", "masterIdFrom"];
+    const periodFields = financialPeriodFields.concat(technicalConfigFields);
+
+    const monthNames = [
+        "Януари", "Февруари", "Март", "Април", "Май", "Юни",
+        "Юли", "Август", "Септември", "Октомври", "Ноември", "Декември"
     ];
 
     periodFields.forEach(id => {
         const el = document.getElementById(id);
+        const isFinancialField = financialPeriodFields.includes(id);
         if (el && el.tagName === 'SELECT') {
             // Populate if empty
             if (el.options.length === 0) {
-                const year = d.getFullYear();
-                const monthNames = [
-                    "Януари", "Февруари", "Март", "Април", "Май", "Юни",
-                    "Юли", "Август", "Септември", "Октомври", "Ноември", "Декември"
-                ];
-                
                 monthNames.forEach((name, index) => {
                     const m = String(index + 1).padStart(2, '0');
-                    const val = `${m}.${year}`;
-                    const opt = new Option(`${name} ${year}`, val);
+                    const val = `${m}.${curYear}`;
+                    if (isFinancialField && isFutureTechnicalPeriodUI(val)) return;
+                    const opt = new Option(`${name} ${curYear}`, val);
                     el.appendChild(opt);
                 });
             }
@@ -4839,6 +4936,10 @@ window.generateReport = async function () {
         showToast("Моля, въведете период!", "error");
         return;
     }
+    if (isFutureTechnicalPeriodUI(period)) {
+        showToast(`Период ${period} е бъдещ технически резервен период (текущ активен: ${getActiveSofiaPeriod()}). Месечен финансов отчет не се генерира за бъдещи периоди.`, "warning");
+        return;
+    }
 
     const btn = document.querySelector("#view-monthly-report .btn-primary");
     showSaving(btn, "Зареждане...");
@@ -4879,27 +4980,40 @@ window.generateReport = async function () {
 
             document.getElementById("report-total-invoiced").textContent = d.invoiced.total.toFixed(2) + " EUR";
 
-            // Render V3 4-component balance reconciliation (A: Gross Expense, B: Apt Base, C: Ext Base, D: Art.51 Surcharges)
+            // Render V3.1 exact balance reconciliation (A = B + C, D1 Apt Art.51, D2 Ext Art.51, exact vs per-unit rounding)
             const recBox = document.getElementById("report-reconciliation-v3");
             if (recBox) {
                 if (d.v3Summary && d.v3Summary.reconciliation) {
                     const rec = d.v3Summary.reconciliation;
                     const fmtE = c => (Number(c || 0) / 100).toFixed(2) + " EUR";
-                    const aptDueCents = Number(d.apartmentTotalDueCents || 0);
-                    const aptArt51SurchargeCents = Math.max(0, aptDueCents - Number(rec.apartmentBaseCents || 0) - Number(rec.masterRoundingResidualCents || 0));
+                    const fmtSigned = c => (Number(c || 0) > 0 ? "+" : "") + (Number(c || 0) / 100).toFixed(2) + " EUR";
+                    const aptExactCents = rec.apartmentExactSumCents !== undefined ? Number(rec.apartmentExactSumCents) : Number(d.apartmentTotalDueCents || 0);
+                    const aptRoundedCents = rec.apartmentRoundedSumCents !== undefined ? Number(rec.apartmentRoundedSumCents) : aptExactCents;
+                    const aptArt51SurchargeCents = rec.apartmentArt51SurchargeCents !== undefined
+                        ? Number(rec.apartmentArt51SurchargeCents)
+                        : Math.max(0, aptExactCents - Number(rec.apartmentBaseCents || 0));
+                    const displayRoundingDiffCents = rec.apartmentDisplayRoundingDiffCents !== undefined
+                        ? Number(rec.apartmentDisplayRoundingDiffCents)
+                        : (aptRoundedCents - aptExactCents);
                     const extMgmtTotalCents = Number(rec.externalBaseCents || 0) + Number(rec.externalSurchargeCents || 0) + Number(rec.externalRepairFundCents || 0);
-                    const totalMgmtReceivablesCents = aptDueCents + extMgmtTotalCents;
+                    const totalMgmtExactCents = rec.totalMgmtReceivablesExactCents !== undefined
+                        ? Number(rec.totalMgmtReceivablesExactCents)
+                        : (aptExactCents + extMgmtTotalCents);
+                    const totalMgmtByUnitCents = rec.totalMgmtReceivablesByUnitCents !== undefined
+                        ? Number(rec.totalMgmtReceivablesByUnitCents)
+                        : (aptRoundedCents + extMgmtTotalCents);
                     const rentCents = Number(rec.externalContractRentCents || 0);
                     recBox.innerHTML = `
                         <div style="font-weight:700; margin-bottom:6px; color:#0f172a;">Разпределение и балансово равенство (в евроцентове)</div>
                         <div class="report-reconciliation-row"><span>A. Реално въведен общ разход за входа</span><strong>${fmtE(rec.grossExpenseCents)}</strong></div>
                         <div class="report-reconciliation-row"><span>B. Разпределен базов дял на апартаментите (A1–A${d.v3Summary.apartmentCount || d.apartments.length})</span><span>${fmtE(rec.apartmentBaseCents)}</span></div>
                         <div class="report-reconciliation-row"><span>C. Разпределен базов дял на външните самостоятелни обекти</span><span>${fmtE(rec.externalBaseCents)}</span></div>
-                        ${rec.masterRoundingResidualCents ? `<div class="report-reconciliation-row"><span>Корекция от закръгляване (MASTER)</span><span>${fmtE(rec.masterRoundingResidualCents)}</span></div>` : ''}
                         <div class="report-reconciliation-row"><span>D1. Допълнителни начисления по чл. 51, ал. 5 ЗУЕС (апартаменти)</span><span>${fmtE(aptArt51SurchargeCents)}</span></div>
                         <div class="report-reconciliation-row"><span>D2. Допълнителни начисления по чл. 51, ал. 5 ЗУЕС (самостоятелни обекти)</span><span>${fmtE(rec.externalSurchargeCents)}</span></div>
                         ${rec.externalRepairFundCents ? `<div class="report-reconciliation-row"><span>Фонд ремонт (самостоятелни обекти)</span><span>${fmtE(rec.externalRepairFundCents)}</span></div>` : ''}
-                        <div class="report-reconciliation-row strong"><span>Общо начислени вземания за управление и поддръжка</span><span>${fmtE(totalMgmtReceivablesCents)}</span></div>
+                        <div class="report-reconciliation-row"><span>Общо вземания за управление и поддръжка (точна сума MASTER + СО)</span><span>${fmtE(totalMgmtExactCents)}</span></div>
+                        ${displayRoundingDiffCents !== 0 ? `<div class="report-reconciliation-row"><span>Разлика от закръгляване по индивидуални партиди (MASTER)</span><span>${fmtSigned(displayRoundingDiffCents)}</span></div>` : ''}
+                        <div class="report-reconciliation-row strong"><span>Общо начислени вземания за управление и поддръжка (сбор по партиди)</span><span>${fmtE(totalMgmtByUnitCents)}</span></div>
                         ${rentCents > 0 ? `<div class="report-reconciliation-row"><span>Договорен наем от самостоятелни обекти (отделно от разходите)</span><span>${fmtE(rentCents)}</span></div>` : ''}
                     `;
                     recBox.style.display = "block";
@@ -6340,7 +6454,7 @@ window.loadChargesV2Register = async function() {
         return;
     }
 
-    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">Зареждане...</td></tr>';
+    setSectionAsyncState_(tbody, 'LOADING', { colspan: 5, loadingText: 'Зареждане на регистъра на разходите…' });
 
     try {
         const { collection, getDocs, query, where } = window.fb;
@@ -7562,52 +7676,78 @@ window.extUnitSelectionChanged = function() {
 };
 
 window.loadExternalUnitsData = async function(silent) {
-    const requestContext = captureRouteRequestContext();
-    try {
-        const res = await apiCall('getExternalUnitsV1', { routeKey: currentRouteKey });
-        throwIfStaleRouteRequestContext(requestContext);
-        if (!res || !res.success) return;
-
-        window._cachedExternalUnits = Array.isArray(res.units) ? res.units : [];
-        window._cachedExternalUnitStatements = Array.isArray(res.unitStatements) ? res.unitStatements : [];
-        window._cachedExternalReconciliation = Array.isArray(res.reconciliationByPeriod) ? res.reconciliationByPeriod : [];
-        window._cachedExternalPendingPayments = Array.isArray(res.pendingPayments) ? res.pendingPayments : [];
-        window._cachedExternalUnitActions = Array.isArray(res.actions) ? res.actions : [];
-
-        const sel = document.getElementById('extUnitSelect');
-        if (sel) {
-            const prevVal = sel.value;
-            sel.innerHTML = '<option value="">➕ Нов самостоятелен обект</option>';
-            window._cachedExternalUnits.forEach(u => {
-                sel.appendChild(new Option(`${u.unitId} — ${u.name}`, u.unitId));
-            });
-            if (prevVal && window._cachedExternalUnits.some(u => u.unitId === prevVal)) {
-                sel.value = prevVal;
-            }
-            if (!silent) extUnitSelectionChanged();
-        }
-
-        const filterSel = document.getElementById('extUnitStatementFilter');
-        if (filterSel) {
-            const prevFilter = filterSel.value || 'ALL';
-            filterSel.innerHTML = '<option value="ALL">Всички самостоятелни обекти</option>';
-            window._cachedExternalUnits.forEach(u => {
-                filterSel.appendChild(new Option(`${u.unitId} — ${u.name}`, u.unitId));
-            });
-            if (prevFilter === 'ALL' || window._cachedExternalUnits.some(u => u.unitId === prevFilter)) {
-                filterSel.value = prevFilter;
-            }
-        }
-
-        populateExternalUnitSelects_();
-        renderExternalUnitsRegistry();
-        renderExternalUnitsStatementView();
-        renderExternalUnitActions();
-        renderPendingExternalPayments_();
-        updateExternalIdealWarningBanner_();
-    } catch (e) {
-        if (!isStaleRouteRequestError(e)) console.warn('loadExternalUnitsData failed:', e);
+    if (window._extUnitsInFlightPromise && window._extUnitsInFlightRoute === currentRouteKey) {
+        return window._extUnitsInFlightPromise;
     }
+    const requestContext = captureRouteRequestContext();
+    const hasCache = Array.isArray(window._cachedExternalUnits) && window._cachedExternalUnitsRoute === currentRouteKey;
+    if (!hasCache) {
+        setSectionAsyncState_('extUnitsRegistryBody', 'LOADING', { colspan: 7, loadingText: 'Зареждане на самостоятелните обекти…' });
+        setSectionAsyncState_('extUnitsStatementBody', 'LOADING', { colspan: 8, loadingText: 'Зареждане на справката по периоди…' });
+        setSectionAsyncState_('extUnitsReconciliationBody', 'LOADING', { colspan: 7, loadingText: 'Зареждане на сверката…' });
+        setSectionAsyncState_('extUnitActionsBody', 'LOADING', { colspan: 6, loadingText: 'Зареждане на регистъра на промените…' });
+    }
+    window._extUnitsInFlightRoute = currentRouteKey;
+    const runPromise = (async () => {
+        try {
+            const res = await apiCall('getExternalUnitsV1', { routeKey: currentRouteKey });
+            throwIfStaleRouteRequestContext(requestContext);
+            if (!res || !res.success) {
+                throw new Error((res && res.error) ? res.error : 'Неуспешно зареждане на самостоятелните обекти.');
+            }
+
+            window._cachedExternalUnitsRoute = currentRouteKey;
+            window._cachedExternalUnits = Array.isArray(res.units) ? res.units : [];
+            window._cachedExternalUnitStatements = Array.isArray(res.unitStatements) ? res.unitStatements : [];
+            window._cachedExternalReconciliation = Array.isArray(res.reconciliationByPeriod) ? res.reconciliationByPeriod : [];
+            window._cachedExternalPendingPayments = Array.isArray(res.pendingPayments) ? res.pendingPayments : [];
+            window._cachedExternalUnitActions = Array.isArray(res.actions) ? res.actions : [];
+
+            const sel = document.getElementById('extUnitSelect');
+            if (sel) {
+                const prevVal = sel.value;
+                sel.innerHTML = '<option value="">➕ Нов самостоятелен обект</option>';
+                window._cachedExternalUnits.forEach(u => {
+                    sel.appendChild(new Option(`${u.unitId} — ${u.name}`, u.unitId));
+                });
+                if (prevVal && window._cachedExternalUnits.some(u => u.unitId === prevVal)) {
+                    sel.value = prevVal;
+                }
+                if (!silent) extUnitSelectionChanged();
+            }
+
+            const filterSel = document.getElementById('extUnitStatementFilter');
+            if (filterSel) {
+                const prevFilter = filterSel.value || 'ALL';
+                filterSel.innerHTML = '<option value="ALL">Всички самостоятелни обекти</option>';
+                window._cachedExternalUnits.forEach(u => {
+                    filterSel.appendChild(new Option(`${u.unitId} — ${u.name}`, u.unitId));
+                });
+                if (prevFilter === 'ALL' || window._cachedExternalUnits.some(u => u.unitId === prevFilter)) {
+                    filterSel.value = prevFilter;
+                }
+            }
+
+            populateExternalUnitSelects_();
+            renderExternalUnitsRegistry();
+            renderExternalUnitsStatementView();
+            renderExternalUnitActions();
+            renderPendingExternalPayments_();
+            updateExternalIdealWarningBanner_();
+        } catch (err) {
+            if (!isStaleRouteRequestError(err)) {
+                const errMsg = (err && err.message) ? err.message : 'Грешка при зареждане.';
+                setSectionAsyncState_('extUnitsRegistryBody', 'ERROR', { colspan: 7, errorText: errMsg, retryAction: 'loadExternalUnitsData(false)' });
+                setSectionAsyncState_('extUnitsStatementBody', 'ERROR', { colspan: 8, errorText: errMsg, retryAction: 'loadExternalUnitsData(false)' });
+                setSectionAsyncState_('extUnitsReconciliationBody', 'ERROR', { colspan: 7, errorText: errMsg, retryAction: 'loadExternalUnitsData(false)' });
+                setSectionAsyncState_('extUnitActionsBody', 'ERROR', { colspan: 6, errorText: errMsg, retryAction: 'loadExternalUnitsData(false)' });
+            }
+        } finally {
+            window._extUnitsInFlightPromise = null;
+        }
+    })();
+    window._extUnitsInFlightPromise = runPromise;
+    return runPromise;
 };
 
 function updateExternalIdealWarningBanner_() {
@@ -7843,6 +7983,7 @@ window.renderExternalUnitsStatementView = function() {
         const rows = [];
         filtered.forEach(st => {
             (st.periods || []).forEach(p => {
+                if (isFutureTechnicalPeriodUI(p.period)) return;
                 if (p.chargedCents === 0 && p.paidCents === 0 && p.endingDebtCents === 0 && p.endingAdvanceCents === 0) return;
                 const mgmt = p.buckets.management;
                 const rep = p.buckets.repairFund;
