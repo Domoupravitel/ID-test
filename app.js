@@ -5927,7 +5927,7 @@ window.submitIncomeV2 = async function() {
     const extUnitSelEl = document.getElementById("v2IncomeExtUnit");
     const selectedExtUnitId = ((apt === "EXTERNAL_UNIT" || apt === "EXTERNAL") && extUnitSelEl) ? extUnitSelEl.value : "";
 
-    if (apt === "EXTERNAL_UNIT") {
+    if (apt === "EXTERNAL_UNIT" || (apt === "EXTERNAL" && selectedExtUnitId)) {
         if (!selectedExtUnitId) {
             showToast("Моля, изберете самостоятелен обект.", "error");
             return;
@@ -5955,12 +5955,15 @@ window.submitIncomeV2 = async function() {
             } catch (e) {}
         };
         const extUnitUiSuccess_ = window.extUnitUiSuccess_ || function(res, req) {
+            const ALLOWED_EXT_COMPONENTS = ['rupBase', 'rupSurcharge', 'repairFund', 'contractRent'];
             if (!res || res.success !== true) return false;
             const finStatus = res.financialStatus || res.status;
             if (res.status !== 'APPLIED' || finStatus !== 'APPLIED') return false;
+            if (res.projectionSyncStatus !== undefined && res.projectionSyncStatus !== 'COMPLETE') return false;
             if (!req || res.paymentId !== req.paymentId) return false;
-            if (res.unitId !== undefined && res.unitId !== req.unitId) return false;
-            if (res.period !== undefined && res.period !== req.period) return false;
+            if (!res.unitId || res.unitId !== req.unitId) return false;
+            if (!res.period || res.period !== req.period) return false;
+            if (req.requestFingerprint && res.requestFingerprint && res.requestFingerprint !== req.requestFingerprint) return false;
             const expectedCents = Math.round(Number(req.amount) * 100);
             const receivedCents = Number(res.receivedCents);
             const allocatedCents = Number(res.allocatedCents);
@@ -5973,6 +5976,7 @@ window.submitIncomeV2 = async function() {
             let lineSum = 0;
             for (const l of res.allocations) {
                 if (!l || !Number.isSafeInteger(l.amountCents) || l.amountCents <= 0) return false;
+                if (!l.component || ALLOWED_EXT_COMPONENTS.indexOf(l.component) === -1) return false;
                 lineSum += l.amountCents;
             }
             return lineSum === allocatedCents;
@@ -6187,32 +6191,7 @@ window.submitIncomeV2 = async function() {
         if (editId) {
             v2CancelEdit();
         } else {
-
-            if (apt === "EXTERNAL" && selectedExtUnitId) {
-                try {
-                    const extPayId = 'manual_' + recordData.timestamp + '_' + selectedExtUnitId;
-                    await apiCall('recordExternalUnitPaymentV1', {
-                        routeKey: operationContext.routeKey,
-                        pin: operationPin,
-                        request: JSON.stringify({
-                            paymentId: extPayId,
-                            unitId: selectedExtUnitId,
-                            period: period,
-                            category: category,
-                            amount: amount,
-                            docNum: docNum,
-                            note: note,
-                            source: 'manual',
-                            timestamp: recordData.timestamp,
-                            skipIncomeWrite: true
-                        })
-                    }, operationContext);
-                    if (typeof loadExternalUnitsData === 'function') loadExternalUnitsData(true);
-                } catch (extErr) {
-                    console.warn("External unit payment sync warning:", extErr);
-                }
-            }
-            
+            // P0.5: Legacy dual-write (EXTERNAL + selectedExtUnitId) removed — routed exclusively through canonical EXTERNAL_UNIT flow above.
             // Връзка с V1: Ако е от апартамент, запиши го и като плащане във V1
             if (apt !== "EXTERNAL" && category === "Управление и поддръжка") {
                 try {
@@ -7009,10 +6988,14 @@ window.updateV2DistAvailableSum = async function() {
 
         // 1. Server authoritative balances (includes СО payments, Paid Apartment ART51 surcharges, Rent mapping, Repair Fund, Maintenance)
         let serverBalancesAuthoritative = false;
+        let serverIncompleteReason = '';
         try {
             const srvRes = await apiCall('getDistributableBalancesV2', { routeKey: currentRouteKey });
             if (srvRes && srvRes.success && Array.isArray(srvRes.categories)) {
-                serverBalancesAuthoritative = true;
+                serverBalancesAuthoritative = (srvRes.authoritative !== false && srvRes.completenessStatus !== 'UNVERIFIED');
+                if (!serverBalancesAuthoritative) {
+                    serverIncompleteReason = Array.isArray(srvRes.incompleteSources) ? srvRes.incompleteSources.join(', ') : 'UNVERIFIED';
+                }
                 srvRes.categories.forEach(item => {
                     const catKey = item && (item.key || item.category);
                     if (catKey && Number.isFinite(item.availableCents)) {
@@ -7021,10 +7004,17 @@ window.updateV2DistAvailableSum = async function() {
                 });
             }
         } catch (srvErr) {
-            console.warn("getDistributableBalancesV2 fallback to client calculation:", srvErr);
+            serverIncompleteReason = (srvErr && srvErr.message) ? srvErr.message : 'SERVER_UNAVAILABLE';
+            console.warn("getDistributableBalancesV2 fallback to informational client calculation:", srvErr);
+        }
+        window._v2DistBalanceAuthoritative = serverBalancesAuthoritative;
+        window._v2DistBalanceIncompleteReason = serverIncompleteReason;
+        const distSubmitBtn = document.getElementById("v2DistSubmitBtn");
+        if (distSubmitBtn && !(selectedCats.length === 1 && selectedCats[0] === 'maintenance')) {
+            distSubmitBtn.disabled = !serverBalancesAuthoritative;
         }
 
-        // 2. Client Firestore fallback ONLY if server authoritative balances failed
+        // 2. Client Firestore informational fallback ONLY if server authoritative balances failed (NEVER authorizes distribution)
         if (!serverBalancesAuthoritative && window.fb && window.fb.getDocs && window.db) {
             const { collection, getDocs, query, where } = window.fb;
             const db = window.db;
@@ -7407,72 +7397,8 @@ window.submitDistributionV2 = async function() {
         }
 
         if (!serverDistSaved) {
-            const recordData = {
-                routeKey: operationContext.routeKey,
-                period: period,
-                category: category,
-                amount: amount,
-                amountCents: amountCents,
-                type: type,
-                note: note,
-                apts: Object.freeze(allocationPlan.allocations.map(allocation => allocation.apartment)),
-                details: distributedDetails,
-                sourceBreakdown: JSON.stringify(clientSourceBreakdown),
-                sourceBreakdownSummary: sourceBreakdownSummary,
-                timestamp: new Date().getTime()
-            };
-
-            try {
-                assertFinancialOperationContextCurrent(operationContext);
-                const distSaveRes = await apiCall('saveDistributionV2', {
-                    routeKey: operationContext.routeKey,
-                    pin: sessionStorage.getItem("adminAuth_" + operationContext.routeKey) || getStoredPin(),
-                    request: JSON.stringify(recordData)
-                }, operationContext);
-                assertFinancialOperationContextCurrent(operationContext);
-                assertSuccessfulApiResult(distSaveRes, "Записването на разпределението");
-            } catch (fbErr) {
-                if (isStaleRouteRequestError(fbErr)) throw fbErr;
-                assertFinancialOperationContextCurrent(operationContext, fbErr);
-                if (!isFirestorePermissionFallbackError(fbErr)) {
-                    if (completedBalancePayments.length) {
-                        const completedText = completedBalancePayments.map(item =>
-                            item.apartment + " (" + item.amount.toFixed(2) + ")").join(", ");
-                        throw createFinancialPartialCompletionError_(
-                            "Плащанията са извършени за: " + completedText +
-                                ", но записът за разпределението не е създаден. Не повтаряйте операцията без операторска проверка.",
-                            "distribution-persistence",
-                            { completedPayments: completedBalancePayments, distributionPersisted: false },
-                            fbErr
-                        );
-                    }
-                    throw fbErr;
-                }
-                try {
-                    console.warn("Fallback to localStorage for distributionsV2", fbErr);
-                    const storageKey = 'distributionsV2_' + operationContext.routeKey;
-                    const local = readLocalFinancialRecords_(storageKey);
-                    local.push({ ...recordData, id: 'loc_' + new Date().getTime() });
-                    assertFinancialOperationContextCurrent(operationContext);
-                    localStorage.setItem(storageKey, JSON.stringify(local));
-                    assertFinancialOperationContextCurrent(operationContext);
-                } catch (fallbackError) {
-                    if (isStaleRouteRequestError(fallbackError)) throw fallbackError;
-                    assertFinancialOperationContextCurrent(operationContext, fallbackError);
-                    if (completedBalancePayments.length) {
-                        const completedText = completedBalancePayments.map(item =>
-                            item.apartment + " (" + item.amount.toFixed(2) + ")").join(", ");
-                        throw createFinancialPartialCompletionError_(
-                            "Плащанията са извършени за: " + completedText +
-                                ", но локалният запис за разпределението не е създаден. Не повтаряйте операцията без операторска проверка.",
-                            "distribution-local-persistence",
-                            { completedPayments: completedBalancePayments, distributionPersisted: false },
-                            fallbackError
-                        );
-                    }
-                    throw fallbackError;
-                }
-            }
+            // P0.3: Single Authoritative Distribution Writer — NEVER fall back to unvalidated client or localStorage write.
+            throw new Error("Разпределянето не бе потвърдено от авторитетния сървър (distributeIncomeV2). Операцията е прекратена без локален запис.");
         }
 
         // Синхронизираме Firebase с актуалните данни от Google Sheets (салда и отчети)
