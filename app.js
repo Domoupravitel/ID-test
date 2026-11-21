@@ -5677,35 +5677,24 @@ window.v2LoadPaymentDue = async function(operationContext) {
 // по взет кредит, независимо от обичайния оперативен баланс.
 // ==============================================
 async function addCreditLiabilityDelta_(operationContext, originalDelta, remainingDelta) {
-    if (!window.fb || !window.db) return;
-    const { routeDoc, mutationDoc, getDoc, setDoc } = window.fb;
-    const db = window.db;
     assertFinancialOperationContextCurrent(operationContext);
     if (typeof operationContext.apartment !== "string" || !operationContext.apartment) {
         throw new TypeError("Credit liability operation requires an apartment-bound context");
     }
     const operationRouteKey = operationContext.routeKey;
     const operationApartment = operationContext.apartment;
-    const docId = operationRouteKey + "_" + operationApartment;
-    const readRef = routeDoc(db, "creditLiabilitiesV2", docId, operationRouteKey);
-    const writeAuthority = mutationDoc("creditLiabilitiesV2", docId, operationRouteKey);
-
-    let current = { routeKey: operationRouteKey, apt: operationApartment, original: 0, remaining: 0 };
-    const snap = await getDoc(readRef);
-    assertFinancialOperationContextCurrent(operationContext);
-    if (snap.exists()) current = { ...current, ...snap.data() };
-
-    const newOriginal = (parseFloat(current.original) || 0) + originalDelta;
-    const newRemaining = Math.max(0, (parseFloat(current.remaining) || 0) + remainingDelta);
-
-    await setDoc(writeAuthority, {
+    const pin = sessionStorage.getItem("adminAuth_" + operationRouteKey) || getStoredPin();
+    const res = await apiCall('saveCreditLiabilityV2', {
         routeKey: operationRouteKey,
-        apt: operationApartment,
-        original: newOriginal,
-        remaining: newRemaining,
-        lastUpdated: new Date().getTime()
-    });
+        pin: pin,
+        request: JSON.stringify({
+            apartment: operationApartment,
+            originalDelta: originalDelta,
+            remainingDelta: remainingDelta
+        })
+    }, operationContext);
     assertFinancialOperationContextCurrent(operationContext);
+    assertSuccessfulApiResult(res, "Записването на кредитното задължение");
 }
 
 window.loadCreditLiabilitiesRegister = async function(operationContext) {
@@ -5952,64 +5941,202 @@ window.submitIncomeV2 = async function() {
             return;
         }
 
-        const btn = document.getElementById("v2SubmitBtn");
-        btn.disabled = true;
-        btn.textContent = "Записване...";
-        try {
-            assertFinancialOperationContextCurrent(operationContext);
-            const ts = new Date().getTime();
-            const extPayId = (window._currentExtPaymentId && window._currentExtPaymentUnitId === selectedExtUnitId)
-                ? window._currentExtPaymentId
-                : ('manual_' + ts + '_' + selectedExtUnitId);
-            window._currentExtPaymentId = extPayId;
-            window._currentExtPaymentUnitId = selectedExtUnitId;
-
-            const payRes = await apiCall('recordExternalUnitPaymentV1', {
-                routeKey: operationContext.routeKey,
-                pin: operationPin,
-                request: JSON.stringify({
-                    paymentId: extPayId,
-                    unitId: selectedExtUnitId,
-                    period: period,
-                    category: "Плащане за СО",
-                    amount: amount,
-                    docNum: docNum,
-                    note: note,
-                    basis: note,
-                    source: 'manual',
-                    timestamp: ts,
-                    expectedDebtFingerprint: window._lastExtPaymentPreviewFingerprint || undefined,
-                    skipIncomeWrite: false
-                })
-            }, operationContext);
-            assertFinancialOperationContextCurrent(operationContext);
-            if (!payRes || !payRes.success) {
-                throw new Error((payRes && payRes.error) ? payRes.error : "Грешка при запис на плащане за самостоятелен обект.");
+        const extPendingKey = 'extUnitPendingV1_' + operationContext.routeKey;
+        const readExtPending = () => {
+            try {
+                const raw = sessionStorage.getItem(extPendingKey);
+                return raw ? JSON.parse(raw) : null;
+            } catch (e) { return null; }
+        };
+        const writeExtPending = (val) => {
+            try {
+                if (val) sessionStorage.setItem(extPendingKey, JSON.stringify(val));
+                else sessionStorage.removeItem(extPendingKey);
+            } catch (e) {}
+        };
+        const extUnitUiSuccess_ = window.extUnitUiSuccess_ || function(res, req) {
+            if (!res || res.success !== true) return false;
+            const finStatus = res.financialStatus || res.status;
+            if (res.status !== 'APPLIED' || finStatus !== 'APPLIED') return false;
+            if (!req || res.paymentId !== req.paymentId) return false;
+            if (res.unitId !== undefined && res.unitId !== req.unitId) return false;
+            if (res.period !== undefined && res.period !== req.period) return false;
+            const expectedCents = Math.round(Number(req.amount) * 100);
+            const receivedCents = Number(res.receivedCents);
+            const allocatedCents = Number(res.allocatedCents);
+            const unallocatedCents = Number(res.unallocatedAdvanceCents || 0);
+            if (!Number.isSafeInteger(receivedCents) || receivedCents !== expectedCents) return false;
+            if (!Number.isSafeInteger(allocatedCents) || allocatedCents < 0) return false;
+            if (!Number.isSafeInteger(unallocatedCents) || unallocatedCents < 0) return false;
+            if (allocatedCents + unallocatedCents !== receivedCents) return false;
+            if (!Array.isArray(res.allocations)) return false;
+            let lineSum = 0;
+            for (const l of res.allocations) {
+                if (!l || !Number.isSafeInteger(l.amountCents) || l.amountCents <= 0) return false;
+                lineSum += l.amountCents;
             }
+            return lineSum === allocatedCents;
+        };
+        window.extUnitUiSuccess_ = extUnitUiSuccess_;
 
+        const btn = document.getElementById("v2SubmitBtn");
+        const feedbackEl = document.getElementById("fin01PaymentFeedback");
+        let pending = readExtPending();
+        if (pending && (pending.unitId !== selectedExtUnitId || pending.period !== period || Math.round(Number(pending.amount) * 100) !== Math.round(amount * 100))) {
+            // Different payment while previous is unresolved -> check previous status first or clear if idle
+            if (pending.uiState !== 'AMBIGUOUS_UNKNOWN' && pending.uiState !== 'RECOVERY_REQUIRED') {
+                pending = null;
+                writeExtPending(null);
+            }
+        }
+
+        const isStatusCheckStep = Boolean(pending && pending.uiState === 'AMBIGUOUS_UNKNOWN');
+        btn.disabled = true;
+        btn.textContent = isStatusCheckStep ? "Проверка на статуса..." : "Записване...";
+
+        const completeExtConfirmation = async (receiptRes) => {
+            writeExtPending(null);
             window._currentExtPaymentId = null;
             window._currentExtPaymentUnitId = null;
             window._lastExtPaymentPreviewFingerprint = null;
-
             document.getElementById("v2IncomeAmount").value = "";
             document.getElementById("v2IncomeDoc").value = "";
             document.getElementById("v2IncomeNote").value = "";
             const previewBox = document.getElementById("extUnitPaymentPreviewBox");
             if (previewBox) previewBox.style.display = "none";
-
-            showToast(SAVED_SYNC_TOAST_MSG, "neutral", 3000);
+            if (feedbackEl) {
+                feedbackEl.setAttribute('data-ext-state', 'CONFIRMED');
+                feedbackEl.textContent = 'Плащането за самостоятелен обект е потвърдено. ' + (receiptRes.allocationSummary || '');
+            }
+            showToast("Плащането за самостоятелен обект е потвърдено!", "success", 3500);
             if (typeof loadExternalUnitsData === 'function') await loadExternalUnitsData(true);
             await loadIncomesV2(operationContext);
             await v2LoadPaymentDue(operationContext);
-            if (typeof updateV2DistAvailableSum === 'function') updateV2DistAvailableSum();
+            if (typeof loadDashboardData === 'function') Promise.resolve(loadDashboardData()).catch(() => {});
+            if (typeof updateV2DistAvailableSum === 'function') await updateV2DistAvailableSum();
+        };
+
+        try {
+            assertFinancialOperationContextCurrent(operationContext);
+
+            // PHASE 0.1 (P0.2): On ambiguous/lost-response state, ALWAYS perform read-only status check FIRST!
+            if (isStatusCheckStep) {
+                const stRes = await apiCall('externalUnitPaymentStatus', {
+                    routeKey: operationContext.routeKey,
+                    pin: operationPin,
+                    request: JSON.stringify({ paymentId: pending.paymentId })
+                }, operationContext);
+                assertFinancialOperationContextCurrent(operationContext);
+                if (!stRes || stRes.success !== true) {
+                    if (feedbackEl) {
+                        feedbackEl.setAttribute('data-ext-state', 'AMBIGUOUS_UNKNOWN');
+                        feedbackEl.textContent = 'Статусът не може да бъде проверен в момента. Опитайте „Провери статуса“ отново.';
+                    }
+                    showToast("Статусът не може да бъде проверен. Опитайте „Провери статуса“ отново.", "error");
+                    return;
+                }
+                if (stRes.status === 'APPLIED' && stRes.receipt && extUnitUiSuccess_(stRes.receipt, pending)) {
+                    await completeExtConfirmation(stRes.receipt);
+                    return;
+                }
+                if (stRes.status === 'CONFLICT') {
+                    pending.uiState = 'CONFLICT';
+                    writeExtPending(pending);
+                    if (feedbackEl) {
+                        feedbackEl.setAttribute('data-ext-state', 'CONFLICT');
+                        feedbackEl.textContent = 'Конфликт на идентификатор: заявката изисква административна проверка.';
+                    }
+                    showToast("Конфликт на идентификатор за плащането.", "error");
+                    return;
+                }
+                // PREPARED, PARTIALLY_APPLIED, or NOT_FOUND -> allow safe same-ID recovery
+                pending.uiState = 'RECOVERY_REQUIRED';
+                writeExtPending(pending);
+                if (feedbackEl) {
+                    feedbackEl.setAttribute('data-ext-state', 'RECOVERY_REQUIRED');
+                    feedbackEl.textContent = stRes.message || 'Натиснете „Възстанови същото плащане“, за да приключите безопасно със същия идентификатор.';
+                }
+                showToast("Статусът е проверен. Натиснете „Възстанови същото плащане“ със същия идентификатор.", "neutral");
+                return;
+            }
+
+            const ts = (pending && pending.timestamp) ? pending.timestamp : new Date().getTime();
+            const extPayId = (pending && pending.paymentId)
+                ? pending.paymentId
+                : ((window._currentExtPaymentId && window._currentExtPaymentUnitId === selectedExtUnitId)
+                    ? window._currentExtPaymentId
+                    : ('manual_' + ts + '_' + selectedExtUnitId));
+            window._currentExtPaymentId = extPayId;
+            window._currentExtPaymentUnitId = selectedExtUnitId;
+
+            const reqPayload = {
+                paymentId: extPayId,
+                unitId: selectedExtUnitId,
+                period: period,
+                category: "Плащане за СО",
+                amount: amount,
+                docNum: docNum,
+                note: note,
+                basis: note,
+                source: 'manual',
+                timestamp: ts,
+                expectedDebtFingerprint: window._lastExtPaymentPreviewFingerprint || undefined,
+                skipIncomeWrite: false
+            };
+
+            pending = {
+                paymentId: extPayId,
+                unitId: selectedExtUnitId,
+                period: period,
+                amount: amount,
+                timestamp: ts,
+                uiState: 'AMBIGUOUS_UNKNOWN'
+            };
+            writeExtPending(pending);
+
+            const payRes = await apiCall('recordExternalUnitPaymentV1', {
+                routeKey: operationContext.routeKey,
+                pin: operationPin,
+                request: JSON.stringify(reqPayload)
+            }, operationContext);
+            assertFinancialOperationContextCurrent(operationContext);
+            if (payRes && payRes.success === false) {
+                const errText = String(payRes.error || '');
+                // Proven pre-commit validation/stale errors clear pending; conflicts lock; unknown errors keep AMBIGUOUS_UNKNOWN
+                if (errText.indexOf('EXT_UNIT_PAYMENT_CONFLICT') !== -1) {
+                    pending.uiState = 'CONFLICT';
+                    writeExtPending(pending);
+                } else if (errText.indexOf('EXT_UNIT_STALE_PREVIEW') !== -1 || errText.indexOf('EXT_UNIT_PAYMENT_VALIDATION') !== -1 || errText.indexOf('EXT_UNIT_NOT_FOUND') !== -1 || errText.indexOf('EXT_UNIT_CONTRADICTORY_BASIS') !== -1) {
+                    writeExtPending(null);
+                    window._currentExtPaymentId = null;
+                }
+                throw new Error(errText || "Грешка при запис на плащане за самостоятелен обект.");
+            }
+            if (!extUnitUiSuccess_(payRes, reqPayload)) {
+                throw new Error("Отговорът от сървъра не съдържа валидна канонична разписка. Натиснете „Провери статуса“.");
+            }
+
+            await completeExtConfirmation(payRes);
         } catch (extErr) {
             if (!isStaleRouteRequestError(extErr) && isFinancialOperationContextCurrent(operationContext)) {
+                const curPending = readExtPending();
+                if (curPending && curPending.uiState === 'AMBIGUOUS_UNKNOWN' && feedbackEl) {
+                    feedbackEl.setAttribute('data-ext-state', 'AMBIGUOUS_UNKNOWN');
+                    feedbackEl.textContent = 'Отговорът от сървъра не е потвърден. Натиснете „Провери статуса“ преди всяка друга стъпка.';
+                }
                 showToast("Грешка при запис на плащане за самостоятелен обект: " + (extErr.message || extErr), "error");
             }
         } finally {
             if (isFinancialOperationContextCurrent(operationContext)) {
-                btn.disabled = false;
-                btn.textContent = "➕ Добави приход";
+                const curPending = readExtPending();
+                btn.disabled = !!(curPending && curPending.uiState === 'CONFLICT');
+                if (curPending && curPending.uiState === 'AMBIGUOUS_UNKNOWN') {
+                    btn.textContent = "Провери статуса";
+                } else if (curPending && curPending.uiState === 'RECOVERY_REQUIRED') {
+                    btn.textContent = "Възстанови същото плащане";
+                } else {
+                    btn.textContent = "➕ Добави приход";
+                }
             }
         }
         return;
@@ -6048,18 +6175,18 @@ window.submitIncomeV2 = async function() {
     let incomeSuccessMessage = editId ? "Успешно редактиран приход!" : SAVED_SYNC_TOAST_MSG;
 
     try {
-        const { mutationCollection, mutationDoc, addDoc, updateDoc } = window.fb;
         assertFinancialOperationContextCurrent(operationContext);
-
+        const saveRes = await apiCall('saveIncomeV2', {
+            routeKey: operationContext.routeKey,
+            pin: operationPin,
+            request: JSON.stringify(Object.assign({}, recordData, editId ? { editId: operationContext.documentId } : {}))
+        }, operationContext);
+        assertFinancialOperationContextCurrent(operationContext);
+        assertSuccessfulApiResult(saveRes, "Записването на прихода");
+        primaryIncomePersisted = true;
         if (editId) {
-            await updateDoc(mutationDoc("incomesV2", operationContext.documentId, operationContext.routeKey), recordData);
-            primaryIncomePersisted = true;
-            assertFinancialOperationContextCurrent(operationContext);
             v2CancelEdit();
         } else {
-            await addDoc(mutationCollection("incomesV2", operationContext.routeKey), recordData);
-            primaryIncomePersisted = true;
-            assertFinancialOperationContextCurrent(operationContext);
 
             if (apt === "EXTERNAL" && selectedExtUnitId) {
                 try {
@@ -6261,7 +6388,6 @@ window.deleteIncomeV2 = async function(id) {
     if (!confirm("Сигурни ли сте, че искате да изтриете този приход?")) return;
     
     try {
-        const { deleteDoc, mutationDoc } = window.fb;
         assertFinancialOperationContextCurrent(operationContext);
         const storageKey = 'incomesV2_' + operationContext.routeKey;
         if (id.startsWith('loc_')) {
@@ -6269,8 +6395,13 @@ window.deleteIncomeV2 = async function(id) {
             localIncomes = localIncomes.filter(r => r.id !== id);
             localStorage.setItem(storageKey, JSON.stringify(localIncomes));
         } else {
-            await deleteDoc(mutationDoc("incomesV2", operationContext.documentId, operationContext.routeKey));
+            const delRes = await apiCall('deleteIncomeV2', {
+                routeKey: operationContext.routeKey,
+                pin: sessionStorage.getItem("adminAuth_" + operationContext.routeKey) || getStoredPin(),
+                request: JSON.stringify({ id: operationContext.documentId })
+            }, operationContext);
             assertFinancialOperationContextCurrent(operationContext);
+            assertSuccessfulApiResult(delRes, "Изтриването на прихода");
         }
         showToast("Приходът е изтрит.", "success");
         await loadIncomesV2(operationContext);
@@ -6652,11 +6783,15 @@ window.saveExternalPayer = async function() {
     let primaryPayerPersisted = false;
 
     try {
-        const { mutationCollection, addDoc } = window.fb;
         assertFinancialOperationContextCurrent(operationContext);
-        await addDoc(mutationCollection("externalPayers", operationContext.routeKey), recordData);
+        const saveRes = await apiCall('saveExternalPayerV2', {
+            routeKey: operationContext.routeKey,
+            pin: sessionStorage.getItem("adminAuth_" + operationContext.routeKey) || getStoredPin(),
+            request: JSON.stringify(recordData)
+        }, operationContext);
+        assertFinancialOperationContextCurrent(operationContext);
+        assertSuccessfulApiResult(saveRes, "Записването на външния платец");
         primaryPayerPersisted = true;
-        assertFinancialOperationContextCurrent(operationContext);
         showToast("Успешно записан външен платец!", "success");
 
         // Clear input fields
@@ -6703,7 +6838,6 @@ window.deleteExternalPayer = async function(id) {
     if (!confirm("Сигурни ли сте, че искате да изтриете този външен платец?")) return;
 
     try {
-        const { deleteDoc, mutationDoc } = window.fb;
         assertFinancialOperationContextCurrent(operationContext);
         const storageKey = 'externalPayers_' + operationContext.routeKey;
         if (id.startsWith('loc_')) {
@@ -6711,8 +6845,13 @@ window.deleteExternalPayer = async function(id) {
             localPayers = localPayers.filter(r => r.id !== id);
             localStorage.setItem(storageKey, JSON.stringify(localPayers));
         } else {
-            await deleteDoc(mutationDoc("externalPayers", operationContext.documentId, operationContext.routeKey));
+            const delRes = await apiCall('deleteExternalPayerV2', {
+                routeKey: operationContext.routeKey,
+                pin: sessionStorage.getItem("adminAuth_" + operationContext.routeKey) || getStoredPin(),
+                request: JSON.stringify({ id: operationContext.documentId })
+            }, operationContext);
             assertFinancialOperationContextCurrent(operationContext);
+            assertSuccessfulApiResult(delRes, "Изтриването на външния платец");
         }
         showToast("Външният платец е изтрит.", "success");
         await loadExternalPayers(operationContext);
@@ -6868,10 +7007,12 @@ window.updateV2DistAvailableSum = async function() {
         ];
         allCategories.forEach(c => { balancesCents[c] = 0; });
 
-        // 1. Server authoritative balances (includes СО payments, Rent mapping, Repair Fund, Maintenance)
+        // 1. Server authoritative balances (includes СО payments, Paid Apartment ART51 surcharges, Rent mapping, Repair Fund, Maintenance)
+        let serverBalancesAuthoritative = false;
         try {
             const srvRes = await apiCall('getDistributableBalancesV2', { routeKey: currentRouteKey });
             if (srvRes && srvRes.success && Array.isArray(srvRes.categories)) {
+                serverBalancesAuthoritative = true;
                 srvRes.categories.forEach(item => {
                     const catKey = item && (item.key || item.category);
                     if (catKey && Number.isFinite(item.availableCents)) {
@@ -6883,8 +7024,8 @@ window.updateV2DistAvailableSum = async function() {
             console.warn("getDistributableBalancesV2 fallback to client calculation:", srvErr);
         }
 
-        // 2. Client Firestore reconciliation (for any client-direct incomesV2 / distributionsV2)
-        if (window.fb && window.fb.getDocs && window.db) {
+        // 2. Client Firestore fallback ONLY if server authoritative balances failed
+        if (!serverBalancesAuthoritative && window.fb && window.fb.getDocs && window.db) {
             const { collection, getDocs, query, where } = window.fb;
             const db = window.db;
             const [snapInc, snapDist, snapApts] = await Promise.all([
@@ -7283,8 +7424,13 @@ window.submitDistributionV2 = async function() {
 
             try {
                 assertFinancialOperationContextCurrent(operationContext);
-                await addDoc(mutationCollection("distributionsV2", operationContext.routeKey), recordData);
+                const distSaveRes = await apiCall('saveDistributionV2', {
+                    routeKey: operationContext.routeKey,
+                    pin: sessionStorage.getItem("adminAuth_" + operationContext.routeKey) || getStoredPin(),
+                    request: JSON.stringify(recordData)
+                }, operationContext);
                 assertFinancialOperationContextCurrent(operationContext);
+                assertSuccessfulApiResult(distSaveRes, "Записването на разпределението");
             } catch (fbErr) {
                 if (isStaleRouteRequestError(fbErr)) throw fbErr;
                 assertFinancialOperationContextCurrent(operationContext, fbErr);

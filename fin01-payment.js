@@ -100,7 +100,7 @@ async function fin01RefreshPaymentView_() {
     const controls = document.getElementById('fin01PaymentControls');
     if (!controls) return;
     controls.hidden = true;
-    if (!apt || apt === 'EXTERNAL') return;
+    if (!apt || apt === 'EXTERNAL' || apt === 'EXTERNAL_UNIT') return;
     try {
         const result = await apiCall('fin01Status', { routeKey: context.routeKey, pin: getStoredPin() }, context);
         if (!isFinancialOperationContextCurrent(context) || document.getElementById('v2IncomeApt').value !== apt) return;
@@ -234,7 +234,7 @@ function fin01CompleteUiConfirmation_(state, result, context) {
 
 async function submitApartmentFin01IfActive_() {
     const apt = document.getElementById('v2IncomeApt').value;
-    if (!apt || apt === 'EXTERNAL') return false;
+    if (!apt || apt === 'EXTERNAL' || apt === 'EXTERNAL_UNIT') return false;
     const context = captureFinancialOperationContext();
     const state = fin01PaymentView_();
     if (state.inFlight || state.rejected || state.uiState === 'CONFLICT') return true;
