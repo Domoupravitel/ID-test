@@ -2003,14 +2003,14 @@ async function loadApartmentData(apartment) {
             } else {
                 const extStmt = await bgApiCall('getExternalUnitsStatementV1', { routeKey: currentRouteKey }).catch(() => null);
                 const units = (extStmt && extStmt.success && Array.isArray(extStmt.unitStatements)) ? extStmt.unitStatements : [];
-                const hasPart = units.some(us => us && us.unit && us.unit.managementParticipation);
+                const hasPart = units.some(us => { const u = (us && us.unit) || us || {}; return Boolean(u.managementParticipation); });
                 if (extNote) extNote.style.display = hasPart ? "block" : "none";
                 if (extSect && units.length > 0) {
                     window._publicExtUnitStatements_ = units;
                     const sel = document.getElementById("publicExtUnitSelect");
                     if (sel) {
                         sel.innerHTML = units.map((us, idx) => {
-                            const u = us.unit || {};
+                            const u = us.unit || us || {};
                             return `<option value="${idx}">${reportEscape_(u.unitId || us.unitId || '')} — ${reportEscape_(u.name || '')}</option>`;
                         }).join('');
                     }
@@ -2033,7 +2033,7 @@ window.renderPublicExternalUnitCard_ = function () {
     if (!sel || !box || !units.length) return;
     const us = units[Number(sel.value) || 0];
     if (!us) return;
-    const u = us.unit || {};
+    const u = us.unit || us || {};
     const idealTxt = u.idealPartsStatus === 'ESTABLISHED'
         ? `${Number(u.idealPartsPercent || 0).toFixed(2)}% (Установени)`
         : 'Неустановени';
