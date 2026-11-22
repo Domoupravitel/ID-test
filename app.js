@@ -3590,6 +3590,66 @@ window.submitBulkIdealParts = async function () {
     }
 };
 
+window.formatElevatorChipsUiState_ = function (res, selectedPeriod) {
+    const parsePeriodSortable = function (p) {
+        const m = /^(0[1-9]|1[0-2])\.(20\d{2})$/.exec(String(p || '').trim());
+        return m ? (Number(m[2]) * 100 + Number(m[1])) : null;
+    };
+    const effPeriod = String((res && res.period) || selectedPeriod || '').trim();
+    const effInt = parsePeriodSortable(effPeriod);
+
+    if (!res || res.success !== true) {
+        return {
+            state: 'INACTIVE',
+            toggleChecked: false,
+            statusText: 'Статус: ИЗКЛЮЧЕНО'
+        };
+    }
+
+    const activeForPeriod = res.activeForPeriod === true;
+    if (activeForPeriod) {
+        const since = res.activeSincePeriod || res.effectiveFromPeriod || effPeriod || '-';
+        return {
+            state: 'ACTIVE_FOR_PERIOD',
+            toggleChecked: true,
+            statusText: effPeriod
+                ? ('Статус: АКТИВНО за период ' + effPeriod + ' (от период ' + since + ')')
+                : ('Статус: АКТИВНО (от период ' + since + ')')
+        };
+    }
+
+    let scheduledPeriod = res.scheduledActivationPeriod || null;
+    if (!scheduledPeriod && effInt !== null) {
+        const hist = Array.isArray(res.history) && res.history.length > 0
+            ? res.history.slice().sort(function (a, b) {
+                return (parsePeriodSortable(a && a.effectiveFromPeriod) || 0) - (parsePeriodSortable(b && b.effectiveFromPeriod) || 0);
+            })
+            : (res.active === true && res.effectiveFromPeriod ? [{ active: true, effectiveFromPeriod: res.effectiveFromPeriod }] : []);
+        for (let i = 0; i < hist.length; i++) {
+            const hInt = parsePeriodSortable(hist[i] && hist[i].effectiveFromPeriod);
+            if (hInt !== null && hInt > effInt && hist[i].active === true) {
+                scheduledPeriod = hist[i].effectiveFromPeriod;
+                break;
+            }
+        }
+    }
+
+    if (scheduledPeriod) {
+        return {
+            state: 'SCHEDULED_FUTURE',
+            toggleChecked: false,
+            scheduledActivationPeriod: scheduledPeriod,
+            statusText: 'Статус: ПЛАНИРАНО от бъдещ период ' + scheduledPeriod + (effPeriod ? (' (изключено за ' + effPeriod + ')') : '')
+        };
+    }
+
+    return {
+        state: 'INACTIVE',
+        toggleChecked: false,
+        statusText: 'Статус: ИЗКЛЮЧЕНО (асансьорът се разпределя по основния метод)'
+    };
+};
+
 window.loadElevatorChipsConfigUI = async function () {
     const toggle = document.getElementById('masterElevatorChipsToggle');
     const statusEl = document.getElementById('masterElevatorChipsStatus');
@@ -3601,15 +3661,11 @@ window.loadElevatorChipsConfigUI = async function () {
     try {
         const period = fromEl ? String(fromEl.value || '').trim() : '';
         const res = await apiCall('getElevatorChipsConfigV1', { pin: getStoredPin(), period: period });
-        if (res && res.success) {
-            toggle.checked = res.active === true;
-            if (statusEl) {
-                statusEl.textContent = res.active
-                    ? ('Статус: АКТИВНО (от период ' + (res.effectiveFromPeriod || period || '-') + ')')
-                    : 'Статус: ИЗКЛЮЧЕНО (асансьорът се разпределя по основния метод)';
-            }
-        } else if (statusEl) {
-            statusEl.textContent = 'Статус: ИЗКЛЮЧЕНО';
+        const uiState = window.formatElevatorChipsUiState_(res, period);
+        toggle.checked = uiState.toggleChecked;
+        if (statusEl) {
+            statusEl.setAttribute('data-chips-state', uiState.state);
+            statusEl.textContent = uiState.statusText;
         }
     } catch (e) {
         if (statusEl) statusEl.textContent = 'Неуспешно зареждане на настройката.';
@@ -3633,10 +3689,17 @@ window.saveElevatorChipsConfigUI = async function () {
             request: JSON.stringify({ active: active, effectiveFromPeriod: effectiveFromPeriod })
         });
         if (res && res.success) {
+            const uiState = window.formatElevatorChipsUiState_({
+                success: true,
+                period: effectiveFromPeriod,
+                active: res.active,
+                activeForPeriod: res.activeForPeriod !== undefined ? res.activeForPeriod : res.active,
+                effectiveFromPeriod: res.effectiveFromPeriod || effectiveFromPeriod,
+                history: res.history || []
+            }, effectiveFromPeriod);
             if (statusEl) {
-                statusEl.textContent = res.active
-                    ? ('Статус: АКТИВНО (от период ' + (res.effectiveFromPeriod || effectiveFromPeriod) + ')')
-                    : ('Статус: ИЗКЛЮЧЕНО (от период ' + (res.effectiveFromPeriod || effectiveFromPeriod) + ')');
+                statusEl.setAttribute('data-chips-state', uiState.state);
+                statusEl.textContent = uiState.statusText;
             }
             showToast(res.message || 'Настройката за чипове е запазена.', 'success');
             bgApiCall('forceSync', { pin: getStoredPin() }).then(() => {
@@ -6032,12 +6095,15 @@ window.submitIncomeV2 = async function() {
             const ALLOWED_EXT_COMPONENTS = ['rupBase', 'rupSurcharge', 'repairFund', 'contractRent'];
             if (!res || res.success !== true) return false;
             const finStatus = res.financialStatus || res.status;
-            if (res.status !== 'APPLIED' || finStatus !== 'APPLIED') return false;
-            // P0 FINAL CLOSURE (Section 11): Financial APPLIED receipt confirmation MUST NOT depend on projectionSyncStatus === 'COMPLETE'.
+            // BLOCKER D: Separate financial status from projection/overall status.
+            // Proven financialStatus === 'APPLIED' is valid when overall status is 'APPLIED' or 'PARTIALLY_APPLIED' (projection lag/failure).
+            if (finStatus !== 'APPLIED') return false;
+            if (res.status !== 'APPLIED' && res.status !== 'PARTIALLY_APPLIED') return false;
             if (!req || res.paymentId !== req.paymentId) return false;
+            if (req.routeKey && res.routeKey && res.routeKey !== req.routeKey) return false;
             if (!res.unitId || res.unitId !== req.unitId) return false;
             if (!res.period || res.period !== req.period) return false;
-            if (req.requestFingerprint && res.requestFingerprint && res.requestFingerprint !== req.requestFingerprint) return false;
+            if (req.requestFingerprint && (!res.requestFingerprint || res.requestFingerprint !== req.requestFingerprint)) return false;
             const expectedCents = Math.round(Number(req.amount) * 100);
             const receivedCents = Number(res.receivedCents);
             const allocatedCents = Number(res.allocatedCents);
@@ -6085,6 +6151,33 @@ window.submitIncomeV2 = async function() {
         };
         window.extUnitConfirmationState_ = extUnitConfirmationState_;
 
+        const extUnitResolveStatusOutcome_ = window.extUnitResolveStatusOutcome_ || function(stRes, pendingReq) {
+            if (!stRes || stRes.success !== true) {
+                return { action: 'RETRY_STATUS', uiState: 'AMBIGUOUS_UNKNOWN' };
+            }
+            if (stRes.financialStatus === 'CONFLICT' || stRes.status === 'CONFLICT') {
+                return { action: 'CONFLICT', uiState: 'CONFLICT' };
+            }
+            const candidateReceipt = stRes.receipt
+                ? Object.assign({}, stRes.receipt, {
+                    routeKey: stRes.receipt.routeKey || stRes.routeKey,
+                    financialStatus: stRes.receipt.financialStatus || stRes.financialStatus,
+                    projectionSyncStatus: stRes.receipt.projectionSyncStatus || stRes.projectionSyncStatus
+                })
+                : null;
+            const financiallyApplied = (stRes.financialStatus === 'APPLIED') ||
+                (candidateReceipt && candidateReceipt.financialStatus === 'APPLIED');
+            if (financiallyApplied && candidateReceipt && extUnitUiSuccess_(candidateReceipt, pendingReq)) {
+                return {
+                    action: 'CONFIRM_PAYMENT',
+                    receipt: candidateReceipt,
+                    confirmation: extUnitConfirmationState_(candidateReceipt)
+                };
+            }
+            return { action: 'RECOVERY_REQUIRED', uiState: 'RECOVERY_REQUIRED' };
+        };
+        window.extUnitResolveStatusOutcome_ = extUnitResolveStatusOutcome_;
+
         const btn = document.getElementById("v2SubmitBtn");
         const feedbackEl = document.getElementById("fin01PaymentFeedback");
         let pending = readExtPending();
@@ -6126,15 +6219,22 @@ window.submitIncomeV2 = async function() {
         try {
             assertFinancialOperationContextCurrent(operationContext);
 
-            // PHASE 0.1 (P0.2): On ambiguous/lost-response state, ALWAYS perform read-only status check FIRST!
+            // PHASE 0.1 (P0.2 + Blocker D): On ambiguous/lost-response state, ALWAYS perform read-only status check FIRST!
             if (isStatusCheckStep) {
                 const stRes = await apiCall('externalUnitPaymentStatus', {
                     routeKey: operationContext.routeKey,
                     pin: operationPin,
-                    request: JSON.stringify({ paymentId: pending.paymentId })
+                    request: JSON.stringify({
+                        paymentId: pending.paymentId,
+                        unitId: pending.unitId,
+                        period: pending.period,
+                        amount: pending.amount,
+                        expectedRequestFingerprint: pending.requestFingerprint || undefined
+                    })
                 }, operationContext);
                 assertFinancialOperationContextCurrent(operationContext);
-                if (!stRes || stRes.success !== true) {
+                const outcome = extUnitResolveStatusOutcome_(stRes, pending);
+                if (outcome.action === 'RETRY_STATUS') {
                     if (feedbackEl) {
                         feedbackEl.setAttribute('data-ext-state', 'AMBIGUOUS_UNKNOWN');
                         feedbackEl.textContent = 'Статусът не може да бъде проверен в момента. Опитайте „Провери статуса“ отново.';
@@ -6142,11 +6242,13 @@ window.submitIncomeV2 = async function() {
                     showToast("Статусът не може да бъде проверен. Опитайте „Провери статуса“ отново.", "error");
                     return;
                 }
-                if (stRes.status === 'APPLIED' && stRes.receipt && extUnitUiSuccess_(stRes.receipt, pending)) {
-                    await completeExtConfirmation(stRes.receipt);
+                if (outcome.action === 'CONFIRM_PAYMENT') {
+                    // BLOCKER D: Financial payment is proven APPLIED (even if overall status is PARTIALLY_APPLIED with PENDING/FAILED projection).
+                    // Confirm payment immediately and NEVER initiate a second financial payment or prompt "Възстанови същото плащане".
+                    await completeExtConfirmation(outcome.receipt);
                     return;
                 }
-                if (stRes.status === 'CONFLICT') {
+                if (outcome.action === 'CONFLICT') {
                     pending.uiState = 'CONFLICT';
                     writeExtPending(pending);
                     if (feedbackEl) {
@@ -6156,7 +6258,7 @@ window.submitIncomeV2 = async function() {
                     showToast("Конфликт на идентификатор за плащането.", "error");
                     return;
                 }
-                // PREPARED, PARTIALLY_APPLIED, or NOT_FOUND -> allow safe same-ID recovery
+                // PREPARED or NOT_FOUND (unproven financial commit) -> allow safe same-ID recovery
                 pending.uiState = 'RECOVERY_REQUIRED';
                 writeExtPending(pending);
                 if (feedbackEl) {
@@ -6177,6 +6279,7 @@ window.submitIncomeV2 = async function() {
             window._currentExtPaymentUnitId = selectedExtUnitId;
 
             const reqPayload = {
+                routeKey: operationContext.routeKey,
                 paymentId: extPayId,
                 unitId: selectedExtUnitId,
                 period: period,
@@ -6192,6 +6295,7 @@ window.submitIncomeV2 = async function() {
             };
 
             pending = {
+                routeKey: operationContext.routeKey,
                 paymentId: extPayId,
                 unitId: selectedExtUnitId,
                 period: period,

@@ -1111,7 +1111,7 @@
                                     <label class="admin-label">Брой чипове</label>
                                     <input type="number" id="masterChVal" class="admin-input" placeholder="Напр. 3" min="0" step="1">
                                     <label class="admin-label">От период (MM.YYYY)</label>
-                                    <select id="masterChFrom" class="admin-input"></select>
+                                    <select id="masterChFrom" class="admin-input" onchange="if (typeof window.loadElevatorChipsConfigUI === 'function') window.loadElevatorChipsConfigUI()"></select>
                                     <button class="admin-btn primary" onclick="submitMaster('ЧИПОВЕ')">Запиши за напред</button>
                                 </div>
                             </div>
