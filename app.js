@@ -6091,6 +6091,57 @@ window.submitIncomeV2 = async function() {
                 else sessionStorage.removeItem(extPendingKey);
             } catch (e) {}
         };
+        // BLOCKER B2: Mandatory verified pre-POST persistence (write + readback integrity check)
+        const extUnitPersistPendingVerified_ = window.extUnitPersistPendingVerified_ || function(storage, key, pendingObj) {
+            if (!storage || typeof storage.setItem !== 'function' || typeof storage.getItem !== 'function') {
+                return { ok: false, code: 'PENDING_STORAGE_UNAVAILABLE', error: 'Локалното хранилище (sessionStorage) не е достъпно.' };
+            }
+            if (!pendingObj || typeof pendingObj !== 'object' || !pendingObj.paymentId || !pendingObj.requestFingerprint) {
+                return { ok: false, code: 'PENDING_PAYLOAD_INCOMPLETE', error: 'Непълен пакет за възстановяване преди изпращане.' };
+            }
+            let serialized;
+            try {
+                serialized = JSON.stringify(pendingObj);
+                storage.setItem(key, serialized);
+            } catch (e) {
+                return { ok: false, code: 'PENDING_STORAGE_WRITE_FAILED', error: 'Неуспешен запис в локалното хранилище: ' + String(e && e.message || e) };
+            }
+            let readBackRaw;
+            let readBack;
+            try {
+                readBackRaw = storage.getItem(key);
+                if (!readBackRaw) {
+                    return { ok: false, code: 'PENDING_STORAGE_READBACK_EMPTY', error: 'Записът не може да бъде прочетен обратно от локалното хранилище.' };
+                }
+                readBack = JSON.parse(readBackRaw);
+            } catch (e) {
+                return { ok: false, code: 'PENDING_STORAGE_READBACK_CORRUPT', error: 'Повреден запис при обратно прочитане от локалното хранилище.' };
+            }
+            const coreMatch = readBack &&
+                readBack.paymentId === pendingObj.paymentId &&
+                readBack.routeKey === pendingObj.routeKey &&
+                readBack.unitId === pendingObj.unitId &&
+                readBack.period === pendingObj.period &&
+                Number(readBack.amountCents) === Number(pendingObj.amountCents) &&
+                readBack.requestFingerprint === pendingObj.requestFingerprint;
+            if (!coreMatch) {
+                return { ok: false, code: 'PENDING_STORAGE_READBACK_MISMATCH', error: 'Несъответствие при верификация на локално запазения запис за възстановяване.' };
+            }
+            if (pendingObj.expectedComponents) {
+                const ec = pendingObj.expectedComponents;
+                const rc = readBack.expectedComponents;
+                const compMatch = Boolean(rc) &&
+                    Number(rc.rupBaseCents) === Number(ec.rupBaseCents) &&
+                    Number(rc.rupSurchargeCents) === Number(ec.rupSurchargeCents) &&
+                    Number(rc.repairFundCents) === Number(ec.repairFundCents) &&
+                    Number(rc.contractRentCents) === Number(ec.contractRentCents);
+                if (!compMatch) {
+                    return { ok: false, code: 'PENDING_STORAGE_READBACK_COMPONENTS_MISMATCH', error: 'Несъответствие на финансовите компоненти при обратно прочитане.' };
+                }
+            }
+            return { ok: true, pending: readBack };
+        };
+        window.extUnitPersistPendingVerified_ = extUnitPersistPendingVerified_;
         // BLOCKER C: Synchronous UTF-8 SHA-256 matching backend manualExpenseSha256_ byte-for-byte
         const extUnitSha256Hex_ = window.extUnitSha256Hex_ || function(str) {
             const bytes = (typeof TextEncoder !== 'undefined')
@@ -6215,6 +6266,16 @@ window.submitIncomeV2 = async function() {
                 expectedDebtFingerprint: params.expectedDebtFingerprint || undefined,
                 skipIncomeWrite: Boolean(params.skipIncomeWrite)
             };
+            let expectedComponents = null;
+            if (params.expectedComponents && typeof params.expectedComponents === 'object') {
+                const ec = params.expectedComponents;
+                expectedComponents = {
+                    rupBaseCents: Number.isSafeInteger(Number(ec.rupBaseCents)) ? Number(ec.rupBaseCents) : 0,
+                    rupSurchargeCents: Number.isSafeInteger(Number(ec.rupSurchargeCents)) ? Number(ec.rupSurchargeCents) : 0,
+                    repairFundCents: Number.isSafeInteger(Number(ec.repairFundCents)) ? Number(ec.repairFundCents) : 0,
+                    contractRentCents: Number.isSafeInteger(Number(ec.contractRentCents)) ? Number(ec.contractRentCents) : 0
+                };
+            }
             const requestFingerprint = extUnitBuildCanonicalRequestFingerprint_(reqPayload);
             reqPayload.requestFingerprint = requestFingerprint;
             const pendingRecord = {
@@ -6228,6 +6289,7 @@ window.submitIncomeV2 = async function() {
                 docNum: docNumStr,
                 note: noteStr,
                 basis: basisStr,
+                expectedComponents: expectedComponents,
                 requestFingerprint: requestFingerprint,
                 timestamp: ts,
                 uiState: 'AMBIGUOUS_UNKNOWN'
@@ -6261,12 +6323,29 @@ window.submitIncomeV2 = async function() {
             if (allocatedCents + unallocatedCents !== receivedCents) return false;
             if (!Array.isArray(res.allocations)) return false;
             let lineSum = 0;
+            const actualByComp = { rupBase: 0, rupSurcharge: 0, repairFund: 0, contractRent: 0 };
             for (const l of res.allocations) {
                 if (!l || !Number.isSafeInteger(l.amountCents) || l.amountCents <= 0) return false;
                 if (!l.component || ALLOWED_EXT_COMPONENTS.indexOf(l.component) === -1) return false;
                 lineSum += l.amountCents;
+                actualByComp[l.component] += l.amountCents;
             }
-            return lineSum === allocatedCents;
+            if (lineSum !== allocatedCents) return false;
+            // BLOCKER B1: Exact component-by-component validation (including zero components)
+            if (req.expectedComponents && typeof req.expectedComponents === 'object') {
+                const ec = req.expectedComponents;
+                const expMap = {
+                    rupBase: Number(ec.rupBaseCents !== undefined ? ec.rupBaseCents : (ec.rupBase || 0)),
+                    rupSurcharge: Number(ec.rupSurchargeCents !== undefined ? ec.rupSurchargeCents : (ec.rupSurcharge || 0)),
+                    repairFund: Number(ec.repairFundCents !== undefined ? ec.repairFundCents : (ec.repairFund || 0)),
+                    contractRent: Number(ec.contractRentCents !== undefined ? ec.contractRentCents : (ec.contractRent || 0))
+                };
+                for (const comp of ALLOWED_EXT_COMPONENTS) {
+                    if (!Number.isSafeInteger(expMap[comp]) || expMap[comp] < 0) return false;
+                    if (actualByComp[comp] !== expMap[comp]) return false;
+                }
+            }
+            return true;
         };
         window.extUnitUiSuccess_ = extUnitUiSuccess_;
 
@@ -6351,6 +6430,7 @@ window.submitIncomeV2 = async function() {
             window._currentExtPaymentId = null;
             window._currentExtPaymentUnitId = null;
             window._lastExtPaymentPreviewFingerprint = null;
+            window._lastExtPaymentPreviewComponents = null;
             document.getElementById("v2IncomeAmount").value = "";
             document.getElementById("v2IncomeDoc").value = "";
             document.getElementById("v2IncomeNote").value = "";
@@ -6396,6 +6476,7 @@ window.submitIncomeV2 = async function() {
                         period: pending.period,
                         amount: pending.amount,
                         amountCents: pending.amountCents,
+                        expectedComponents: pending.expectedComponents || undefined,
                         expectedRequestFingerprint: pendingFp,
                         requireFingerprint: true
                     })
@@ -6458,12 +6539,24 @@ window.submitIncomeV2 = async function() {
                 basis: note,
                 source: 'manual',
                 timestamp: ts,
+                expectedComponents: window._lastExtPaymentPreviewComponents || undefined,
                 expectedDebtFingerprint: window._lastExtPaymentPreviewFingerprint || undefined,
                 skipIncomeWrite: false
             });
             const reqPayload = prepared.reqPayload;
             pending = prepared.pendingRecord;
-            writeExtPending(pending);
+            const persistCheck = extUnitPersistPendingVerified_(sessionStorage, extPendingKey, pending);
+            if (!persistCheck || !persistCheck.ok) {
+                window._currentExtPaymentId = null;
+                window._currentExtPaymentUnitId = null;
+                const msg = 'Плащането НЕ е изпратено: неуспешно локално съхранение на данните за възстановяване (' + ((persistCheck && persistCheck.code) || 'STORAGE_ERROR') + '). Моля, опитайте отново.';
+                if (feedbackEl) {
+                    feedbackEl.setAttribute('data-ext-state', 'NOT_SENT_STORAGE_ERROR');
+                    feedbackEl.textContent = msg;
+                }
+                showToast(msg, 'error', 6000);
+                return;
+            }
 
             const payRes = await apiCall('recordExternalUnitPaymentV1', {
                 routeKey: operationContext.routeKey,
@@ -7951,11 +8044,18 @@ window.onV2IncomeExtPaymentInputChanged = function() {
             if (seq !== _extPaymentPreviewSeq) return;
             if (!res || !res.success) {
                 window._lastExtPaymentPreviewFingerprint = null;
+                window._lastExtPaymentPreviewComponents = null;
                 content.innerHTML = `<div style="font-size:12px; color:#dc2626;">⚠️ ${(res && res.error) || 'Неуспешен предварителен преглед.'}</div>`;
                 return;
             }
             window._lastExtPaymentPreviewFingerprint = res.expectedDebtFingerprint || null;
             const c = res.components || res;
+            window._lastExtPaymentPreviewComponents = {
+                rupBaseCents: Number(c.rupBaseCents || 0),
+                rupSurchargeCents: Number(c.rupSurchargeCents || 0),
+                repairFundCents: Number(c.repairFundCents || 0),
+                contractRentCents: Number(c.contractRentCents || 0)
+            };
             const cur = sessionStorage.getItem("currency_" + currentRouteKey) || "EUR";
             const fmt = v => ((Number(v || 0)) / 100).toFixed(2) + ' ' + cur;
             const explicitBadge = res.explicitComponent
