@@ -1094,6 +1094,18 @@
                             <div class="master-acc-item">
                                 <button type="button" class="master-tab" data-master-tab="chipove" onclick="switchMasterTab('chipove',this)"><span>🔑 Чипове</span><span class="master-item-chevron">▸</span></button>
                                 <div id="master-tab-chipove" class="master-panel" style="display:none;">
+                                    <div id="masterElevatorChipsBox" style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; padding:10px 12px; margin-bottom:12px;">
+                                        <label style="display:flex; align-items:flex-start; gap:8px; cursor:pointer; font-weight:600; font-size:0.9rem; color:#0f172a;">
+                                            <input type="checkbox" id="masterElevatorChipsToggle" style="margin-top:3px; width:16px; height:16px;">
+                                            <span>Разпределяне на асансьорните разходи по чипове</span>
+                                        </label>
+                                        <div style="font-size:0.8rem; color:#475569; margin-top:4px; line-height:1.35;">
+                                            При включване асансьорните разходи (ток и абонамент) се разпределят пропорционално на чиповете само между участващите апартаменти. Всички участващи апартаменти трябва да имат въведен положителен цял брой чипове (&gt; 0).
+                                        </div>
+                                        <div id="masterElevatorChipsStatus" style="font-size:0.8rem; color:#0f766e; margin-top:6px;"></div>
+                                        <div id="masterElevatorChipsError" style="display:none; font-size:0.82rem; color:#b91c1c; background:#fef2f2; border:1px solid #fecaca; border-radius:6px; padding:6px 8px; margin-top:6px;"></div>
+                                        <button type="button" id="masterElevatorChipsSaveBtn" class="admin-btn" style="margin-top:8px; width:100%;" onclick="saveElevatorChipsConfigUI()">Запази настройката за чипове</button>
+                                    </div>
                                     <label class="admin-label">Апартамент</label>
                                     <select id="masterChApt" class="admin-input"></select>
                                     <label class="admin-label">Брой чипове</label>

@@ -3185,6 +3185,12 @@ window.switchMasterTab = function (tab, btn) {
         }
     }
 
+    if (tab === 'chipove') {
+        if (typeof window.loadElevatorChipsConfigUI === 'function') {
+            window.loadElevatorChipsConfigUI();
+        }
+    }
+
     if (tab === 'extunits') {
         if (btn) {
             btn.style.background = "var(--primary)";
@@ -3581,6 +3587,74 @@ window.submitBulkIdealParts = async function () {
             saveBtn.textContent = origText;
             window.toggleBulkIdealPartsSubmitBtn();
         }
+    }
+};
+
+window.loadElevatorChipsConfigUI = async function () {
+    const toggle = document.getElementById('masterElevatorChipsToggle');
+    const statusEl = document.getElementById('masterElevatorChipsStatus');
+    const errEl = document.getElementById('masterElevatorChipsError');
+    const fromEl = document.getElementById('masterChFrom');
+    if (!toggle) return;
+    if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
+    if (statusEl) statusEl.textContent = 'Зареждане на настройката...';
+    try {
+        const period = fromEl ? String(fromEl.value || '').trim() : '';
+        const res = await apiCall('getElevatorChipsConfigV1', { pin: getStoredPin(), period: period });
+        if (res && res.success) {
+            toggle.checked = res.active === true;
+            if (statusEl) {
+                statusEl.textContent = res.active
+                    ? ('Статус: АКТИВНО (от период ' + (res.effectiveFromPeriod || period || '-') + ')')
+                    : 'Статус: ИЗКЛЮЧЕНО (асансьорът се разпределя по основния метод)';
+            }
+        } else if (statusEl) {
+            statusEl.textContent = 'Статус: ИЗКЛЮЧЕНО';
+        }
+    } catch (e) {
+        if (statusEl) statusEl.textContent = 'Неуспешно зареждане на настройката.';
+    }
+};
+
+window.saveElevatorChipsConfigUI = async function () {
+    const toggle = document.getElementById('masterElevatorChipsToggle');
+    const statusEl = document.getElementById('masterElevatorChipsStatus');
+    const errEl = document.getElementById('masterElevatorChipsError');
+    const saveBtn = document.getElementById('masterElevatorChipsSaveBtn');
+    const fromEl = document.getElementById('masterChFrom');
+    if (!toggle) return;
+    const active = toggle.checked === true;
+    const effectiveFromPeriod = fromEl ? String(fromEl.value || '').trim() : '';
+    if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
+    if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Записване...'; }
+    try {
+        const res = await apiCall('saveElevatorChipsConfigV1', {
+            pin: getStoredPin(),
+            request: JSON.stringify({ active: active, effectiveFromPeriod: effectiveFromPeriod })
+        });
+        if (res && res.success) {
+            if (statusEl) {
+                statusEl.textContent = res.active
+                    ? ('Статус: АКТИВНО (от период ' + (res.effectiveFromPeriod || effectiveFromPeriod) + ')')
+                    : ('Статус: ИЗКЛЮЧЕНО (от период ' + (res.effectiveFromPeriod || effectiveFromPeriod) + ')');
+            }
+            showToast(res.message || 'Настройката за чипове е запазена.', 'success');
+            bgApiCall('forceSync', { pin: getStoredPin() }).then(() => {
+                refreshCurrentView();
+            }).catch(() => {});
+        } else {
+            const msg = (res && res.error) ? res.error : 'Неуспешно запазване на настройката за чипове.';
+            if (errEl) { errEl.textContent = msg; errEl.style.display = 'block'; }
+            showToast(msg, 'error', 6000);
+            toggle.checked = !active;
+        }
+    } catch (e) {
+        const msg = 'Сървърна грешка при запазване на настройката за чипове.';
+        if (errEl) { errEl.textContent = msg; errEl.style.display = 'block'; }
+        showToast(msg, 'error');
+        toggle.checked = !active;
+    } finally {
+        if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Запази настройката за чипове'; }
     }
 };
 
@@ -5959,7 +6033,7 @@ window.submitIncomeV2 = async function() {
             if (!res || res.success !== true) return false;
             const finStatus = res.financialStatus || res.status;
             if (res.status !== 'APPLIED' || finStatus !== 'APPLIED') return false;
-            if (res.projectionSyncStatus !== undefined && res.projectionSyncStatus !== 'COMPLETE') return false;
+            // P0 FINAL CLOSURE (Section 11): Financial APPLIED receipt confirmation MUST NOT depend on projectionSyncStatus === 'COMPLETE'.
             if (!req || res.paymentId !== req.paymentId) return false;
             if (!res.unitId || res.unitId !== req.unitId) return false;
             if (!res.period || res.period !== req.period) return false;
@@ -5982,6 +6056,34 @@ window.submitIncomeV2 = async function() {
             return lineSum === allocatedCents;
         };
         window.extUnitUiSuccess_ = extUnitUiSuccess_;
+
+        const extUnitConfirmationState_ = window.extUnitConfirmationState_ || function(receiptRes) {
+            const proj = receiptRes && receiptRes.projectionSyncStatus ? String(receiptRes.projectionSyncStatus).toUpperCase() : 'COMPLETE';
+            const summary = (receiptRes && receiptRes.allocationSummary) ? (' ' + receiptRes.allocationSummary) : '';
+            if (proj === 'PENDING') {
+                return {
+                    state: 'CONFIRMED_PROJECTION_PENDING',
+                    message: 'Плащането е потвърдено. Справките се обновяват.' + summary,
+                    toast: 'Плащането е потвърдено. Справките се обновяват.',
+                    toastType: 'success'
+                };
+            }
+            if (proj === 'FAILED') {
+                return {
+                    state: 'CONFIRMED_PROJECTION_FAILED',
+                    message: 'Плащането е потвърдено. Справките все още не са актуализирани.' + summary,
+                    toast: 'Плащането е потвърдено. Справките все още не са актуализирани.',
+                    toastType: 'neutral'
+                };
+            }
+            return {
+                state: 'CONFIRMED',
+                message: 'Плащането е потвърдено.' + summary,
+                toast: 'Плащането е потвърдено.',
+                toastType: 'success'
+            };
+        };
+        window.extUnitConfirmationState_ = extUnitConfirmationState_;
 
         const btn = document.getElementById("v2SubmitBtn");
         const feedbackEl = document.getElementById("fin01PaymentFeedback");
@@ -6008,11 +6110,12 @@ window.submitIncomeV2 = async function() {
             document.getElementById("v2IncomeNote").value = "";
             const previewBox = document.getElementById("extUnitPaymentPreviewBox");
             if (previewBox) previewBox.style.display = "none";
+            const conf = extUnitConfirmationState_(receiptRes);
             if (feedbackEl) {
-                feedbackEl.setAttribute('data-ext-state', 'CONFIRMED');
-                feedbackEl.textContent = 'Плащането за самостоятелен обект е потвърдено. ' + (receiptRes.allocationSummary || '');
+                feedbackEl.setAttribute('data-ext-state', conf.state);
+                feedbackEl.textContent = conf.message;
             }
-            showToast("Плащането за самостоятелен обект е потвърдено!", "success", 3500);
+            showToast(conf.toast, conf.toastType, 4000);
             if (typeof loadExternalUnitsData === 'function') await loadExternalUnitsData(true);
             await loadIncomesV2(operationContext);
             await v2LoadPaymentDue(operationContext);
