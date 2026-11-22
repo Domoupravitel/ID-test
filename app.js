@@ -6091,13 +6091,88 @@ window.submitIncomeV2 = async function() {
                 else sessionStorage.removeItem(extPendingKey);
             } catch (e) {}
         };
-        // BLOCKER B2: Mandatory verified pre-POST persistence (write + readback integrity check)
+        // BLOCKER C + BLOCKER D (v57): Mandatory 4-component validator + complete verified pre-POST persistence
+        const extUnitValidateExpectedComponents_ = window.extUnitValidateExpectedComponents_ || function(ec, expectedAmountCents) {
+            if (!ec || typeof ec !== 'object' || Array.isArray(ec)) {
+                return { ok: false, code: 'PENDING_COMPONENTS_REQUIRED', error: 'Липсва задължителната разбивка по финансови компоненти (expectedComponents).' };
+            }
+            const reqKeys = ['rupBaseCents', 'rupSurchargeCents', 'repairFundCents', 'contractRentCents'];
+            const norm = {};
+            let sum = 0;
+            for (const k of reqKeys) {
+                const rawV = ec[k];
+                if (rawV === undefined || rawV === null || rawV === '' || typeof rawV === 'boolean') {
+                    return { ok: false, code: 'PENDING_COMPONENTS_MISSING_FIELD', error: 'Липсва задължителен финансов компонент: ' + k };
+                }
+                const n = Number(rawV);
+                if (!Number.isSafeInteger(n) || n < 0) {
+                    return { ok: false, code: 'PENDING_COMPONENTS_INVALID_CENTS', error: 'Невалидна стойност в евроцентове за ' + k };
+                }
+                norm[k] = n;
+                sum += n;
+            }
+            let adv = 0;
+            if (ec.unallocatedAdvanceCents !== undefined && ec.unallocatedAdvanceCents !== null && ec.unallocatedAdvanceCents !== '') {
+                if (typeof ec.unallocatedAdvanceCents === 'boolean') {
+                    return { ok: false, code: 'PENDING_COMPONENTS_INVALID_CENTS', error: 'Невалидна стойност за unallocatedAdvanceCents' };
+                }
+                adv = Number(ec.unallocatedAdvanceCents);
+                if (!Number.isSafeInteger(adv) || adv < 0) {
+                    return { ok: false, code: 'PENDING_COMPONENTS_INVALID_CENTS', error: 'Невалидна стойност за unallocatedAdvanceCents' };
+                }
+            }
+            norm.unallocatedAdvanceCents = adv;
+            if (expectedAmountCents !== undefined && expectedAmountCents !== null) {
+                if (!Number.isSafeInteger(Number(expectedAmountCents)) || sum + adv !== Number(expectedAmountCents)) {
+                    return { ok: false, code: 'PENDING_COMPONENTS_SUM_MISMATCH', error: 'Сборът на финансовите компоненти не съвпада с общата сума.' };
+                }
+            }
+            return { ok: true, components: norm };
+        };
+        window.extUnitValidateExpectedComponents_ = extUnitValidateExpectedComponents_;
+
         const extUnitPersistPendingVerified_ = window.extUnitPersistPendingVerified_ || function(storage, key, pendingObj) {
+            const validateComp_ = function(ec, expCents) {
+                if (!ec || typeof ec !== 'object' || Array.isArray(ec)) return { ok: false, code: 'PENDING_COMPONENTS_REQUIRED', error: 'Липсва задължителната разбивка по финансови компоненти (expectedComponents).' };
+                const reqKeys = ['rupBaseCents', 'rupSurchargeCents', 'repairFundCents', 'contractRentCents'];
+                const norm = {};
+                let sum = 0;
+                for (const k of reqKeys) {
+                    const rawV = ec[k];
+                    if (rawV === undefined || rawV === null || rawV === '' || typeof rawV === 'boolean') return { ok: false, code: 'PENDING_COMPONENTS_MISSING_FIELD', error: 'Липсва задължителен финансов компонент: ' + k };
+                    const n = Number(rawV);
+                    if (!Number.isSafeInteger(n) || n < 0) return { ok: false, code: 'PENDING_COMPONENTS_INVALID_CENTS', error: 'Невалидна стойност в евроцентове за ' + k };
+                    norm[k] = n;
+                    sum += n;
+                }
+                let adv = 0;
+                if (ec.unallocatedAdvanceCents !== undefined && ec.unallocatedAdvanceCents !== null && ec.unallocatedAdvanceCents !== '') {
+                    if (typeof ec.unallocatedAdvanceCents === 'boolean') return { ok: false, code: 'PENDING_COMPONENTS_INVALID_CENTS', error: 'Невалидна стойност за unallocatedAdvanceCents' };
+                    adv = Number(ec.unallocatedAdvanceCents);
+                    if (!Number.isSafeInteger(adv) || adv < 0) return { ok: false, code: 'PENDING_COMPONENTS_INVALID_CENTS', error: 'Невалидна стойност за unallocatedAdvanceCents' };
+                }
+                norm.unallocatedAdvanceCents = adv;
+                if (!Number.isSafeInteger(Number(expCents)) || sum + adv !== Number(expCents)) return { ok: false, code: 'PENDING_COMPONENTS_SUM_MISMATCH', error: 'Сборът на финансовите компоненти не съвпада с общата сума.' };
+                return { ok: true, components: norm };
+            };
             if (!storage || typeof storage.setItem !== 'function' || typeof storage.getItem !== 'function') {
                 return { ok: false, code: 'PENDING_STORAGE_UNAVAILABLE', error: 'Локалното хранилище (sessionStorage) не е достъпно.' };
             }
-            if (!pendingObj || typeof pendingObj !== 'object' || !pendingObj.paymentId || !pendingObj.requestFingerprint) {
+            if (!pendingObj || typeof pendingObj !== 'object' || Array.isArray(pendingObj)) {
                 return { ok: false, code: 'PENDING_PAYLOAD_INCOMPLETE', error: 'Непълен пакет за възстановяване преди изпращане.' };
+            }
+            if (!pendingObj.paymentId || !pendingObj.routeKey || !pendingObj.unitId || !pendingObj.period ||
+                !Number.isSafeInteger(Number(pendingObj.amountCents)) || Number(pendingObj.amountCents) <= 0 ||
+                !pendingObj.category || !Number.isSafeInteger(Number(pendingObj.timestamp)) || Number(pendingObj.timestamp) <= 0 ||
+                !/^[0-9a-f]{64}$/.test(String(pendingObj.requestFingerprint || ''))) {
+                return { ok: false, code: 'PENDING_PAYLOAD_INCOMPLETE', error: 'Липсват задължителни полета за финансова идентичност преди изпращане.' };
+            }
+            if (pendingObj.uiState !== 'AMBIGUOUS_UNKNOWN') {
+                return { ok: false, code: 'PENDING_UISTATE_REQUIRED', error: 'Липсва или е невалидно състоянието за възстановяване (uiState).' };
+            }
+            const compCheck = validateComp_(pendingObj.expectedComponents, pendingObj.amountCents);
+            if (!compCheck.ok) {
+                return { ok: false, code: compCheck.code, error: compCheck.error };
             }
             let serialized;
             try {
@@ -6117,27 +6192,31 @@ window.submitIncomeV2 = async function() {
             } catch (e) {
                 return { ok: false, code: 'PENDING_STORAGE_READBACK_CORRUPT', error: 'Повреден запис при обратно прочитане от локалното хранилище.' };
             }
-            const coreMatch = readBack &&
+            const coreMatch = Boolean(readBack && typeof readBack === 'object') &&
                 readBack.paymentId === pendingObj.paymentId &&
                 readBack.routeKey === pendingObj.routeKey &&
                 readBack.unitId === pendingObj.unitId &&
                 readBack.period === pendingObj.period &&
                 Number(readBack.amountCents) === Number(pendingObj.amountCents) &&
-                readBack.requestFingerprint === pendingObj.requestFingerprint;
+                readBack.category === pendingObj.category &&
+                Number(readBack.timestamp) === Number(pendingObj.timestamp) &&
+                readBack.requestFingerprint === pendingObj.requestFingerprint &&
+                readBack.uiState === pendingObj.uiState;
             if (!coreMatch) {
                 return { ok: false, code: 'PENDING_STORAGE_READBACK_MISMATCH', error: 'Несъответствие при верификация на локално запазения запис за възстановяване.' };
             }
-            if (pendingObj.expectedComponents) {
-                const ec = pendingObj.expectedComponents;
-                const rc = readBack.expectedComponents;
-                const compMatch = Boolean(rc) &&
-                    Number(rc.rupBaseCents) === Number(ec.rupBaseCents) &&
-                    Number(rc.rupSurchargeCents) === Number(ec.rupSurchargeCents) &&
-                    Number(rc.repairFundCents) === Number(ec.repairFundCents) &&
-                    Number(rc.contractRentCents) === Number(ec.contractRentCents);
-                if (!compMatch) {
-                    return { ok: false, code: 'PENDING_STORAGE_READBACK_COMPONENTS_MISMATCH', error: 'Несъответствие на финансовите компоненти при обратно прочитане.' };
-                }
+            const rbCompCheck = validateComp_(readBack.expectedComponents, readBack.amountCents);
+            if (!rbCompCheck.ok) {
+                return { ok: false, code: 'PENDING_STORAGE_READBACK_COMPONENTS_MISMATCH', error: 'Невалидни финансови компоненти при обратно прочитане.' };
+            }
+            const ec = compCheck.components;
+            const rc = rbCompCheck.components;
+            if (rc.rupBaseCents !== ec.rupBaseCents ||
+                rc.rupSurchargeCents !== ec.rupSurchargeCents ||
+                rc.repairFundCents !== ec.repairFundCents ||
+                rc.contractRentCents !== ec.contractRentCents ||
+                rc.unallocatedAdvanceCents !== ec.unallocatedAdvanceCents) {
+                return { ok: false, code: 'PENDING_STORAGE_READBACK_COMPONENTS_MISMATCH', error: 'Несъответствие на финансовите компоненти при обратно прочитане.' };
             }
             return { ok: true, pending: readBack };
         };
@@ -6267,14 +6346,25 @@ window.submitIncomeV2 = async function() {
                 skipIncomeWrite: Boolean(params.skipIncomeWrite)
             };
             let expectedComponents = null;
-            if (params.expectedComponents && typeof params.expectedComponents === 'object') {
+            if (params.expectedComponents && typeof params.expectedComponents === 'object' && !Array.isArray(params.expectedComponents)) {
                 const ec = params.expectedComponents;
-                expectedComponents = {
-                    rupBaseCents: Number.isSafeInteger(Number(ec.rupBaseCents)) ? Number(ec.rupBaseCents) : 0,
-                    rupSurchargeCents: Number.isSafeInteger(Number(ec.rupSurchargeCents)) ? Number(ec.rupSurchargeCents) : 0,
-                    repairFundCents: Number.isSafeInteger(Number(ec.repairFundCents)) ? Number(ec.repairFundCents) : 0,
-                    contractRentCents: Number.isSafeInteger(Number(ec.contractRentCents)) ? Number(ec.contractRentCents) : 0
-                };
+                const keys = ['rupBaseCents', 'rupSurchargeCents', 'repairFundCents', 'contractRentCents'];
+                let allValid = true;
+                const norm = {};
+                let sum = 0;
+                for (const k of keys) {
+                    if (ec[k] === undefined || ec[k] === null || ec[k] === '' || typeof ec[k] === 'boolean') { allValid = false; break; }
+                    const n = Number(ec[k]);
+                    if (!Number.isSafeInteger(n) || n < 0) { allValid = false; break; }
+                    norm[k] = n;
+                    sum += n;
+                }
+                const adv = (ec.unallocatedAdvanceCents !== undefined && ec.unallocatedAdvanceCents !== null && ec.unallocatedAdvanceCents !== '')
+                    ? Number(ec.unallocatedAdvanceCents) : 0;
+                if (allValid && Number.isSafeInteger(adv) && adv >= 0 && sum + adv === amountCents) {
+                    norm.unallocatedAdvanceCents = adv;
+                    expectedComponents = norm;
+                }
             }
             const requestFingerprint = extUnitBuildCanonicalRequestFingerprint_(reqPayload);
             reqPayload.requestFingerprint = requestFingerprint;
@@ -6331,19 +6421,25 @@ window.submitIncomeV2 = async function() {
                 actualByComp[l.component] += l.amountCents;
             }
             if (lineSum !== allocatedCents) return false;
-            // BLOCKER B1: Exact component-by-component validation (including zero components)
-            if (req.expectedComponents && typeof req.expectedComponents === 'object') {
-                const ec = req.expectedComponents;
-                const expMap = {
-                    rupBase: Number(ec.rupBaseCents !== undefined ? ec.rupBaseCents : (ec.rupBase || 0)),
-                    rupSurcharge: Number(ec.rupSurchargeCents !== undefined ? ec.rupSurchargeCents : (ec.rupSurcharge || 0)),
-                    repairFund: Number(ec.repairFundCents !== undefined ? ec.repairFundCents : (ec.repairFund || 0)),
-                    contractRent: Number(ec.contractRentCents !== undefined ? ec.contractRentCents : (ec.contractRent || 0))
-                };
-                for (const comp of ALLOWED_EXT_COMPONENTS) {
-                    if (!Number.isSafeInteger(expMap[comp]) || expMap[comp] < 0) return false;
-                    if (actualByComp[comp] !== expMap[comp]) return false;
-                }
+            // BLOCKER C (v57): Mandatory exact 4-component validation (NEVER skip when expectedComponents is null/missing!)
+            const ec = req.expectedComponents;
+            if (!ec || typeof ec !== 'object' || Array.isArray(ec)) return false;
+            const reqCompKeys = ['rupBaseCents', 'rupSurchargeCents', 'repairFundCents', 'contractRentCents'];
+            for (const k of reqCompKeys) {
+                if (ec[k] === undefined || ec[k] === null || ec[k] === '' || typeof ec[k] === 'boolean') return false;
+                const n = Number(ec[k]);
+                if (!Number.isSafeInteger(n) || n < 0) return false;
+            }
+            const expAdv = (ec.unallocatedAdvanceCents !== undefined && ec.unallocatedAdvanceCents !== null && ec.unallocatedAdvanceCents !== '')
+                ? Number(ec.unallocatedAdvanceCents) : 0;
+            if (!Number.isSafeInteger(expAdv) || expAdv < 0) return false;
+            if (Number(ec.rupBaseCents) + Number(ec.rupSurchargeCents) + Number(ec.repairFundCents) + Number(ec.contractRentCents) + expAdv !== expectedCents) return false;
+            if (actualByComp.rupBase !== Number(ec.rupBaseCents) ||
+                actualByComp.rupSurcharge !== Number(ec.rupSurchargeCents) ||
+                actualByComp.repairFund !== Number(ec.repairFundCents) ||
+                actualByComp.contractRent !== Number(ec.contractRentCents) ||
+                unallocatedCents !== expAdv) {
+                return false;
             }
             return true;
         };
@@ -6456,14 +6552,17 @@ window.submitIncomeV2 = async function() {
             // using the canonical requestFingerprint persisted BEFORE the first POST!
             if (isStatusCheckStep) {
                 const pendingFp = String((pending && pending.requestFingerprint) || '').trim();
-                if (!pendingFp) {
+                const pendingCompCheck = extUnitValidateExpectedComponents_(pending && pending.expectedComponents, pending && pending.amountCents);
+                if (!pendingFp || !pendingCompCheck.ok) {
                     pending.uiState = 'CONFLICT';
                     writeExtPending(pending);
                     if (feedbackEl) {
                         feedbackEl.setAttribute('data-ext-state', 'CONFLICT');
-                        feedbackEl.textContent = 'Липсва каноничен отпечатък (requestFingerprint) за чакащото плащане. Изисква се административна проверка.';
+                        feedbackEl.textContent = !pendingFp
+                            ? 'Липсва каноничен отпечатък (requestFingerprint) за чакащото плащане. Изисква се административна проверка.'
+                            : 'Липсва валидна разбивка по финансови компоненти (expectedComponents) за чакащото плащане. Изисква се административна проверка.';
                     }
-                    showToast("Липсва каноничен отпечатък за чакащото плащане.", "error");
+                    showToast("Непълна финансова идентичност за чакащото плащане.", "error");
                     return;
                 }
                 const stRes = await apiCall('externalUnitPaymentStatus', {
@@ -6476,9 +6575,10 @@ window.submitIncomeV2 = async function() {
                         period: pending.period,
                         amount: pending.amount,
                         amountCents: pending.amountCents,
-                        expectedComponents: pending.expectedComponents || undefined,
+                        expectedComponents: pendingCompCheck.components,
                         expectedRequestFingerprint: pendingFp,
-                        requireFingerprint: true
+                        requireFingerprint: true,
+                        requireComponents: true
                     })
                 }, operationContext);
                 assertFinancialOperationContextCurrent(operationContext);
@@ -8054,7 +8154,8 @@ window.onV2IncomeExtPaymentInputChanged = function() {
                 rupBaseCents: Number(c.rupBaseCents || 0),
                 rupSurchargeCents: Number(c.rupSurchargeCents || 0),
                 repairFundCents: Number(c.repairFundCents || 0),
-                contractRentCents: Number(c.contractRentCents || 0)
+                contractRentCents: Number(c.contractRentCents || 0),
+                unallocatedAdvanceCents: Number(c.unallocatedAdvanceCents || 0)
             };
             const cur = sessionStorage.getItem("currency_" + currentRouteKey) || "EUR";
             const fmt = v => ((Number(v || 0)) / 100).toFixed(2) + ' ' + cur;
