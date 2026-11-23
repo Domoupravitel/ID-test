@@ -113,9 +113,173 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 });
 
+// ==============================================
+// STAGE 2A.2: PRECOMPUTED READ MODELS & FRESHNESS CLIENT
+// ==============================================
+window._projFlags = { PUBLIC_PLATFORM_CONFIG: 'OFF', ENTRANCE_SUMMARY: 'OFF', ADMIN_ENTRANCE_CONFIG: 'OFF' };
+window._adminConfigCache = null;
+
+function purgeAdminConfigCache_() {
+    window._adminConfigCache = null;
+}
+
+function showProjectionFreshnessBanner_(status, contextLabel) {
+    let el = document.getElementById('projectionFreshnessBanner');
+    if (!status || status === 'CURRENT') {
+        if (el) el.style.display = 'none';
+        return;
+    }
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'projectionFreshnessBanner';
+        el.style.cssText = 'position:fixed;bottom:14px;right:14px;z-index:9999;max-width:360px;padding:10px 14px;border-radius:10px;font-size:13px;font-weight:600;box-shadow:0 4px 16px rgba(0,0,0,.22);display:none;';
+        document.body.appendChild(el);
+    }
+    const map = {
+        PENDING: { bg: '#eff6ff', fg: '#1d4ed8', border: '#93c5fd', msg: 'Записано успешно. Справките се обновяват.' },
+        STALE: { bg: '#fffbeb', fg: '#b45309', border: '#fcd34d', msg: 'Данните в справката може да не са напълно актуални.' },
+        FAILED: { bg: '#fef2f2', fg: '#b91c1c', border: '#fca5a5', msg: 'Обновяването на справката е неуспешно. Данните са неактуални.' },
+        UNVERIFIED: { bg: '#fffbeb', fg: '#92400e', border: '#fde68a', msg: 'Справката все още се подготвя или не е верифицирана.' }
+    };
+    const cfg = map[status] || map.UNVERIFIED;
+    el.style.background = cfg.bg;
+    el.style.color = cfg.fg;
+    el.style.border = '1px solid ' + cfg.border;
+    el.textContent = (contextLabel ? contextLabel + ': ' : '') + cfg.msg;
+    el.style.display = 'block';
+}
+
+function evaluateSubscriptionGateClient_(gate, nowDate) {
+    if (!gate || typeof gate !== 'object') return { stale: true, isSoftBlocked: false, isHardBlocked: false, status: 'UNVERIFIED' };
+    const nowMs = nowDate ? nowDate.getTime() : Date.now();
+    const evalMs = Date.parse(gate.gateEvaluatedAtUtc || '');
+    const ttlHours = Number(gate.gateTtlHours) || 24;
+    if (!Number.isFinite(evalMs) || (nowMs - evalMs) > ttlHours * 3600000) {
+        return { stale: true, isSoftBlocked: false, isHardBlocked: false, status: 'STALE_TTL' };
+    }
+    if (gate.policyStatus === 'MANUAL_BLOCKED') return { stale: false, isSoftBlocked: true, isHardBlocked: true, status: 'HARD_BLOCKED' };
+    if (gate.policyStatus === 'LIFETIME') return { stale: false, isSoftBlocked: false, isHardBlocked: false, status: 'LIFETIME' };
+    let todayYmd = '';
+    try {
+        todayYmd = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Sofia', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(nowMs));
+    } catch (e) {
+        todayYmd = new Date(nowMs).toISOString().slice(0, 10);
+    }
+    if (gate.hardBlockFromSofiaYmd && todayYmd >= gate.hardBlockFromSofiaYmd) {
+        return { stale: false, isSoftBlocked: true, isHardBlocked: true, status: 'HARD_BLOCKED' };
+    }
+    if (gate.activeThroughSofiaYmd && todayYmd > gate.activeThroughSofiaYmd) {
+        return { stale: false, isSoftBlocked: true, isHardBlocked: false, status: gate.policyStatus === 'TRIAL' ? 'TRIAL_ADMIN_GRACE' : 'PAID_GRACE_7D' };
+    }
+    return { stale: false, isSoftBlocked: false, isHardBlocked: false, status: gate.policyStatus === 'TRIAL' ? 'TRIAL_FULL' : 'PAID_ACTIVE' };
+}
+
+async function readPrecomputedPublicPlatformConfig_() {
+    if (!window.fb || !window.fb.getDoc || !window.fb.doc || !window.db) return null;
+    try {
+        const snap = await window.fb.getDoc(window.fb.doc(window.db, 'publicPlatformConfigV1', 'global'));
+        if (!snap || !snap.exists()) return null;
+        const d = snap.data() || {};
+        if (d.payload && d.payload.projFlags && typeof d.payload.projFlags === 'object') {
+            window._projFlags = Object.assign({}, window._projFlags, d.payload.projFlags);
+        }
+        if (d.contractVersion !== 1 || d.projectionStatus !== 'CURRENT' || !d.payload) {
+            if (d.projectionStatus && d.projectionStatus !== 'CURRENT') showProjectionFreshnessBanner_(d.projectionStatus);
+            return null;
+        }
+        if (window._projFlags.PUBLIC_PLATFORM_CONFIG !== 'ON') return null;
+        return { success: true, showRegForm: d.payload.showRegForm, regFormText: d.payload.regFormText, globalMessage: d.payload.globalMessage, _fromPrecomputed: true };
+    } catch (e) {
+        return null;
+    }
+}
+
+async function readPrecomputedEntranceSummary_(routeKey) {
+    if (window._projFlags.ENTRANCE_SUMMARY !== 'ON') return null;
+    if (!window.fb || !window.fb.getDoc || !window.fb.routeDoc || !window.db) return null;
+    try {
+        const snap = await window.fb.getDoc(window.fb.routeDoc(window.db, 'entranceSummaryV1', routeKey, routeKey));
+        if (!snap || !snap.exists()) return null;
+        const d = snap.data() || {};
+        if (d.contractVersion !== 1 || d.routeKey !== routeKey || !d.payload) return null;
+        if (d.projectionStatus !== 'CURRENT') {
+            showProjectionFreshnessBanner_(d.projectionStatus, 'Обобщение на входа');
+            return null;
+        }
+        const gateEval = evaluateSubscriptionGateClient_(d.payload.subscriptionGate);
+        if (gateEval.stale) {
+            showProjectionFreshnessBanner_('STALE', 'Абонаментен статус');
+            return null;
+        }
+        const p = d.payload;
+        return {
+            apartments: Array.isArray(p.apartments) ? p.apartments : null,
+            configResult: {
+                success: true,
+                _fromPrecomputed: true,
+                info: {
+                    entranceName: p.entranceName || '',
+                    currency: p.currency || 'EUR',
+                    currentActivePeriod: p.currentActivePeriod || '',
+                    isSoftBlocked: gateEval.isSoftBlocked,
+                    isHardBlocked: gateEval.isHardBlocked,
+                    subscriptionStatus: gateEval.status,
+                    paymentInfo: p.paymentInfo || '',
+                    entranceNotice: p.publicNotice || '',
+                    globalMessage: p.globalMessage || ''
+                }
+            }
+        };
+    } catch (e) {
+        return null;
+    }
+}
+
+async function fetchAdminConfigSnapshotV1_(routeKey, forceRefresh) {
+    if (window._projFlags.ADMIN_ENTRANCE_CONFIG !== 'ON') return null;
+    const pin = (typeof getStoredPin === 'function') ? getStoredPin() : (sessionStorage.getItem('adminPin_' + routeKey) || '');
+    if (!pin || !routeKey) { purgeAdminConfigCache_(); return null; }
+    const now = Date.now();
+    if (!forceRefresh && window._adminConfigCache &&
+        window._adminConfigCache.routeKey === routeKey &&
+        window._adminConfigCache.pin === pin &&
+        (now - window._adminConfigCache.fetchedAt) < 60000) {
+        return window._adminConfigCache.snapshot;
+    }
+    try {
+        const res = await fetch(SCRIPT_URL, {
+            method: 'POST',
+            body: new URLSearchParams({ action: 'getAdminConfigSnapshotV1', routeKey: routeKey, pin: pin })
+        });
+        if (!res.ok) return null;
+        const jsonRes = await res.json();
+        if (!jsonRes || jsonRes.success === false) {
+            if (jsonRes && (String(jsonRes.error || '').indexOf('Unauthorized') !== -1 || jsonRes.isHardBlocked)) {
+                purgeAdminConfigCache_();
+                sessionStorage.removeItem('adminPin_' + routeKey);
+            }
+            return null;
+        }
+        if (jsonRes.projectionStatus !== 'CURRENT' || !jsonRes.data) {
+            showProjectionFreshnessBanner_(jsonRes.projectionStatus || 'UNVERIFIED', 'Админ настройки');
+            return null;
+        }
+        window._adminConfigCache = { routeKey: routeKey, pin: pin, fetchedAt: now, snapshot: jsonRes };
+        return jsonRes;
+    } catch (e) {
+        return null;
+    }
+}
+
 async function loadPublicSettings() {
     try {
-        const res = await apiCall('getPublicSettings');
+        let res = await readPrecomputedPublicPlatformConfig_();
+        if (!res) {
+            res = await apiCall('getPublicSettings');
+            if (res && res.projFlags && typeof res.projFlags === 'object') {
+                window._projFlags = Object.assign({}, window._projFlags, res.projFlags);
+            }
+        }
         const regLink = document.getElementById("regButtonLink");
         const customText = document.getElementById("regCustomText");
         
@@ -968,12 +1132,32 @@ async function apiCall(action, params = {}, operationContext) {
     const queryParams = new URLSearchParams(params).toString();
 
     try {
+        // STAGE 2A.2: Cache invalidation on config writes & fast cached read for admin config tabs when flag is ON
+        if (['updateMaster', 'saveArt51V1', 'saveElevatorChipsConfigV1', 'saveRecurringExpenseV1', 'updateAdminEmail'].indexOf(action) !== -1) {
+            purgeAdminConfigCache_();
+        }
+        if ((action === 'getBuildingIdealParts' || action === 'getPeriodOccupants') && window._projFlags && window._projFlags.ADMIN_ENTRANCE_CONFIG === 'ON' && currentRouteKey) {
+            const snap = await fetchAdminConfigSnapshotV1_(currentRouteKey, false);
+            if (snap && snap.data) {
+                if (action === 'getBuildingIdealParts' && snap.data.idealPartsMeta) {
+                    hideLoading();
+                    return Object.assign({ success: true, parts: snap.data.idealParts || {}, _fromPrecomputed: true }, snap.data.idealPartsMeta);
+                }
+                if (action === 'getPeriodOccupants' && params.period && snap.data.occupantsByPeriod && snap.data.occupantsByPeriod[params.period]) {
+                    hideLoading();
+                    return { success: true, period: params.period, occupants: snap.data.occupantsByPeriod[params.period], _fromPrecomputed: true };
+                }
+            }
+        }
         // The accepted form-POST contract avoids URL limits for nine per-category notes.
-        const response = (action === 'distributeMaintenanceV1' || action === 'fin01Preview' || action === 'fin01Settle' || action === 'addChargesV2' || action === 'saveRecurringExpenseV1' || action === 'previewExternalUnitPaymentV1' || action === 'recordExternalUnitPaymentV1' || action === 'reverseExternalUnitPaymentV1' || action === 'distributeIncomeV2') ? // SLICE5_RECURRING_UI // FIN01_POST // MAINTENANCE_POST
+        const response = (action === 'getAdminConfigSnapshotV1' || action === 'retryFailedProjectionsV1' || action === 'distributeMaintenanceV1' || action === 'fin01Preview' || action === 'fin01Settle' || action === 'addChargesV2' || action === 'saveRecurringExpenseV1' || action === 'previewExternalUnitPaymentV1' || action === 'recordExternalUnitPaymentV1' || action === 'reverseExternalUnitPaymentV1' || action === 'distributeIncomeV2') ? // SLICE5_RECURRING_UI // FIN01_POST // MAINTENANCE_POST
             await fetch(SCRIPT_URL, {method: 'POST', body: new URLSearchParams(params)}) :
             await fetch(`${SCRIPT_URL}?${queryParams}`);
         if (!response.ok) throw new Error('HTTP_' + response.status);
         const result = await response.json();
+        if (result && (String(result.error || '').indexOf('Unauthorized') !== -1 || result.isHardBlocked)) {
+            purgeAdminConfigCache_();
+        }
         throwIfStaleRouteRequestContext(owner);
         if (operationContext) assertFinancialOperationContextCurrent(operationContext);
         hideLoading();
@@ -1213,10 +1397,18 @@ window.enterEntrance = async function () {
         btn.disabled = true;
     }
 
-    const [result, configResult] = await Promise.all([
-        apiCall('list', { list: 'apartments' }),
-        apiCall('getEntranceInfo')
-    ]);
+    purgeAdminConfigCache_();
+    let result, configResult;
+    const preSum = await readPrecomputedEntranceSummary_(currentRouteKey);
+    if (preSum && preSum.apartments && preSum.configResult) {
+        result = preSum.apartments;
+        configResult = preSum.configResult;
+    } else {
+        [result, configResult] = await Promise.all([
+            apiCall('list', { list: 'apartments' }),
+            apiCall('getEntranceInfo')
+        ]);
+    }
 
     if (configResult && configResult.success && configResult.info) {
         const info = configResult.info;
