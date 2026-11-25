@@ -35,38 +35,147 @@
     <meta name="twitter:image" content="https://domoupravitel.github.io/ID/og-image.png">
 
     <!-- Modern Typography: Inter & Outfit -->
+    <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
+    <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <script>
+        // Stage 2C.2 Final Gate: Start 1-RTT Firestore REST bootstrap prefetch at t=0ms
+        // (before CSS/fonts/app.js/Firebase SDK) and hide marketing landing on direct entrance URLs.
+        (function () {
+            try {
+                var sp = new URLSearchParams(window.location.search);
+                var rk = sp.get('id') || '';
+                if (window.location.hash) {
+                    var raw = window.location.hash.replace(/^#/, '');
+                    if (raw) {
+                        var first = raw.split('/')[0];
+                        if (first) rk = decodeURIComponent(first);
+                    }
+                }
+                rk = (rk || '').trim();
+                window._stage2c2BootstrapCache_ = window._stage2c2BootstrapCache_ || Object.create(null);
+                var base = 'https://firestore.googleapis.com/v1/projects/domoupravitel-test/databases/(default)/documents';
+                var decVal = function (v) {
+                    if (!v || typeof v !== 'object') return null;
+                    if ('nullValue' in v) return null;
+                    if ('booleanValue' in v) return Boolean(v.booleanValue);
+                    if ('integerValue' in v) return Number(v.integerValue);
+                    if ('doubleValue' in v) return Number(v.doubleValue);
+                    if ('stringValue' in v) return String(v.stringValue);
+                    if ('timestampValue' in v) return String(v.timestampValue);
+                    if ('arrayValue' in v) return ((v.arrayValue && v.arrayValue.values) || []).map(decVal);
+                    if ('mapValue' in v) return decFields((v.mapValue && v.mapValue.fields) || {});
+                    return null;
+                };
+                var decFields = function (f) {
+                    var o = {}, ks = Object.keys(f || {});
+                    for (var i = 0; i < ks.length; i++) o[ks[i]] = decVal(f[ks[i]]);
+                    return o;
+                };
+                var restGet = function (col, id) {
+                    return fetch(base + '/' + encodeURIComponent(col) + '/' + encodeURIComponent(id), { method: 'GET', cache: 'no-store' })
+                        .then(function (r) {
+                            if (r.status === 404) return { exists: function () { return false; }, data: function () { return null; } };
+                            if (r.status === 403) return null;
+                            if (!r.ok) return null;
+                            return r.json().then(function (p) {
+                                var d = decFields(p.fields || {});
+                                return { exists: function () { return true; }, data: function () { return d; } };
+                            });
+                        })
+                        .catch(function () { return null; });
+                };
+                var cachePut = function (k, snap) {
+                    if (snap) window._stage2c2BootstrapCache_[k] = { ts: Date.now(), snap: snap };
+                };
+                // Always prefetch publicPlatformConfigV1/global at t=0ms (including main page without #routeKey!)
+                // so feature flags are already hydrated before interactive entrance navigation!
+                var pPub = restGet('publicPlatformConfigV1', 'global').then(function (s) { cachePut('publicPlatformConfigV1/global', s); return s; });
+                window._stage2c2EarlyPubPromise_ = pPub;
+                if (!rk) return;
+                document.documentElement.classList.add('direct-entrance-route');
+                window._stage2c2EarlyPrefetchRoute_ = rk;
+                var pSum = restGet('entranceSummaryV1', rk).then(function (s) { cachePut('entranceSummaryV1/' + rk, s); return s; });
+                var pMan = restGet('financialManifestV1', rk).then(function (s) {
+                    cachePut('financialManifestV1/' + rk, s);
+                    var md = s && s.exists && s.exists() ? s.data() : null;
+                    if (md && md.parts && md.parts.buildingDashboard) {
+                        var dId = md.parts.buildingDashboard;
+                        window._stage2c2EarlyDashPromise_ = restGet('buildingDashboardSummaryV1', dId).then(function (ds) {
+                            cachePut('buildingDashboardSummaryV1/' + dId, ds);
+                            return ds;
+                        });
+                    }
+                    return s;
+                });
+                window._stage2c2EarlyPrefetchPromise_ = Promise.all([pPub, pSum, pMan]);
+            } catch (e) {}
+        })();
+    </script>
     <link
         href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;600;800&display=swap"
-        rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=1795026000000">
-        <script src="firestore-client.js"></script>
-        <script src="app.js?v=1795026000000" defer></script>
+        rel="stylesheet" media="print" onload="this.media='all'">
+    <noscript>
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
+    </noscript>
+    <link rel="stylesheet" href="style.css?v=1795026000002">
+        <script src="firestore-client.js" defer></script>
+        <script src="app.js?v=1795026000002" defer></script>
         <script src="recurring-expenses.js" defer></script>
         <script src="fin01-payment.js" defer></script>
-        <script src="maintenance-ledger.js" defer></script>
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getFirestore, collection, getDocs, doc, getDoc, setDoc, query, where, deleteDoc, addDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-
-        const firebaseConfig = {
-            apiKey: "AIzaSyCa-f7O_BPKjAqhj5ePdSwL5bx6qU8qthc",
-            authDomain: "domoupravitel-test.firebaseapp.com",
-            projectId: "domoupravitel-test",
-            storageBucket: "domoupravitel-test.firebasestorage.app",
-            messagingSenderId: "919319085139",
-            appId: "1:919319085139:web:5ad19d8f281348cfbd86a6"
+        <script src="maintenance-ledger.js?v=1795026000002" defer></script>
+    <script>
+        // Stage 2C.2 Final Gate: Non-blocking lazy Firebase 10.7.1 SDK initializer (preserves memoryLocalCache() & installFirestoreClient)
+        window._firebaseSdkPromise_ = null;
+        window.ensureFirebaseSdk_ = function () {
+            if (window.fb && window.db) return Promise.resolve(window.fb);
+            if (window._firebaseSdkPromise_) return window._firebaseSdkPromise_;
+            window._firebaseSdkPromise_ = Promise.all([
+                import("https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js"),
+                import("https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js")
+            ]).then(function (mods) {
+                var initializeApp = mods[0].initializeApp;
+                var initializeFirestore = mods[1].initializeFirestore;
+                var memoryLocalCache = mods[1].memoryLocalCache;
+                var fsMod = mods[1];
+                var firebaseConfig = {
+                    apiKey: "AIzaSyCa-f7O_BPKjAqhj5ePdSwL5bx6qU8qthc",
+                    authDomain: "domoupravitel-test.firebaseapp.com",
+                    projectId: "domoupravitel-test",
+                    storageBucket: "domoupravitel-test.firebasestorage.app",
+                    messagingSenderId: "919319085139",
+                    appId: "1:919319085139:web:5ad19d8f281348cfbd86a6"
+                };
+                var app = initializeApp(firebaseConfig);
+                var db = initializeFirestore(app, { localCache: memoryLocalCache() });
+                window.db = db;
+                window.fb = installFirestoreClient(
+                    {
+                        collection: fsMod.collection,
+                        getDocs: fsMod.getDocs,
+                        doc: fsMod.doc,
+                        getDoc: fsMod.getDoc,
+                        onSnapshot: fsMod.onSnapshot,
+                        setDoc: fsMod.setDoc,
+                        query: fsMod.query,
+                        where: fsMod.where,
+                        deleteDoc: fsMod.deleteDoc,
+                        addDoc: fsMod.addDoc,
+                        updateDoc: fsMod.updateDoc
+                    },
+                    { firestoreInstance: db, projectId: firebaseConfig.projectId, databaseId: "(default)" }
+                );
+                return window.fb;
+            }).catch(function (err) {
+                window._firebaseSdkPromise_ = null;
+                throw err;
+            });
+            return window._firebaseSdkPromise_;
         };
-
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
-
-        window.db = db;
-        window.fb = installFirestoreClient(
-            { collection, getDocs, doc, getDoc, setDoc, query, where, deleteDoc, addDoc, updateDoc },
-            { firestoreInstance: db, projectId: firebaseConfig.projectId, databaseId: "(default)" }
-        );
+        window.addEventListener('DOMContentLoaded', function () {
+            setTimeout(function () { window.ensureFirebaseSdk_().catch(function () {}); }, 120);
+        });
     </script>
 
 <style>.value-red { color: #d32f2f; font-weight: bold; } .value-green { color: #2e7d32; font-weight: bold; }
@@ -1870,7 +1979,7 @@
                 <!-- HEADER -->
                 <header class="landing-header">
                     <div class="landing-logo-container">
-                        <img src="logo.png" alt="Лого" class="landing-logo" onclick="openSuperAdmin()" title="Вход за създатели" onerror="this.onerror=null; this.outerHTML='<div class=\'brand-logo\' onclick=\'openSuperAdmin()\' style=\'width:40px; height:40px; border-radius:8px; display:flex; align-items:center; justify-content:center; background:linear-gradient(135deg, #2563eb, #8B5CF6); font-family:var(--font-head); font-weight:800; font-size:1.4rem; color:white; cursor:pointer;\' title=\'Вход за създатели\'>Е</div>'">
+                        <img src="media/logo.png" loading="lazy" alt="Лого" class="landing-logo" onclick="openSuperAdmin()" title="Вход за създатели" onerror="this.onerror=null; this.outerHTML='<div class=\'brand-logo\' onclick=\'openSuperAdmin()\' style=\'width:40px; height:40px; border-radius:8px; display:flex; align-items:center; justify-content:center; background:linear-gradient(135deg, #2563eb, #8B5CF6); font-family:var(--font-head); font-weight:800; font-size:1.4rem; color:white; cursor:pointer;\' title=\'Вход за създатели\'>Е</div>'">
                         <span class="landing-brand-name">Онлайн <span class="landing-brand-highlight">Домоуправител</span></span>
                     </div>
                     
@@ -2412,8 +2521,9 @@
                 <div class="glass-panel" style="padding: 20px; margin-bottom: 20px;">
                     <label class="admin-label">Изберете период (ММ.ГГГГ):</label>
                     <div style="display:flex; gap:10px; margin-bottom: 20px; margin-top: 8px;">
-                        <input type="text" id="reportPeriodInput" class="admin-input" placeholder="03.2026"
+                        <input type="text" id="reportPeriodInput" list="reportAvailablePeriodsList" class="admin-input" placeholder="03.2026"
                             style="margin:0;">
+                        <datalist id="reportAvailablePeriodsList"></datalist>
                         <button class="btn btn-primary" onclick="generateReport()"
                             style="padding: 0 20px; white-space: nowrap;">Покажи</button>
                     </div>

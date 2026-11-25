@@ -96,17 +96,25 @@ body {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  width: 100%;
+  opacity: 1;
+  visibility: visible;
 }
 
 .view-panel {
   display: none;
-  animation: fadeIn 0.4s ease forwards;
 }
 
 .view-panel.active {
   display: flex;
   flex-direction: column;
   flex: 1;
+  opacity: 1;
+  visibility: visible;
+}
+
+html.direct-entrance-route #view-selector {
+  display: none !important;
 }
 
 .hidden {
@@ -711,8 +719,7 @@ body {
     padding: 0;
   }
 
-  
-    overflow-x: hidden;
+  .app-container {
     overflow-x: hidden;
   }
 

@@ -67,8 +67,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         } catch(e) { console.error("Hash parsing failed", e); }
     }
 
+    // Stage 2C.2: Parallel 1-RTT bootstrap prefetch (publicPlatformConfigV1 + entranceSummaryV1 + financialManifestV1)
+    // eliminates serial waterfall and Firebase SDK WebChannel cold-start delay!
+    window._stage2c2NavStartMs_ = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
     if (idValue) {
         const cleanId = idValue.trim();
+        await prefetchEntranceBootstrapV2_(cleanId);
+        await loadPublicSettings();
         document.getElementById('access-id').value = cleanId;
         
         // Trigger entrance
@@ -77,28 +82,18 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (success && aptValue) {
             const select = document.getElementById("apartmentSelect");
             const targetApt = decodeURIComponent(aptValue);
-            
-            // Polling approach is safer than a fixed timeout
-            // removed attempts
-            // removed interval wrapper
-                if (apartmentList && apartmentList.length > 0) {
-                    // Try to find matching apartment
-                    const found = apartmentList.find(a => normalizeAptName(a) === normalizeAptName(targetApt)) || 
-                                  apartmentList.find(a => a === targetApt);
-                    
-                    if (found) {
-                        select.value = found;
-                        loadApartmentData(found);
-                    }
-                    // removed clearInterval
+            if (apartmentList && apartmentList.length > 0) {
+                const found = apartmentList.find(a => normalizeAptName(a) === normalizeAptName(targetApt)) || 
+                              apartmentList.find(a => a === targetApt);
+                if (found) {
+                    select.value = found;
+                    loadApartmentData(found);
                 }
-                // removed attempts check
-            // removed interval closing braces
+            }
         }
+    } else {
+        await loadPublicSettings();
     }
-
-    // Зареждаме публичните настройки (Бутон за регистрация и т.н.)
-    loadPublicSettings();
 
     // Ако сме се върнали от ръководството, отваряме админ панела автоматично
     if (sessionStorage.getItem('shouldOpenAdmin') === 'true') {
@@ -114,14 +109,591 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 // ==============================================
-// STAGE 2A.2: PRECOMPUTED READ MODELS & FRESHNESS CLIENT
+// STAGE 2A.2 / 2C.2: PRECOMPUTED READ MODELS, ACCESS GATE & FRESHNESS CLIENT
 // ==============================================
-window._projFlags = { PUBLIC_PLATFORM_CONFIG: 'OFF', ENTRANCE_SUMMARY: 'OFF', ADMIN_ENTRANCE_CONFIG: 'OFF' };
+window._projFlags = {
+    PUBLIC_PLATFORM_CONFIG: 'OFF',
+    ENTRANCE_SUMMARY: 'OFF',
+    ADMIN_ENTRANCE_CONFIG: 'OFF',
+    FIN_DASHBOARD: 'OFF',
+    FIN_MAINTENANCE_BALANCE: 'OFF',
+    FIN_EXTERNAL_UNITS: 'OFF',
+    FIN_MONTHLY_REPORT_V3: 'OFF'
+};
 window._adminConfigCache = null;
+window._finMatCache_ = null;
+window._finMatMonthlyCache_ = Object.create(null);
+window._finMatParityLog_ = [];
+window._entranceSubUnsub_ = null;
+window._stage2c2BootstrapCache_ = window._stage2c2BootstrapCache_ || Object.create(null);
+
+const FIRESTORE_REST_BASE_V2_ = 'https://firestore.googleapis.com/v1/projects/domoupravitel-test/databases/(default)/documents';
+
+function fsRestDecodeVal_(v) {
+    if (!v || typeof v !== 'object') return null;
+    if ('nullValue' in v) return null;
+    if ('booleanValue' in v) return Boolean(v.booleanValue);
+    if ('integerValue' in v) return Number(v.integerValue);
+    if ('doubleValue' in v) return Number(v.doubleValue);
+    if ('stringValue' in v) return String(v.stringValue);
+    if ('timestampValue' in v) return String(v.timestampValue);
+    if ('arrayValue' in v) return ((v.arrayValue && v.arrayValue.values) || []).map(fsRestDecodeVal_);
+    if ('mapValue' in v) return fsRestDecodeFields_((v.mapValue && v.mapValue.fields) || {});
+    return null;
+}
+
+function fsRestDecodeFields_(fields) {
+    const out = {};
+    const keys = Object.keys(fields || {});
+    for (let i = 0; i < keys.length; i++) out[keys[i]] = fsRestDecodeVal_(fields[keys[i]]);
+    return out;
+}
+
+async function fastGetPublicDoc_(collectionName, docId, routeKey) {
+    const cacheKey = collectionName + '/' + docId;
+    if (collectionName === 'buildingDashboardSummaryV1' && window._stage2c2EarlyDashPromise_) {
+        try { await window._stage2c2EarlyDashPromise_; } catch (e) {}
+        window._stage2c2EarlyDashPromise_ = null;
+    }
+    const pre = window._stage2c2BootstrapCache_[cacheKey];
+    if (pre && (Date.now() - pre.ts) < 10000) {
+        return pre.snap;
+    }
+    // Use direct no-store REST GET on live browser origins (enforces 100% identical firestore.rules with zero SDK WebChannel cold start!)
+    const canUseRest = typeof fetch === 'function' && typeof window !== 'undefined' && window.location && /^https?:$/.test(window.location.protocol);
+    if (canUseRest) {
+        try {
+            const url = FIRESTORE_REST_BASE_V2_ + '/' + encodeURIComponent(collectionName) + '/' + encodeURIComponent(docId);
+            const r = await fetch(url, { method: 'GET', cache: 'no-store' });
+            if (r.status === 404) return { exists: () => false, data: () => null };
+            if (r.status === 403) {
+                const err = new Error('PERMISSION_DENIED');
+                err.code = 'permission-denied';
+                throw err;
+            }
+            if (r.ok) {
+                const parsed = await r.json();
+                const decoded = fsRestDecodeFields_(parsed.fields || {});
+                return { exists: () => true, data: () => decoded };
+            }
+        } catch (restErr) {
+            if (restErr && restErr.code === 'permission-denied') throw restErr;
+            // Fall through to Firebase SDK getDoc
+        }
+    }
+    if (!window.fb || !window.fb.getDoc || !window.db) return null;
+    const ref = (routeKey && typeof window.fb.routeDoc === 'function')
+        ? window.fb.routeDoc(window.db, collectionName, docId, routeKey)
+        : window.fb.doc(window.db, collectionName, docId);
+    return window.fb.getDoc(ref);
+}
+
+async function prefetchEntranceBootstrapV2_(routeKey) {
+    if (!routeKey) return;
+    try {
+        if (window._stage2c2EarlyPrefetchPromise_ && window._stage2c2EarlyPrefetchRoute_ === routeKey) {
+            await window._stage2c2EarlyPrefetchPromise_;
+            window._stage2c2EarlyPrefetchPromise_ = null;
+            return;
+        }
+        const [pubSnap, sumSnap, manSnap] = await Promise.all([
+            fastGetPublicDoc_('publicPlatformConfigV1', 'global', null).catch(() => null),
+            fastGetPublicDoc_('entranceSummaryV1', routeKey, routeKey).catch(() => null),
+            fastGetPublicDoc_('financialManifestV1', routeKey, routeKey).catch(() => null)
+        ]);
+        const ts = Date.now();
+        if (pubSnap) window._stage2c2BootstrapCache_['publicPlatformConfigV1/global'] = { ts, snap: pubSnap };
+        if (sumSnap) window._stage2c2BootstrapCache_['entranceSummaryV1/' + routeKey] = { ts, snap: sumSnap };
+        if (manSnap) {
+            window._stage2c2BootstrapCache_['financialManifestV1/' + routeKey] = { ts, snap: manSnap };
+            // Speculatively prefetch buildingDashboardSummaryV1 in parallel right away if manifest is ready!
+            const md = manSnap.exists && manSnap.exists() ? manSnap.data() : null;
+            if (md && md.parts && md.parts.buildingDashboard) {
+                const dId = md.parts.buildingDashboard;
+                window._stage2c2EarlyDashPromise_ = fastGetPublicDoc_('buildingDashboardSummaryV1', dId, routeKey)
+                    .then(s => { if (s) window._stage2c2BootstrapCache_['buildingDashboardSummaryV1/' + dId] = { ts: Date.now(), snap: s }; return s; })
+                    .catch(() => null);
+            }
+        }
+    } catch (e) { /* best-effort bootstrap prefetch */ }
+}
 
 function purgeAdminConfigCache_() {
     window._adminConfigCache = null;
 }
+
+function purgeFinancialMaterializedCache_(preserveBootstrap) {
+    window._finMatCache_ = null;
+    window._finMatMonthlyCache_ = Object.create(null);
+    if (!preserveBootstrap) window._stage2c2BootstrapCache_ = Object.create(null);
+    window._publicExtUnitStatements_ = [];
+    window._cachedExternalUnits = [];
+    window._cachedExternalUnitStatements = [];
+    window._cachedExternalReconciliation = [];
+    window._cachedExternalPendingPayments = [];
+    window._cachedExternalUnitActions = [];
+}
+
+function isEntranceAdminLoggedIn_(routeKey) {
+    if (!routeKey) return false;
+    return Boolean(sessionStorage.getItem('adminAuth_' + routeKey) || sessionStorage.getItem('adminPin_' + routeKey));
+}
+
+function clearProtectedFinancialDomOnBlock_(routeKey, isHardBlocked) {
+    purgeFinancialMaterializedCache_();
+    const label = isHardBlocked ? 'Достъпът е спрян' : 'Скрит (неплатен абонамент)';
+    const setText = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
+    setText('dash-debts', '—');
+    setText('dash-balance', '—');
+    setText('dash-maintenance-balance', '—');
+    setText('dash-credit-balance', '—');
+    setText('dash-debts-trend', label);
+    setText('dash-balance-trend', label);
+    setText('maintenanceSourceSummary', label);
+    setText('dash-credit-trend', label);
+    const breakdownEl = document.getElementById('dash-debts-breakdown');
+    if (breakdownEl) { breakdownEl.innerHTML = ''; breakdownEl.style.display = 'none'; }
+    setText('saldo', isHardBlocked ? 'Спрян достъп' : 'Скрит');
+    const tBody = document.getElementById('tableBody');
+    if (tBody) {
+        tBody.innerHTML = `<tr><td colspan="14" style="text-align:center; color:#e74c3c;">⚠️ ${isHardBlocked ? 'Достъпът е напълно спрян поради неплатен абонамент.' : 'Информацията е скрита поради неплатен абонамент.'}</td></tr>`;
+    }
+    const repEl = document.getElementById('report-content');
+    if (repEl) repEl.innerHTML = '';
+    const extSect = document.getElementById('publicExternalUnitsSection');
+    if (extSect) extSect.style.display = 'none';
+    const extBox = document.getElementById('publicExtUnitDetails');
+    if (extBox) extBox.innerHTML = '';
+    const extNote = document.getElementById('individualAptExtUnitsNote');
+    if (extNote) extNote.style.display = 'none';
+    if (isHardBlocked) {
+        purgeAdminConfigCache_();
+        sessionStorage.removeItem('adminAuth_' + routeKey);
+        sessionStorage.removeItem('adminPin_' + routeKey);
+        const adminOverlay = document.getElementById('adminOverlay');
+        if (adminOverlay) adminOverlay.classList.remove('active');
+        const homeView = document.getElementById('view-entrance-home');
+        if (homeView) { homeView.classList.remove('active'); homeView.classList.add('hidden'); }
+        const reportView = document.getElementById('view-monthly-report');
+        if (reportView) { reportView.classList.remove('active'); reportView.classList.add('hidden'); }
+        const hardBlockView = document.getElementById('view-hard-blocked');
+        if (hardBlockView) {
+            hardBlockView.classList.remove('hidden');
+            hardBlockView.classList.add('active');
+            const hbId = hardBlockView.querySelector('#hard-block-id');
+            if (hbId) hbId.textContent = routeKey;
+        }
+    }
+}
+
+function attachEntranceSubscriptionWatcher_(routeKey) {
+    if (typeof window._entranceSubUnsub_ === 'function') {
+        try { window._entranceSubUnsub_(); } catch (e) {}
+        window._entranceSubUnsub_ = null;
+    }
+    if (!routeKey) return;
+    // Defer real-time Listen channel by 250ms so it never contends with initial paint,
+    // and ensure lazy Firebase SDK is loaded before attaching onSnapshot.
+    setTimeout(async () => {
+        if (routeKey !== currentRouteKey) return;
+        try {
+            if ((!window.fb || !window.db) && typeof window.ensureFirebaseSdk_ === 'function') {
+                await window.ensureFirebaseSdk_();
+            }
+            if (routeKey !== currentRouteKey || !window.fb || typeof window.fb.onSnapshot !== 'function' || !window.db) return;
+            const ref = window.fb.routeDoc(window.db, 'entranceSummaryV1', routeKey, routeKey);
+            window._entranceSubUnsub_ = window.fb.onSnapshot(ref, (snap) => {
+                if (!snap || !snap.exists() || routeKey !== currentRouteKey) return;
+                const d = snap.data() || {};
+                if (!d.payload || !d.payload.subscriptionGate) return;
+                const gateEval = evaluateSubscriptionGateClient_(d.payload.subscriptionGate);
+                if (gateEval.stale) return;
+                sessionStorage.setItem('isSoftBlocked_' + routeKey, gateEval.isSoftBlocked ? 'true' : 'false');
+                sessionStorage.setItem('isHardBlocked_' + routeKey, gateEval.isHardBlocked ? 'true' : 'false');
+                sessionStorage.setItem('subscriptionStatus_' + routeKey, gateEval.status || '');
+                if (gateEval.isHardBlocked || (gateEval.isSoftBlocked && !isEntranceAdminLoggedIn_(routeKey))) {
+                    clearProtectedFinancialDomOnBlock_(routeKey, gateEval.isHardBlocked);
+                }
+            }, () => { /* ignore transient listener error */ });
+        } catch (e) { /* best-effort live watcher */ }
+    }, 250);
+}
+
+function reconstructExternalUnitsClient_(summaryPayload, yearRowPayloadsByYear) {
+    if (!summaryPayload) return null;
+    const years = Array.isArray(summaryPayload.years) ? summaryPayload.years : Object.keys(yearRowPayloadsByYear || {}).sort();
+    const unitSummaries = Array.isArray(summaryPayload.unitSummaries) ? summaryPayload.unitSummaries : [];
+    const unitStatements = unitSummaries.map(us => {
+        let allPeriods = [];
+        for (let i = 0; i < years.length; i++) {
+            const yDoc = yearRowPayloadsByYear && yearRowPayloadsByYear[years[i]];
+            const uRows = yDoc && yDoc.unitPeriodsByUnit && yDoc.unitPeriodsByUnit[us.unitId];
+            if (Array.isArray(uRows)) allPeriods = allPeriods.concat(uRows);
+        }
+        return Object.assign({}, us, { periods: allPeriods });
+    });
+    let reconciliationByPeriod = [];
+    for (let j = 0; j < years.length; j++) {
+        const yDoc2 = yearRowPayloadsByYear && yearRowPayloadsByYear[years[j]];
+        if (yDoc2 && Array.isArray(yDoc2.reconciliationByPeriod)) {
+            reconciliationByPeriod = reconciliationByPeriod.concat(yDoc2.reconciliationByPeriod);
+        }
+    }
+    return {
+        success: true,
+        units: Array.isArray(summaryPayload.units) ? summaryPayload.units : [],
+        unitStatements: unitStatements,
+        reconciliationByPeriod: reconciliationByPeriod,
+        pendingPayments: Array.isArray(summaryPayload.pendingPayments) ? summaryPayload.pendingPayments : [],
+        actions: Array.isArray(summaryPayload.actions) ? summaryPayload.actions : [],
+        financialSummary: summaryPayload.financialSummary || null,
+        years: years
+    };
+}
+
+async function fetchAdminFinancialBundleV1_(routeKey) {
+    const pin = sessionStorage.getItem('adminAuth_' + routeKey) || sessionStorage.getItem('adminPin_' + routeKey) || '';
+    if (!pin || !routeKey) return null;
+    try {
+        const res = await fetch(SCRIPT_URL, {
+            method: 'POST',
+            body: new URLSearchParams({ action: 'getAdminFinancialBundleV1', routeKey: routeKey, pin: pin })
+        });
+        if (!res.ok) return null;
+        const data = await res.json();
+        if (!data || !data.success) {
+            if (data && data.isHardBlocked) clearProtectedFinancialDomOnBlock_(routeKey, true);
+            return null;
+        }
+        return data;
+    } catch (e) {
+        return null;
+    }
+}
+
+async function readFinancialManifestBundleV2_(routeKey, opts) {
+    const options = opts || {};
+    const needDashboard = options.dashboard !== false;
+    const needExternalSummary = Boolean(options.externalSummary || options.externalRows);
+    const needExternalRows = Boolean(options.externalRows);
+    const forceRefresh = Boolean(options.forceRefresh);
+    if (!routeKey) return null;
+
+    const isHard = sessionStorage.getItem('isHardBlocked_' + routeKey) === 'true';
+    const isSoft = sessionStorage.getItem('isSoftBlocked_' + routeKey) === 'true';
+    const isAdmin = isEntranceAdminLoggedIn_(routeKey);
+    if (isHard) return null;
+
+    const now = Date.now();
+    const cached = window._finMatCache_;
+    if (!forceRefresh && cached && cached.routeKey === routeKey && (now - cached.fetchedAt) < 15000) {
+        const hasDash = !needDashboard || Boolean(cached.dashboard);
+        const hasExtSum = !needExternalSummary || Boolean(cached.externalUnitsSummary);
+        const hasExtRows = !needExternalRows || Boolean(cached.externalUnitsReconstructed);
+        if (hasDash && hasExtSum && hasExtRows) return cached;
+    }
+
+    const inFlightKey = `${routeKey}|${needDashboard ? 1 : 0}|${needExternalSummary ? 1 : 0}|${needExternalRows ? 1 : 0}`;
+    if (!forceRefresh && window._finMatInFlight_ && window._finMatInFlight_.key === inFlightKey) {
+        return window._finMatInFlight_.promise;
+    }
+
+    const execPromise = (async () => {
+    // Admin grace-period fallback: during SOFT_BLOCKED, Firestore denies direct reads, so Admin reads via POST PIN-gated GAS (0 recalculation!)
+    if (isSoft && isAdmin) {
+        const adminBundle = await fetchAdminFinancialBundleV1_(routeKey);
+        if (!adminBundle || !adminBundle.success) return null;
+        if (adminBundle.manifest && adminBundle.manifest.freshnessStatus && adminBundle.manifest.freshnessStatus !== 'CURRENT') {
+            showProjectionFreshnessBanner_(adminBundle.manifest.freshnessStatus, 'Финансови данни');
+        }
+        const entry = {
+            routeKey: routeKey,
+            fetchedAt: now,
+            fromAdminGrace: true,
+            manifest: adminBundle.manifest,
+            dashboard: adminBundle.dashboard || null,
+            maintenanceBalance: adminBundle.maintenanceBalance || (adminBundle.dashboard && adminBundle.dashboard.maintenanceBalance) || null,
+            externalUnitsSummary: adminBundle.externalUnitsSummary || null,
+            externalUnitsPeriodRows: adminBundle.externalUnitsPeriodRows || null,
+            externalUnitsReconstructed: adminBundle.externalUnitsReconstructed || null
+        };
+        window._finMatCache_ = entry;
+        return entry;
+    }
+
+    if (isSoft && !isAdmin) return null;
+
+    try {
+        const mSnap = await fastGetPublicDoc_('financialManifestV1', routeKey, routeKey);
+        if (!mSnap || !mSnap.exists()) return null;
+        const m = mSnap.data() || {};
+        if (m.contractVersion !== 1 || m.routeKey !== routeKey || !m.parts) return null;
+
+        const freshness = m.freshnessStatus || 'UNVERIFIED';
+        if (freshness !== 'CURRENT') {
+            showProjectionFreshnessBanner_(freshness === 'DIRTY_IN_FLIGHT' || freshness === 'RECOMPUTING' ? 'PENDING' : freshness, 'Финансови данни');
+        } else {
+            showProjectionFreshnessBanner_('CURRENT');
+        }
+
+        const pubGen = Number(m.publishedMutationGeneration);
+        const pubEpoch = Number(m.publishedFinancialEpoch);
+        const parts = m.parts || {};
+
+        const reqs = [];
+        const keys = [];
+        if (needDashboard && parts.buildingDashboard) {
+            keys.push({ kind: 'dashboard', id: parts.buildingDashboard });
+            reqs.push(fastGetPublicDoc_('buildingDashboardSummaryV1', parts.buildingDashboard, routeKey));
+        }
+        if (needExternalSummary && parts.externalUnitsSummary) {
+            keys.push({ kind: 'extSum', id: parts.externalUnitsSummary });
+            reqs.push(fastGetPublicDoc_('externalUnitsSummaryV1', parts.externalUnitsSummary, routeKey));
+        }
+        if (needExternalRows && parts.externalUnitsPeriodRows && typeof parts.externalUnitsPeriodRows === 'object') {
+            const years = Object.keys(parts.externalUnitsPeriodRows).sort();
+            for (let i = 0; i < years.length; i++) {
+                const yr = years[i];
+                const docId = parts.externalUnitsPeriodRows[yr];
+                if (!docId) continue;
+                keys.push({ kind: 'extYear', year: yr, id: docId });
+                reqs.push(fastGetPublicDoc_('externalUnitsPeriodRowsV1', docId, routeKey));
+            }
+        }
+        if (!reqs.length) return null;
+
+        const snaps = await Promise.all(reqs);
+        let dashPayload = (cached && cached.routeKey === routeKey && cached.publishedEpoch === pubEpoch) ? cached.dashboard : null;
+        let extSumPayload = (cached && cached.routeKey === routeKey && cached.publishedEpoch === pubEpoch) ? cached.externalUnitsSummary : null;
+        let extRowsByYear = (cached && cached.routeKey === routeKey && cached.publishedEpoch === pubEpoch && cached.externalUnitsPeriodRows)
+            ? Object.assign({}, cached.externalUnitsPeriodRows) : {};
+
+        for (let i = 0; i < snaps.length; i++) {
+            const s = snaps[i];
+            const meta = keys[i];
+            if (!s || !s.exists()) return null;
+            const pd = s.data() || {};
+            // ZERO VERSION MIXING INVARIANT: every immutable part must match the exact manifest (G, E)!
+            if (pd.routeKey !== routeKey ||
+                Number(pd.mutationGeneration) !== pubGen ||
+                Number(pd.targetFinancialEpoch) !== pubEpoch ||
+                !pd.payload) {
+                return null;
+            }
+            if (meta.kind === 'dashboard') dashPayload = pd.payload;
+            else if (meta.kind === 'extSum') extSumPayload = pd.payload;
+            else if (meta.kind === 'extYear') extRowsByYear[meta.year] = pd.payload;
+        }
+
+        const extRec = (needExternalRows && extSumPayload)
+            ? reconstructExternalUnitsClient_(extSumPayload, extRowsByYear)
+            : ((cached && cached.routeKey === routeKey && cached.publishedEpoch === pubEpoch) ? cached.externalUnitsReconstructed : null);
+
+        const entry = {
+            routeKey: routeKey,
+            fetchedAt: now,
+            publishedGeneration: pubGen,
+            publishedEpoch: pubEpoch,
+            manifest: m,
+            dashboard: dashPayload,
+            maintenanceBalance: dashPayload && dashPayload.maintenanceBalance ? dashPayload.maintenanceBalance : null,
+            externalUnitsSummary: extSumPayload,
+            externalUnitsPeriodRows: extRowsByYear,
+            externalUnitsReconstructed: extRec
+        };
+        window._finMatCache_ = entry;
+        return entry;
+    } catch (e) {
+        if (e && (e.code === 'permission-denied' || String(e.message || '').indexOf('PERMISSION_DENIED') !== -1)) {
+            clearProtectedFinancialDomOnBlock_(routeKey, false);
+        }
+        return null;
+    }
+    })();
+    window._finMatInFlight_ = { key: inFlightKey, promise: execPromise };
+    try {
+        return await execPromise;
+    } finally {
+        if (window._finMatInFlight_ && window._finMatInFlight_.promise === execPromise) {
+            window._finMatInFlight_ = null;
+        }
+    }
+}
+window.readFinancialManifestBundleV2_ = readFinancialManifestBundleV2_;
+window.purgeFinancialMaterializedCache_ = purgeFinancialMaterializedCache_;
+window.clearProtectedFinancialDomOnBlock_ = clearProtectedFinancialDomOnBlock_;
+
+// STAGE 2C.3: Materialized Monthly Financial Reports Client (0 GAS calls on public read!)
+async function fetchAdminMonthlyReportV3_(routeKey, period) {
+    const pin = sessionStorage.getItem('adminAuth_' + routeKey) || sessionStorage.getItem('adminPin_' + routeKey) || '';
+    if (!pin || !routeKey || !period) return null;
+    try {
+        const res = await fetch(SCRIPT_URL, {
+            method: 'POST',
+            body: new URLSearchParams({ action: 'getAdminMonthlyReportV3', routeKey: routeKey, period: period, pin: pin })
+        });
+        if (!res.ok) return null;
+        const data = await res.json();
+        if (!data || !data.success) {
+            if (data && data.isHardBlocked) clearProtectedFinancialDomOnBlock_(routeKey, true);
+            return null;
+        }
+        return data;
+    } catch (e) {
+        return null;
+    }
+}
+
+function buildMonthlyReportViewDataFromMaterialized_(payload, reportDetails, meta) {
+    if (!payload || !payload.success || !payload.reconciliation) return null;
+    const g = payload.grossByCategoryCents || {};
+    const invoicedCounts = {
+        elevator: Number(g.elevator || 0) / 100,
+        subscription: Number(g.subscription || 0) / 100,
+        light: Number(g.light || 0) / 100,
+        security: Number(g.security || 0) / 100,
+        cleaning: Number(g.cleaning || 0) / 100,
+        podrajka: Number(g.maintenance || 0) / 100,
+        remont: Number(g.repairFund || 0) / 100,
+        water: Number(g.water || 0) / 100,
+        platformSubscription: Number(g.platformSubscription || 0) / 100,
+        total: Number(payload.reconciliation.grossExpenseCents || 0) / 100
+    };
+    const det = reportDetails && typeof reportDetails === 'object' ? reportDetails : {};
+    const apts = Array.isArray(det.apartments) ? det.apartments.map(a => ({
+        apt: a.apt || '?',
+        occupants: a.occupants !== undefined ? a.occupants : 0,
+        chips: a.chips !== undefined ? a.chips : 0,
+        participation: a.participation !== undefined ? a.participation : 'Да',
+        idealParts: a.idealParts !== undefined ? a.idealParts : 0,
+        art51Multiplier: a.art51Multiplier || null,
+        art51Info: a.art51Info || null,
+        due: a.dueCents !== undefined ? Number(a.dueCents) / 100 : Number(a.due || 0)
+    })) : [];
+    const collectedVal = det.apartmentCollectedCents !== undefined
+        ? Number(det.apartmentCollectedCents) / 100
+        : Number(det.collected || 0);
+    return {
+        success: true,
+        _fromMaterializedV3: true,
+        _freshnessStatus: (meta && meta.freshnessStatus) || 'CURRENT',
+        _partDocId: (meta && meta.partDocId) || null,
+        data: {
+            invoiced: invoicedCounts,
+            apartmentTotalDueCents: det.apartmentTotalDueCents !== undefined
+                ? Number(det.apartmentTotalDueCents)
+                : Number(payload.reconciliation.apartmentExactSumCents || 0),
+            collected: collectedVal,
+            logic: det.logic || 'Равно',
+            incomesV2: Array.isArray(det.incomesV2) ? det.incomesV2 : [],
+            distributionsV2: Array.isArray(det.distributionsV2) ? det.distributionsV2 : [],
+            v3Summary: payload,
+            apartments: apts,
+            hasIncompleteHistoricalData: Boolean(det.hasIncompleteHistoricalData),
+            availablePeriods: (meta && meta.availablePeriods) || [],
+            availableYears: (meta && meta.availableYears) || []
+        }
+    };
+}
+
+async function readMaterializedMonthlyReportV3_(routeKey, period, opts) {
+    const options = opts || {};
+    if (!routeKey || !period) return null;
+    const isHard = sessionStorage.getItem('isHardBlocked_' + routeKey) === 'true';
+    const isSoft = sessionStorage.getItem('isSoftBlocked_' + routeKey) === 'true';
+    const isAdmin = isEntranceAdminLoggedIn_(routeKey);
+    if (isHard) return { success: false, permissionDenied: true, isHardBlocked: true };
+
+    const cacheKey = routeKey + '|' + period;
+    const now = Date.now();
+    const cached = window._finMatMonthlyCache_ && window._finMatMonthlyCache_[cacheKey];
+    if (!options.forceRefresh && cached && (now - cached.fetchedAt) < 15000) {
+        return cached.result;
+    }
+
+    // Admin grace-period fallback during SOFT_BLOCKED (POST PIN-gated, zero recalculation!)
+    if (isSoft && isAdmin) {
+        const adminRes = await fetchAdminMonthlyReportV3_(routeKey, period);
+        if (!adminRes || !adminRes.success || !adminRes.data) return null;
+        const fresh = (adminRes.manifest && adminRes.manifest.freshnessStatus) || 'CURRENT';
+        if (fresh !== 'CURRENT') showProjectionFreshnessBanner_(fresh, 'Месечен отчет');
+        else showProjectionFreshnessBanner_('CURRENT');
+        const viewData = buildMonthlyReportViewDataFromMaterialized_(adminRes.data, adminRes.reportDetails, {
+            freshnessStatus: fresh,
+            partDocId: adminRes.partDocId,
+            availablePeriods: adminRes.availablePeriods,
+            availableYears: adminRes.availableYears
+        });
+        if (!viewData) return null;
+        const wrapped = { success: true, fromAdminGrace: true, viewData: viewData, manifest: adminRes.manifest };
+        window._finMatMonthlyCache_[cacheKey] = { fetchedAt: now, result: wrapped };
+        return wrapped;
+    }
+
+    if (isSoft && !isAdmin) return { success: false, permissionDenied: true, isSoftBlocked: true };
+
+    try {
+        // Reuse cached manifest from Stage 2C.2 bootstrap/bundle if fresh, else 1 REST GET
+        let m = (window._finMatCache_ && window._finMatCache_.routeKey === routeKey && window._finMatCache_.manifest && (now - window._finMatCache_.fetchedAt) < 15000)
+            ? window._finMatCache_.manifest
+            : null;
+        if (!m || !m.parts || !m.parts.monthlyReports || !m.parts.monthlyReports[period]) {
+            const mSnap = await fastGetPublicDoc_('financialManifestV1', routeKey, routeKey);
+            if (!mSnap || !mSnap.exists()) return null;
+            m = mSnap.data() || {};
+        }
+        if (m.contractVersion !== 1 || m.routeKey !== routeKey || !m.parts || !m.parts.monthlyReports) return null;
+
+        const partDocId = m.parts.monthlyReports[period];
+        if (!partDocId) return null;
+
+        const pSnap = await fastGetPublicDoc_('monthlyReportSummaryV3', partDocId, routeKey);
+        if (!pSnap || !pSnap.exists()) return null;
+        const pd = pSnap.data() || {};
+
+        // Strict identity & zero-version-mixing guard
+        if (pd.routeKey !== routeKey || pd.period !== period || pd.partType !== 'MONTHLY_REPORT_SUMMARY_V3' || !pd.payload) {
+            return null;
+        }
+        const pv = m.partVersions && m.partVersions.monthlyReports && m.partVersions.monthlyReports[period];
+        const expectedG = pv ? Number(pv.g) : Number(m.publishedMutationGeneration);
+        const expectedE = pv ? Number(pv.e) : Number(m.publishedFinancialEpoch);
+        if (Number(pd.mutationGeneration) !== expectedG ||
+            Number(pd.targetFinancialEpoch) !== expectedE ||
+            expectedE > Number(m.publishedFinancialEpoch)) {
+            return null;
+        }
+
+        const freshness = m.freshnessStatus || 'UNVERIFIED';
+        if (freshness !== 'CURRENT') {
+            showProjectionFreshnessBanner_(freshness === 'DIRTY_IN_FLIGHT' || freshness === 'RECOMPUTING' ? 'PENDING' : freshness, 'Месечен отчет');
+        } else {
+            showProjectionFreshnessBanner_('CURRENT');
+        }
+
+        // Require reportDetails for complete 0-GAS UI rendering (Stage 2C.3 parts always carry it)
+        if (!pd.reportDetails || typeof pd.reportDetails !== 'object') return null;
+
+        const viewData = buildMonthlyReportViewDataFromMaterialized_(pd.payload, pd.reportDetails, {
+            freshnessStatus: freshness,
+            partDocId: partDocId,
+            availablePeriods: m.availablePeriods || Object.keys(m.parts.monthlyReports),
+            availableYears: m.availableYears || []
+        });
+        if (!viewData) return null;
+        const wrapped = { success: true, viewData: viewData, partDoc: pd, manifest: m };
+        window._finMatMonthlyCache_[cacheKey] = { fetchedAt: now, result: wrapped };
+        return wrapped;
+    } catch (e) {
+        if (e && (e.code === 'permission-denied' || String(e.message || '').indexOf('PERMISSION_DENIED') !== -1)) {
+            clearProtectedFinancialDomOnBlock_(routeKey, false);
+            return { success: false, permissionDenied: true };
+        }
+        return null;
+    }
+}
+window.readMaterializedMonthlyReportV3_ = readMaterializedMonthlyReportV3_;
+window.buildMonthlyReportViewDataFromMaterialized_ = buildMonthlyReportViewDataFromMaterialized_;
 
 function showProjectionFreshnessBanner_(status, contextLabel) {
     let el = document.getElementById('projectionFreshnessBanner');
@@ -175,13 +747,17 @@ function evaluateSubscriptionGateClient_(gate, nowDate) {
 }
 
 async function readPrecomputedPublicPlatformConfig_() {
-    if (!window.fb || !window.fb.getDoc || !window.fb.doc || !window.db) return null;
     try {
-        const snap = await window.fb.getDoc(window.fb.doc(window.db, 'publicPlatformConfigV1', 'global'));
+        if (window._stage2c2EarlyPubPromise_) {
+            try { await window._stage2c2EarlyPubPromise_; } catch (e) {}
+            window._stage2c2EarlyPubPromise_ = null;
+        }
+        const snap = await fastGetPublicDoc_('publicPlatformConfigV1', 'global', null);
         if (!snap || !snap.exists()) return null;
         const d = snap.data() || {};
         if (d.payload && d.payload.projFlags && typeof d.payload.projFlags === 'object') {
             window._projFlags = Object.assign({}, window._projFlags, d.payload.projFlags);
+            window._projFlagsLoaded_ = true;
         }
         if (d.contractVersion !== 1 || d.projectionStatus !== 'CURRENT' || !d.payload) {
             if (d.projectionStatus && d.projectionStatus !== 'CURRENT') showProjectionFreshnessBanner_(d.projectionStatus);
@@ -194,11 +770,26 @@ async function readPrecomputedPublicPlatformConfig_() {
     }
 }
 
+async function ensureProjFlagsLoaded_() {
+    if (window._projFlagsLoaded_) return window._projFlags;
+    if (window._projFlagsInFlight_) return window._projFlagsInFlight_;
+    window._projFlagsInFlight_ = (async () => {
+        try {
+            await readPrecomputedPublicPlatformConfig_();
+        } catch (e) { /* keep defaults */ }
+        return window._projFlags;
+    })();
+    try {
+        return await window._projFlagsInFlight_;
+    } finally {
+        window._projFlagsInFlight_ = null;
+    }
+}
+
 async function readPrecomputedEntranceSummary_(routeKey) {
     if (window._projFlags.ENTRANCE_SUMMARY !== 'ON') return null;
-    if (!window.fb || !window.fb.getDoc || !window.fb.routeDoc || !window.db) return null;
     try {
-        const snap = await window.fb.getDoc(window.fb.routeDoc(window.db, 'entranceSummaryV1', routeKey, routeKey));
+        const snap = await fastGetPublicDoc_('entranceSummaryV1', routeKey, routeKey);
         if (!snap || !snap.exists()) return null;
         const d = snap.data() || {};
         if (d.contractVersion !== 1 || d.routeKey !== routeKey || !d.payload) return null;
@@ -1150,7 +1741,7 @@ async function apiCall(action, params = {}, operationContext) {
             }
         }
         // The accepted form-POST contract avoids URL limits for nine per-category notes.
-        const response = (action === 'getAdminConfigSnapshotV1' || action === 'retryFailedProjectionsV1' || action === 'distributeMaintenanceV1' || action === 'fin01Preview' || action === 'fin01Settle' || action === 'addChargesV2' || action === 'saveRecurringExpenseV1' || action === 'previewExternalUnitPaymentV1' || action === 'recordExternalUnitPaymentV1' || action === 'reverseExternalUnitPaymentV1' || action === 'distributeIncomeV2') ? // SLICE5_RECURRING_UI // FIN01_POST // MAINTENANCE_POST
+        const response = (action === 'getAdminConfigSnapshotV1' || action === 'getAdminFinancialBundleV1' || action === 'retryFailedProjectionsV1' || action === 'distributeMaintenanceV1' || action === 'fin01Preview' || action === 'fin01Settle' || action === 'addChargesV2' || action === 'saveRecurringExpenseV1' || action === 'previewExternalUnitPaymentV1' || action === 'recordExternalUnitPaymentV1' || action === 'reverseExternalUnitPaymentV1' || action === 'distributeIncomeV2') ? // SLICE5_RECURRING_UI // FIN01_POST // MAINTENANCE_POST
             await fetch(SCRIPT_URL, {method: 'POST', body: new URLSearchParams(params)}) :
             await fetch(`${SCRIPT_URL}?${queryParams}`);
         if (!response.ok) throw new Error('HTTP_' + response.status);
@@ -1325,6 +1916,7 @@ window.exitEntrance = function () {
         hardBlockView.classList.remove('active');
         hardBlockView.classList.add('hidden');
     }
+    document.documentElement.classList.remove('direct-entrance-route');
     document.getElementById('view-selector').classList.remove('hidden');
     document.getElementById('view-selector').classList.add('active');
     
@@ -1398,6 +1990,13 @@ window.enterEntrance = async function () {
     }
 
     purgeAdminConfigCache_();
+    purgeFinancialMaterializedCache_(true);
+    // Stage 2C.3 Perf Remediation: Ensure feature flags are hydrated AND prefetch entranceSummaryV1 +
+    // financialManifestV1 (+ speculative buildingDashboardSummaryV1) in parallel during interactive navigation!
+    await Promise.all([
+        ensureProjFlagsLoaded_(),
+        prefetchEntranceBootstrapV2_(currentRouteKey)
+    ]);
     let result, configResult;
     const preSum = await readPrecomputedEntranceSummary_(currentRouteKey);
     if (preSum && preSum.apartments && preSum.configResult) {
@@ -1606,6 +2205,7 @@ window.enterEntrance = async function () {
             window.location.hash = targetHash;
         }
 
+        attachEntranceSubscriptionWatcher_(currentRouteKey);
         loadDashboardData();
         return true;
     } else {
@@ -1613,6 +2213,7 @@ window.enterEntrance = async function () {
             btn.textContent = originalText;
             btn.disabled = false;
         }
+        document.documentElement.classList.remove('direct-entrance-route');
         const errStr = result && result.error ? result.error.toString() : "";
         if (errStr.includes("fetch") || errStr.includes("NetworkError")) {
             showToast("Грешка при връзка (Failed to fetch). Проверете интернет връзката си.", "error");
@@ -1626,6 +2227,9 @@ window.enterEntrance = async function () {
 // (Moved logic to main DOMContentLoaded at the top)
 
 async function loadDashboardFromFirebase(routeKey) {
+  if ((!window.fb || !window.db) && typeof window.ensureFirebaseSdk_ === 'function') {
+    await window.ensureFirebaseSdk_();
+  }
   const { collection, getDocs, query, where } = window.fb;
   const db = window.db;
 
@@ -1633,8 +2237,21 @@ async function loadDashboardFromFirebase(routeKey) {
     collection(db, "apartments"),
     where("buildingId", "==", routeKey)
   );
+  const qDist = query(
+    collection(db, "distributionsV2"),
+    where("routeKey", "==", routeKey),
+    where("category", "==", "Фонд ремонт")
+  );
+  const qCredit = query(
+    collection(db, "creditLiabilitiesV2"),
+    where("routeKey", "==", routeKey)
+  );
 
-  const snapshot = await getDocs(q);
+  const [snapshot, snapDistRes, snapCreditRes] = await Promise.all([
+    getDocs(q),
+    getDocs(qDist).catch(err => ({ _err: err })),
+    getDocs(qCredit).catch(err => ({ _err: err }))
+  ]);
 
   let totalDebt = 0;
   let totalBalance = 0;
@@ -1664,37 +2281,26 @@ async function loadDashboardFromFirebase(routeKey) {
   });
 
   let totalSpent = 0;
-  try {
-    const qDist = query(
-      collection(db, "distributionsV2"),
-      where("routeKey", "==", routeKey),
-      where("category", "==", "Фонд ремонт")
-    );
-    const snapDist = await getDocs(qDist);
-    snapDist.forEach(d => {
+  if (snapDistRes && !snapDistRes._err) {
+    snapDistRes.forEach(d => {
       totalSpent += parseFloat(d.data().amount) || 0;
     });
-  } catch (err) {
-    if (isStaleRouteRequestError(err)) throw err;
-    console.error("Error loading distributions for dashboard:", err);
+  } else if (snapDistRes && snapDistRes._err) {
+    if (isStaleRouteRequestError(snapDistRes._err)) throw snapDistRes._err;
+    console.error("Error loading distributions for dashboard:", snapDistRes._err);
   }
 
   let totalCreditRemaining = 0;
   let totalCreditOriginal = 0;
-  try {
-    const qCredit = query(
-      collection(db, "creditLiabilitiesV2"),
-      where("routeKey", "==", routeKey)
-    );
-    const snapCredit = await getDocs(qCredit);
-    snapCredit.forEach(d => {
+  if (snapCreditRes && !snapCreditRes._err) {
+    snapCreditRes.forEach(d => {
       const cData = d.data();
       totalCreditRemaining += Number(cData.remaining || 0);
       totalCreditOriginal += Number(cData.original || 0);
     });
-  } catch (err) {
-    if (isStaleRouteRequestError(err)) throw err;
-    console.error("Error loading credit liabilities for dashboard:", err);
+  } else if (snapCreditRes && snapCreditRes._err) {
+    if (isStaleRouteRequestError(snapCreditRes._err)) throw snapCreditRes._err;
+    console.error("Error loading credit liabilities for dashboard:", snapCreditRes._err);
   }
 
   return {
@@ -1712,30 +2318,90 @@ async function loadDashboardFromFirebase(routeKey) {
 }
 
 async function loadDashboardData() {
-    if(typeof maintenanceRefreshSummary_==='function')maintenanceRefreshSummary_(); // MAINTENANCE_HOME
     const requestContext = captureRouteRequestContext();
     try {
+        // Ensure feature flags are hydrated BEFORE maintenanceRefreshSummary_ or dashboard read
+        // so neither card can race into a slow legacy GAS fallback!
+        if (!window._projFlagsLoaded_) {
+            await ensureProjFlagsLoaded_();
+            throwIfStaleRouteRequestContext(requestContext);
+        }
+        if(typeof maintenanceRefreshSummary_==='function')maintenanceRefreshSummary_(); // MAINTENANCE_HOME
         // Hard block или Soft block (за неавтентикирани живущи) — не зареждаме финансови данни от Firebase
         const isHardBlockedDash = sessionStorage.getItem("isHardBlocked_" + currentRouteKey) === "true";
         const isSoftBlockedDash = sessionStorage.getItem("isSoftBlocked_" + currentRouteKey) === "true";
-        const isAdminLoggedDash = Boolean(sessionStorage.getItem("adminPin_" + currentRouteKey));
+        const isAdminLoggedDash = isEntranceAdminLoggedIn_(currentRouteKey);
         if (isHardBlockedDash || (isSoftBlockedDash && !isAdminLoggedDash)) {
-            const label = isHardBlockedDash ? "Достъпът е спрян" : "Скрит (неплатен абонамент)";
-            document.getElementById('dash-debts').textContent = "—";
-            document.getElementById('dash-balance').textContent = "—";
-            if (document.getElementById('dash-maintenance-balance')) document.getElementById('dash-maintenance-balance').textContent = "—";
-            if (document.getElementById('dash-credit-balance')) document.getElementById('dash-credit-balance').textContent = "—";
-            if (document.getElementById('dash-debts-trend')) document.getElementById('dash-debts-trend').textContent = label;
-            if (document.getElementById('dash-balance-trend')) document.getElementById('dash-balance-trend').textContent = label;
-            if (document.getElementById('maintenanceSourceSummary')) document.getElementById('maintenanceSourceSummary').textContent = label;
-            if (document.getElementById('dash-credit-trend')) document.getElementById('dash-credit-trend').textContent = label;
+            clearProtectedFinancialDomOnBlock_(currentRouteKey, isHardBlockedDash);
             return;
         }
-        const [result, extStmtRes] = await Promise.all([
-            loadDashboardFromFirebase(currentRouteKey),
-            bgApiCall('getExternalUnitsStatementV1', { routeKey: currentRouteKey }).catch(() => null)
-        ]);
-        throwIfStaleRouteRequestContext(requestContext);
+
+        const dashFlag = (window._projFlags && window._projFlags.FIN_DASHBOARD) || 'OFF';
+        let result = null;
+        let extStmtRes = null;
+        let matBundle = null;
+
+        if (dashFlag === 'ON') {
+            matBundle = await readFinancialManifestBundleV2_(currentRouteKey, { dashboard: true });
+            throwIfStaleRouteRequestContext(requestContext);
+        } else if (dashFlag === 'PARITY') {
+            const [matRes, legDash, legExt] = await Promise.all([
+                readFinancialManifestBundleV2_(currentRouteKey, { dashboard: true }).catch(() => null),
+                loadDashboardFromFirebase(currentRouteKey),
+                bgApiCall('getExternalUnitsStatementV1', { routeKey: currentRouteKey }).catch(() => null)
+            ]);
+            throwIfStaleRouteRequestContext(requestContext);
+            result = legDash;
+            extStmtRes = legExt;
+            if (matRes && matRes.dashboard && legDash && legDash.success && legDash.dashboard) {
+                const ld = legDash.dashboard;
+                const md = matRes.dashboard;
+                let legExtCents = 0;
+                if (legExt && legExt.success && Array.isArray(legExt.unitStatements)) {
+                    legExt.unitStatements.forEach(us => { legExtCents += Math.max(0, Number(us.endingDebtCents || 0)); });
+                }
+                const parityOk =
+                    Math.round((parseFloat(ld.totalDebts) || 0) * 100) === md.apartmentDebtsCents &&
+                    legExtCents === md.externalDebtsCents &&
+                    Math.round((parseFloat(ld.totalBalance) || 0) * 100) === md.repairFundCollectedCents &&
+                    Math.round((parseFloat(ld.totalSpent) || 0) * 100) === md.repairFundSpentCents &&
+                    Math.round((parseFloat(ld.totalCreditRemaining) || 0) * 100) === md.creditRemainingCents;
+                if (Array.isArray(window._finMatParityLog_)) {
+                    window._finMatParityLog_.push({ model: 'BUILDING_DASHBOARD_SUMMARY_V1', exact: parityOk, routeKey: currentRouteKey });
+                }
+                if (parityOk) matBundle = matRes;
+            }
+        } else if (dashFlag === 'SHADOW') {
+            readFinancialManifestBundleV2_(currentRouteKey, { dashboard: true }).catch(() => null);
+        }
+
+        if (matBundle && matBundle.dashboard) {
+            const md = matBundle.dashboard;
+            result = {
+                success: true,
+                _fromPrecomputed: true,
+                dashboard: {
+                    totalDebts: md.totalDebts,
+                    totalBalance: md.totalBalance,
+                    totalTargetFund: md.totalTargetFund,
+                    totalSpent: md.totalSpent,
+                    totalCreditRemaining: md.totalCreditRemaining,
+                    totalCreditOriginal: md.totalCreditOriginal,
+                    trendData: md.trendData || []
+                }
+            };
+            extStmtRes = {
+                success: true,
+                _fromPrecomputed: true,
+                unitStatements: md.hasExternalUnits ? [{ endingDebtCents: md.externalDebtsCents }] : []
+            };
+        } else if (!result) {
+            [result, extStmtRes] = await Promise.all([
+                loadDashboardFromFirebase(currentRouteKey),
+                bgApiCall('getExternalUnitsStatementV1', { routeKey: currentRouteKey }).catch(() => null)
+            ]);
+            throwIfStaleRouteRequestContext(requestContext);
+        }
         if (result && result.success && result.dashboard) {
             const d = result.dashboard;
             const cur = sessionStorage.getItem("currency_" + currentRouteKey) || "EUR";
@@ -1789,6 +2455,12 @@ async function loadDashboardData() {
             }
 
             const creditBalEl = document.getElementById('dash-credit-balance');
+            if (typeof requestAnimationFrame === 'function') {
+                requestAnimationFrame(() => {
+                    const tNow = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+                    document.documentElement.dataset.perfDashMs = String(Math.round(tNow));
+                });
+            }
             const creditTrendEl = document.getElementById('dash-credit-trend');
             if (creditBalEl) {
                 const remainingNum = parseFloat(d.totalCreditRemaining) || 0;
@@ -2007,6 +2679,9 @@ window.setSectionAsyncState_ = setSectionAsyncState_;
 // ==============================================
 
 async function loadApartmentFromFirebase(routeKey, apartmentId) {
+  if ((!window.fb || !window.db) && typeof window.ensureFirebaseSdk_ === 'function') {
+    await window.ensureFirebaseSdk_();
+  }
   const { collection, getDocs, query, where } = window.fb;
   const db = window.db;
 
@@ -2015,7 +2690,12 @@ async function loadApartmentFromFirebase(routeKey, apartmentId) {
     where("buildingId", "==", routeKey),
     where("apartmentId", "==", apartmentId)
   );
-  const snapApt = await getDocs(qApt);
+  const qPeriods = query(
+    collection(db, "monthlyReports"),
+    where("buildingId", "==", routeKey),
+    where("apartmentId", "==", apartmentId)
+  );
+  const [snapApt, snapPeriods] = await Promise.all([getDocs(qApt), getDocs(qPeriods)]);
 
   let result = { saldo: 0, periods: [], aptNotice: "" };
 
@@ -2024,13 +2704,6 @@ async function loadApartmentFromFirebase(routeKey, apartmentId) {
     result.saldo = Number(data.balance || 0);
     result.targetFund = Number(data.targetFund || 0);
   });
-
-  const qPeriods = query(
-    collection(db, "monthlyReports"),
-    where("buildingId", "==", routeKey),
-    where("apartmentId", "==", apartmentId)
-  );
-  const snapPeriods = await getDocs(qPeriods);
 
   const rawPeriods = [];
   snapPeriods.forEach(doc => {
@@ -2085,6 +2758,7 @@ async function loadApartmentFromFirebase(routeKey, apartmentId) {
 }
 
 async function loadApartmentData(apartment) {
+    const _aptPerfStart = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
     const requestContext = captureRouteRequestContext();
     resetApartmentData();
 
@@ -2247,6 +2921,12 @@ async function loadApartmentData(apartment) {
         } else {
             tBody.innerHTML = '<tr><td colspan="14" style="text-align:center;">Няма налични данни за избрания апартамент.</td></tr>';
         }
+        if (typeof requestAnimationFrame === 'function') {
+            requestAnimationFrame(() => {
+                const tNow = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+                document.documentElement.dataset.perfAptMs = String(Math.round(tNow - _aptPerfStart));
+            });
+        }
 
         // --- ПЕРСОНАЛНО СЪОБЩЕНИЕ ЗА АПАРТАМЕНТА ---
         const aptNoticeBanner = document.getElementById("individualAptNotice");
@@ -2262,9 +2942,20 @@ async function loadApartmentData(apartment) {
         const art51Box = document.getElementById("individualAptArt51Box");
         const art51Text = document.getElementById("individualAptArt51Text");
         try {
-            const summaryRes = await apiCall('getApartmentMasterSummary', { apartment: apartment });
-            if (summaryRes && summaryRes.success && summaryRes.data && summaryRes.data.art51 && summaryRes.data.art51.active) {
-                const a51 = summaryRes.data.art51;
+            let a51 = null;
+            const dashFlagApt = (window._projFlags && window._projFlags.FIN_DASHBOARD) || 'OFF';
+            if (dashFlagApt === 'ON') {
+                const matApt = await readFinancialManifestBundleV2_(currentRouteKey, { dashboard: true });
+                throwIfStaleRouteRequestContext(requestContext);
+                if (matApt && matApt.dashboard && matApt.dashboard.art51ByApartment) {
+                    a51 = matApt.dashboard.art51ByApartment[normalizeAptName(apartment)] || matApt.dashboard.art51ByApartment[apartment] || { active: false };
+                }
+            }
+            if (a51 === null) {
+                const summaryRes = await apiCall('getApartmentMasterSummary', { apartment: apartment });
+                a51 = (summaryRes && summaryRes.success && summaryRes.data && summaryRes.data.art51 && summaryRes.data.art51.active) ? summaryRes.data.art51 : { active: false };
+            }
+            if (a51 && a51.active) {
                 const mult = a51.multiplier || 3;
                 const eff = a51.effectiveFromPeriod ? ` (в сила от период ${a51.effectiveFromPeriod})` : '';
                 const dec = (a51.decisionReference || a51.decisionDate)
@@ -2284,13 +2975,26 @@ async function loadApartmentData(apartment) {
             const extNote = document.getElementById("individualAptExtUnitsNote");
             const extSect = document.getElementById("publicExternalUnitsSection");
             const isBlockedPub = sessionStorage.getItem("isHardBlocked_" + currentRouteKey) === "true" ||
-                (sessionStorage.getItem("isSoftBlocked_" + currentRouteKey) === "true" && !sessionStorage.getItem("adminPin_" + currentRouteKey));
+                (sessionStorage.getItem("isSoftBlocked_" + currentRouteKey) === "true" && !isEntranceAdminLoggedIn_(currentRouteKey));
             if (isBlockedPub) {
                 if (extNote) extNote.style.display = "none";
                 if (extSect) extSect.style.display = "none";
             } else {
-                const extStmt = await bgApiCall('getExternalUnitsStatementV1', { routeKey: currentRouteKey }).catch(() => null);
-                const units = (extStmt && extStmt.success && Array.isArray(extStmt.unitStatements)) ? extStmt.unitStatements : [];
+                let units = [];
+                const extFlagApt = (window._projFlags && window._projFlags.FIN_EXTERNAL_UNITS) || 'OFF';
+                let usedPreExt = false;
+                if (extFlagApt === 'ON') {
+                    const matExt = await readFinancialManifestBundleV2_(currentRouteKey, { dashboard: false, externalSummary: true });
+                    throwIfStaleRouteRequestContext(requestContext);
+                    if (matExt && matExt.externalUnitsSummary && Array.isArray(matExt.externalUnitsSummary.unitSummaries)) {
+                        units = matExt.externalUnitsSummary.unitSummaries;
+                        usedPreExt = true;
+                    }
+                }
+                if (!usedPreExt) {
+                    const extStmt = await bgApiCall('getExternalUnitsStatementV1', { routeKey: currentRouteKey }).catch(() => null);
+                    units = (extStmt && extStmt.success && Array.isArray(extStmt.unitStatements)) ? extStmt.unitStatements : [];
+                }
                 const hasPart = units.some(us => { const u = (us && us.unit) || us || {}; return Boolean(u.managementParticipation); });
                 if (extNote) extNote.style.display = hasPart ? "block" : "none";
                 if (extSect && units.length > 0) {
@@ -2435,6 +3139,10 @@ function showAdminContent() {
     resetManualExpenseView_();
     if (typeof loadRecurringExpenseState_ === 'function') loadRecurringExpenseState_(); // SLICE5_RECURRING_UI
     if(typeof checkRemontEligibility === 'function') checkRemontEligibility();
+    // Stage 2C.2 Final Gate: Warm-prefetch materialized External Units bundle on Admin open (0 GAS)
+    if (window._projFlags && window._projFlags.FIN_EXTERNAL_UNITS === 'ON' && currentRouteKey) {
+        readFinancialManifestBundleV2_(currentRouteKey, { dashboard: false, externalSummary: true, externalRows: true }).catch(() => null);
+    }
 }
 
 function autoFillCurrentPeriod() {
@@ -5100,6 +5808,13 @@ window.printOwnerDeclaration = async function () {
 
 // ==============================================
 
+function populateAvailableReportPeriodsList_(periods) {
+    const dl = document.getElementById('reportAvailablePeriodsList');
+    if (!dl || !Array.isArray(periods) || !periods.length) return;
+    const sortedDesc = periods.slice().reverse();
+    dl.innerHTML = sortedDesc.map(p => `<option value="${String(p).replace(/"/g, '&quot;')}"></option>`).join('');
+}
+
 window.openMonthlyReport = function () {
     switchPage('monthly-report');
     const d = new Date();
@@ -5108,9 +5823,66 @@ window.openMonthlyReport = function () {
     const periodStr = String(lastMonth.getMonth() + 1).padStart(2, '0') + "." + lastMonth.getFullYear();
     document.getElementById("reportPeriodInput").value = periodStr;
     document.getElementById("report-content").style.display = "none";
+
+    // Stage 2C.3: Deduplicated manifest warmup + available periods datalist + default period prefetch
+    if (currentRouteKey) {
+        const rkOpen = currentRouteKey;
+        (async () => {
+            try {
+                if (!window._projFlagsLoaded_) await ensureProjFlagsLoaded_();
+                if (rkOpen !== currentRouteKey) return;
+                const cachedMan = window._finMatCache_ && window._finMatCache_.routeKey === rkOpen ? window._finMatCache_.manifest : null;
+                if (cachedMan && Array.isArray(cachedMan.availablePeriods) && cachedMan.availablePeriods.length) {
+                    populateAvailableReportPeriodsList_(cachedMan.availablePeriods);
+                }
+                if (window._projFlags && window._projFlags.FIN_MONTHLY_REPORT_V3 === 'ON') {
+                    const pre = await readMaterializedMonthlyReportV3_(rkOpen, periodStr);
+                    if (pre && pre.viewData && Array.isArray(pre.viewData.data.availablePeriods)) {
+                        populateAvailableReportPeriodsList_(pre.viewData.data.availablePeriods);
+                    }
+                } else if (!cachedMan) {
+                    const snap = await fastGetPublicDoc_('financialManifestV1', rkOpen, rkOpen);
+                    if (snap && snap.exists()) {
+                        const md = snap.data() || {};
+                        const pers = Array.isArray(md.availablePeriods) && md.availablePeriods.length
+                            ? md.availablePeriods
+                            : Object.keys((md.parts && md.parts.monthlyReports) || {});
+                        populateAvailableReportPeriodsList_(pers);
+                    }
+                }
+            } catch (e) {}
+        })();
+    }
 }
 
 async function loadMonthlyReportFromFirebase(routeKey, period) {
+  if (!window._projFlagsLoaded_) {
+    await ensureProjFlagsLoaded_();
+  }
+  const flagMode = (window._projFlags && window._projFlags.FIN_MONTHLY_REPORT_V3) || 'OFF';
+
+  // STAGE 2C.3 CUTOVER (ON): Direct Firestore read of precomputed monthlyReportSummaryV3 — 0 GAS calls!
+  if (flagMode === 'ON') {
+    const matRes = await readMaterializedMonthlyReportV3_(routeKey, period);
+    if (matRes && matRes.permissionDenied) {
+      return { success: false, error: 'Достъпът до финансовия отчет е ограничен поради неплатен абонамент.' };
+    }
+    if (matRes && matRes.success && matRes.viewData) {
+      if (Array.isArray(matRes.viewData.data.availablePeriods) && matRes.viewData.data.availablePeriods.length) {
+        populateAvailableReportPeriodsList_(matRes.viewData.data.availablePeriods);
+      }
+      return matRes.viewData;
+    }
+  }
+
+  // SHADOW / PARITY: non-blocking background read to verify eurocent parity against legacy
+  const shadowPromise = (flagMode === 'SHADOW' || flagMode === 'PARITY')
+    ? readMaterializedMonthlyReportV3_(routeKey, period).catch(() => null)
+    : Promise.resolve(null);
+
+  if ((!window.fb || !window.db) && typeof window.ensureFirebaseSdk_ === 'function') {
+    await window.ensureFirebaseSdk_();
+  }
   const { collection, getDocs, query, where } = window.fb;
   const db = window.db;
 
@@ -5119,10 +5891,22 @@ async function loadMonthlyReportFromFirebase(routeKey, period) {
     where("buildingId", "==", routeKey),
     where("periodId", "==", period)
   );
+  const qInc = query(
+    collection(db, "incomesV2"),
+    where("routeKey", "==", routeKey),
+    where("period", "==", period)
+  );
+  const qDist = query(
+    collection(db, "distributionsV2"),
+    where("routeKey", "==", routeKey),
+    where("period", "==", period)
+  );
 
-  const [snapshot, v3Summary] = await Promise.all([
+  const [snapshot, v3Summary, snapIncRes, snapDistRes] = await Promise.all([
     getDocs(q),
-    bgApiCall('getMonthlyReportSummaryV3', { routeKey: routeKey, period: period }).catch(() => null)
+    bgApiCall('getMonthlyReportSummaryV3', { routeKey: routeKey, period: period }).catch(() => null),
+    getDocs(qInc).catch(err => ({ _err: err })),
+    getDocs(qDist).catch(err => ({ _err: err }))
   ]);
 
   let totalInvoiced = 0;
@@ -5179,18 +5963,13 @@ async function loadMonthlyReportFromFirebase(routeKey, period) {
 
   // Външни приходи (V2) за същия период
   let incomesV2 = [];
-  try {
-    const qInc = query(
-      collection(db, "incomesV2"),
-      where("routeKey", "==", routeKey),
-      where("period", "==", period)
-    );
-    const snapInc = await getDocs(qInc);
-    snapInc.forEach(doc => {
+  if (snapIncRes && !snapIncRes._err) {
+    snapIncRes.forEach(doc => {
       const income = { id: doc.id, ...doc.data() }; if (income.paymentId && income.settlementStatus !== 'APPLIED') return; // FIN01_UI
       incomesV2.push({ id: doc.id, ...doc.data() });
     });
-  } catch (err) {
+  } else {
+    const err = snapIncRes && snapIncRes._err;
     if (isStaleRouteRequestError(err)) throw err;
     console.warn("Error fetching V2 incomes for report, trying local storage:", err);
     const local = JSON.parse(localStorage.getItem('incomesV2_' + routeKey) || '[]');
@@ -5199,17 +5978,12 @@ async function loadMonthlyReportFromFirebase(routeKey, period) {
 
   // Разпределения (V2) за същия период
   let distributionsV2 = [];
-  try {
-    const qDist = query(
-      collection(db, "distributionsV2"),
-      where("routeKey", "==", routeKey),
-      where("period", "==", period)
-    );
-    const snapDist = await getDocs(qDist);
-    snapDist.forEach(doc => {
+  if (snapDistRes && !snapDistRes._err) {
+    snapDistRes.forEach(doc => {
       distributionsV2.push({ id: doc.id, ...doc.data() });
     });
-  } catch (err) {
+  } else {
+    const err = snapDistRes && snapDistRes._err;
     if (isStaleRouteRequestError(err)) throw err;
     console.warn("Error fetching V2 distributions for report, trying local storage:", err);
     const local = JSON.parse(localStorage.getItem('distributionsV2_' + routeKey) || '[]');
@@ -5217,8 +5991,9 @@ async function loadMonthlyReportFromFirebase(routeKey, period) {
   }
 
   const art51Map = (hasV3 && v3Summary.art51ByApartment) ? v3Summary.art51ByApartment : {};
-  return {
+  const legacyResult = {
     success: true,
+    _fromMaterializedV3: false,
     data: {
       invoiced: invoicedCounts,
       apartmentTotalDueCents: Math.round(totalInvoiced * 100),
@@ -5256,6 +6031,28 @@ async function loadMonthlyReportFromFirebase(routeKey, period) {
       })
     }
   };
+
+  if (flagMode === 'SHADOW' || flagMode === 'PARITY') {
+    shadowPromise.then(mat => {
+      if (mat && mat.success && mat.viewData && hasV3) {
+        const mRec = mat.viewData.data.v3Summary && mat.viewData.data.v3Summary.reconciliation;
+        const lRec = v3Summary.reconciliation;
+        const grossMatch = Number(mRec && mRec.grossExpenseCents) === Number(lRec && lRec.grossExpenseCents);
+        const totalMatch = Number(mRec && mRec.totalMgmtReceivablesByUnitCents) === Number(lRec && lRec.totalMgmtReceivablesByUnitCents);
+        const collectedMatch = Math.round(mat.viewData.data.collected * 100) === Math.round(totalCollected * 100);
+        window._finMatParityLog_.push({
+          scope: 'FIN_MONTHLY_REPORT_V3',
+          mode: flagMode,
+          routeKey: routeKey,
+          period: period,
+          exactMatch: grossMatch && totalMatch && collectedMatch,
+          ts: Date.now()
+        });
+      }
+    }).catch(() => {});
+  }
+
+  return legacyResult;
 }
 
 window.generateReport = async function () {
@@ -5272,6 +6069,9 @@ window.generateReport = async function () {
 
     const btn = document.querySelector("#view-monthly-report .btn-primary");
     showSaving(btn, "Зареждане...");
+    const _mrStartMs = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+    document.documentElement.dataset.perfMonthlyReportMs = '';
+    document.documentElement.dataset.perfMonthlyReportSource = '';
 
     try {
         const result = await loadMonthlyReportFromFirebase(currentRouteKey, period);
@@ -5542,6 +6342,14 @@ window.generateReport = async function () {
             `;
 
             document.getElementById("report-content").style.display = "block";
+            if (typeof requestAnimationFrame === 'function') {
+                requestAnimationFrame(() => {
+                    const _mrEndMs = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+                    document.documentElement.dataset.perfMonthlyReportMs = String(Math.round(_mrEndMs - _mrStartMs));
+                    document.documentElement.dataset.perfMonthlyReportSource = result._fromMaterializedV3 ? 'MATERIALIZED_V3' : 'LEGACY_GAS';
+                    document.documentElement.dataset.perfMonthlyReportPeriod = period;
+                });
+            }
         } else {
             showToast(result?.error || "Няма данни за този период.", "error");
             document.getElementById("report-content").style.display = "none";
@@ -8397,6 +9205,7 @@ window.reverseExternalUnitPaymentUI = async function(paymentId) {
             return;
         }
         showToast("Плащането е сторнирано успешно с компенсиращ запис.", "success");
+        purgeFinancialMaterializedCache_();
         if (typeof loadExternalUnitsData === 'function') await loadExternalUnitsData(true);
         if (typeof loadIncomesV2 === 'function') await loadIncomesV2();
         if (typeof updateV2DistAvailableSum === 'function') await updateV2DistAvailableSum();
@@ -8508,12 +9317,18 @@ window.extUnitSelectionChanged = function() {
 };
 
 window.loadExternalUnitsData = async function(silent) {
+    const _extPerfStart = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
     if (window._extUnitsInFlightPromise && window._extUnitsInFlightRoute === currentRouteKey) {
         return window._extUnitsInFlightPromise;
     }
     const requestContext = captureRouteRequestContext();
     const hasCache = Array.isArray(window._cachedExternalUnits) && window._cachedExternalUnitsRoute === currentRouteKey;
-    if (!hasCache) {
+    const hasWarmBundle = Boolean(
+        window._projFlags && window._projFlags.FIN_EXTERNAL_UNITS === 'ON' &&
+        window._finMatCache_ && window._finMatCache_.routeKey === currentRouteKey &&
+        window._finMatCache_.externalUnitsReconstructed && (Date.now() - window._finMatCache_.fetchedAt) < 15000
+    );
+    if (!hasCache && !hasWarmBundle) {
         setSectionAsyncState_('extUnitsRegistryBody', 'LOADING', { colspan: 7, loadingText: 'Зареждане на самостоятелните обекти…' });
         setSectionAsyncState_('extUnitsStatementBody', 'LOADING', { colspan: 8, loadingText: 'Зареждане на справката по периоди…' });
         setSectionAsyncState_('extUnitsReconciliationBody', 'LOADING', { colspan: 7, loadingText: 'Зареждане на сверката…' });
@@ -8522,7 +9337,36 @@ window.loadExternalUnitsData = async function(silent) {
     window._extUnitsInFlightRoute = currentRouteKey;
     const runPromise = (async () => {
         try {
-            const res = await apiCall('getExternalUnitsV1', { routeKey: currentRouteKey });
+            const extFlag = (window._projFlags && window._projFlags.FIN_EXTERNAL_UNITS) || 'OFF';
+            let res = null;
+            if (extFlag === 'ON') {
+                const matBundle = await readFinancialManifestBundleV2_(currentRouteKey, { dashboard: false, externalSummary: true, externalRows: true });
+                throwIfStaleRouteRequestContext(requestContext);
+                if (matBundle && matBundle.externalUnitsReconstructed && matBundle.externalUnitsReconstructed.success) {
+                    res = Object.assign({ _fromPrecomputed: true }, matBundle.externalUnitsReconstructed);
+                }
+            } else if (extFlag === 'PARITY') {
+                const [matBundle, legRes] = await Promise.all([
+                    readFinancialManifestBundleV2_(currentRouteKey, { dashboard: false, externalSummary: true, externalRows: true }).catch(() => null),
+                    apiCall('getExternalUnitsV1', { routeKey: currentRouteKey })
+                ]);
+                throwIfStaleRouteRequestContext(requestContext);
+                res = legRes;
+                if (matBundle && matBundle.externalUnitsReconstructed && legRes && legRes.success) {
+                    const matSum = (matBundle.externalUnitsReconstructed.unitStatements || []).reduce((s, u) => s + Number(u.endingDebtCents || 0), 0);
+                    const legSum = (legRes.unitStatements || []).reduce((s, u) => s + Number(u.endingDebtCents || 0), 0);
+                    const exact = matSum === legSum && (matBundle.externalUnitsReconstructed.units || []).length === (legRes.units || []).length;
+                    if (Array.isArray(window._finMatParityLog_)) {
+                        window._finMatParityLog_.push({ model: 'EXTERNAL_UNITS_V1', exact, matSum, legSum });
+                    }
+                    if (exact) res = Object.assign({ _fromPrecomputed: true }, matBundle.externalUnitsReconstructed);
+                }
+            } else if (extFlag === 'SHADOW') {
+                readFinancialManifestBundleV2_(currentRouteKey, { dashboard: false, externalSummary: true, externalRows: true }).catch(() => null);
+            }
+            if (!res) {
+                res = await apiCall('getExternalUnitsV1', { routeKey: currentRouteKey });
+            }
             throwIfStaleRouteRequestContext(requestContext);
             if (!res || !res.success) {
                 throw new Error((res && res.error) ? res.error : 'Неуспешно зареждане на самостоятелните обекти.');
@@ -8566,6 +9410,12 @@ window.loadExternalUnitsData = async function(silent) {
             renderExternalUnitActions();
             renderPendingExternalPayments_();
             updateExternalIdealWarningBanner_();
+            if (typeof requestAnimationFrame === 'function') {
+                requestAnimationFrame(() => {
+                    const tNow = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+                    document.documentElement.dataset.perfExtMs = String(Math.round(tNow - _extPerfStart));
+                });
+            }
         } catch (err) {
             if (!isStaleRouteRequestError(err)) {
                 const errMsg = (err && err.message) ? err.message : 'Грешка при зареждане.';
@@ -8758,6 +9608,7 @@ window.saveExternalUnitSettings = async function() {
         }
 
         // Non-blocking background sync for statements and ideal parts checks
+        purgeFinancialMaterializedCache_();
         setTimeout(() => {
             if (typeof loadExternalUnitsData === 'function') loadExternalUnitsData(true);
             if (typeof checkRemontEligibility === 'function') checkRemontEligibility();
@@ -8930,6 +9781,7 @@ window.resolvePendingExternalEpayPayment = async function(pendingId, idx) {
         });
         if (res && res.success) {
             showToast('Плащането е разпределено успешно!', 'success');
+            purgeFinancialMaterializedCache_();
             await loadExternalUnitsData(true);
             if (typeof loadIncomesV2 === 'function') loadIncomesV2();
             if (typeof updateV2DistAvailableSum === 'function') updateV2DistAvailableSum();

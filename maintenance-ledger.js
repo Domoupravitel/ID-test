@@ -39,6 +39,28 @@ async function maintenanceReadBalance_(context) {
 async function maintenanceRefreshSummary_() {
     const context=captureFinancialOperationContext(),target=document.getElementById('maintenanceSourceSummary');
     if(!target)return;
+    const flag=(typeof window!=='undefined'&&window._projFlags&&window._projFlags.FIN_MAINTENANCE_BALANCE)||'OFF';
+    if((flag==='ON'||flag==='PARITY')&&typeof window.readFinancialManifestBundleV2_==='function'){
+        try{
+            const bundle=await window.readFinancialManifestBundleV2_(context.routeKey,{dashboard:true});
+            if(!isFinancialOperationContextCurrent(context))return;
+            const mb=bundle&&bundle.maintenanceBalance;
+            if(mb&&mb.active===true&&Number.isSafeInteger(mb.availableCents)){
+                const synth=Object.assign({success:true,source:'maintenance'},mb);
+                if(flag==='ON'){
+                    maintenanceDisplay_(synth,target);maintenanceRenderPending_();return;
+                }
+                // PARITY mode: compare against live GAS before displaying
+                const live=await maintenanceReadBalance_(context);
+                const exact=live&&live.openingCents===mb.openingCents&&live.collectedCents===mb.collectedCents&&live.usedCents===mb.usedCents&&live.availableCents===mb.availableCents;
+                if(Array.isArray(window._finMatParityLog_))window._finMatParityLog_.push({model:'MAINTENANCE_BALANCE_V1',exact,liveCents:live?.availableCents,matCents:mb.availableCents});
+                maintenanceDisplay_(exact?synth:live,target);maintenanceRenderPending_();return;
+            }
+            if(mb&&mb.active===false&&flag==='ON'){
+                target.textContent='Наличността не е потвърдена.';maintenanceRenderPending_();return;
+            }
+        }catch(e){/* fall through to legacy */}
+    }
     target.textContent='Наличността не е потвърдена.';
     try{const result=await maintenanceReadBalance_(context);maintenanceDisplay_(result,target);maintenanceRenderPending_();}
     catch(error){if(isFinancialOperationContextCurrent(context))target.textContent='Поддръжка: наличността не е потвърдена.';}
