@@ -741,7 +741,10 @@ function evaluateSubscriptionGateClient_(gate, nowDate) {
         return { stale: false, isSoftBlocked: true, isHardBlocked: true, status: 'HARD_BLOCKED' };
     }
     if (gate.activeThroughSofiaYmd && todayYmd > gate.activeThroughSofiaYmd) {
-        return { stale: false, isSoftBlocked: true, isHardBlocked: false, status: gate.policyStatus === 'TRIAL' ? 'TRIAL_ADMIN_GRACE' : 'PAID_GRACE_7D' };
+        if (gate.policyStatus === 'PAID') {
+            return { stale: false, isSoftBlocked: true, isHardBlocked: false, status: 'PAID_GRACE_7D' };
+        }
+        return { stale: false, isSoftBlocked: true, isHardBlocked: true, status: 'HARD_BLOCKED' };
     }
     return { stale: false, isSoftBlocked: false, isHardBlocked: false, status: gate.policyStatus === 'TRIAL' ? 'TRIAL_FULL' : 'PAID_ACTIVE' };
 }
@@ -862,6 +865,43 @@ async function fetchAdminConfigSnapshotV1_(routeKey, forceRefresh) {
     }
 }
 
+function applyPublicRegFormState_(showRegForm, regFormText) {
+    const enabled = !(showRegForm === false || String(showRegForm).toLowerCase() === 'false');
+    window._publicShowRegForm = enabled;
+
+    // 1. Real landing page registration controls (desktop nav, mobile menu, hero CTA & mobile hero button)
+    const controls = document.querySelectorAll('[data-reg-control="true"]');
+    controls.forEach(el => {
+        el.style.display = enabled ? '' : 'none';
+    });
+
+    // If registrations are disabled, force-close the registration iframe container
+    const regSection = document.getElementById('registration-section');
+    if (!enabled && regSection) {
+        regSection.classList.add('hidden');
+    }
+
+    // 2. Legacy optional hooks (kept harmlessly for backwards compatibility)
+    const regLink = document.getElementById("regButtonLink");
+    const customText = document.getElementById("regCustomText");
+    if (regLink) {
+        if (enabled) {
+            regLink.style.display = "flex";
+            if (customText) customText.style.display = "none";
+        } else {
+            regLink.style.display = "none";
+            if (customText) {
+                if (regFormText && String(regFormText).trim() !== "") {
+                    customText.style.display = "flex";
+                    customText.textContent = String(regFormText);
+                } else {
+                    customText.style.display = "none";
+                }
+            }
+        }
+    }
+}
+
 async function loadPublicSettings() {
     try {
         let res = await readPrecomputedPublicPlatformConfig_();
@@ -871,31 +911,14 @@ async function loadPublicSettings() {
                 window._projFlags = Object.assign({}, window._projFlags, res.projFlags);
             }
         }
-        const regLink = document.getElementById("regButtonLink");
-        const customText = document.getElementById("regCustomText");
-        
-        if (res && res.success && regLink) {
-            if (res.showRegForm) {
-                regLink.style.display = "flex";
-                if (customText) customText.style.display = "none";
-            } else {
-                regLink.style.display = "none";
-                if (customText) {
-                    if (res.regFormText && res.regFormText.trim() !== "") {
-                        customText.style.display = "flex";
-                        customText.textContent = res.regFormText;
-                    } else {
-                        customText.style.display = "none";
-                    }
-                }
-            }
-        } else if (regLink) {
-            // Default fallback if API fails
-            regLink.style.display = "flex";
-            if (customText) customText.style.display = "none";
+        if (res && res.success) {
+            applyPublicRegFormState_(res.showRegForm, res.regFormText);
+        } else {
+            applyPublicRegFormState_(true, '');
         }
     } catch (e) {
         console.error("Error loading public settings:", e);
+        applyPublicRegFormState_(true, '');
     }
 }
 
@@ -1874,6 +1897,12 @@ window.toggleContactForm = function() {
 
 window.toggleRegistrationForm = function() {
     const section = document.getElementById('registration-section');
+    if (!section) return;
+    if (window._publicShowRegForm === false) {
+        section.classList.add('hidden');
+        if (typeof showToast === 'function') showToast("Регистрациите са временно изключени.", "warning");
+        return;
+    }
     if (section.classList.contains('hidden')) {
         // Затваряме формата за контакт, ако е отворена
         document.getElementById('contact-section').classList.add('hidden');
@@ -2025,7 +2054,7 @@ window.enterEntrance = async function () {
                 if (hbId) hbId.textContent = currentRouteKey;
             } else {
                 // Фалбак ако няма специален елемент
-                showToast(`⚠️ Достъпът е напълно спрян поради над 3 месеца неплатен абонамент. (При превод задължително посочете ID: ${currentRouteKey})`, "error");
+                showToast(`⚠️ Достъпът е спрян поради изтекъл абонамент. (При превод задължително посочете ID: ${currentRouteKey})`, "error");
             }
             if (btn) {
                 btn.textContent = originalText;
@@ -4927,7 +4956,7 @@ async function showSuperAdminDashboard() {
             setVal("priceOtherCities", res.priceOtherCities);
             setVal("priceLifetime", res.priceLifetime);
             setVal("superGlobalMessage", res.globalMessage);
-            setVal("superShowRegForm", res.showRegForm || "true");
+            setVal("superShowRegForm", String(res.showRegForm) === "false" ? "false" : "true");
             setVal("superRegFormText", res.regFormText);
         }
     } catch (e) {
@@ -4966,6 +4995,10 @@ window.saveSuperSettings = async function () {
         throwIfStaleRouteRequestContext(requestContext);
 
         if (result && result.success) {
+            if (window._stage2c2BootstrapCache_) {
+                delete window._stage2c2BootstrapCache_['publicPlatformConfigV1/global'];
+            }
+            applyPublicRegFormState_(reqData.showRegForm, reqData.regFormText);
             showToast("✅ Настройките са запазени успешно!", "success");
         } else {
             showToast(result.error || "Грешка при запазване", "error");
@@ -5089,51 +5122,170 @@ window.saveGlobalMessage = async function () {
     }
 }
 
+window._superAdminEntrancesCache = [];
+
+function getSuperAdminSubStatusMeta_(ent) {
+    const st = ent.subscriptionStatus || (ent.validUntil === '2000-01-01' ? 'HARD_BLOCKED' : 'PAID_ACTIVE');
+    const stColor = st === 'HARD_BLOCKED' ? '#fa5252' : (st === 'PAID_GRACE_7D' ? '#f59e0b' : '#4ade80');
+    const stLabelMap = {
+        TRIAL_FULL: 'Пробен (2 мес.)',
+        PAID_ACTIVE: 'Активен',
+        PAID_GRACE_7D: 'Гратис (7 дн.)',
+        HARD_BLOCKED: 'Спрян',
+        LIFETIME: 'Безсрочен'
+    };
+    return { st, stColor, stLabel: stLabelMap[st] || st };
+}
+
+function matchesSuperAdminEntranceQuery_(ent, rawQuery) {
+    const q = String(rawQuery || '').trim().toLowerCase();
+    if (!q) return true;
+    const meta = getSuperAdminSubStatusMeta_(ent);
+    const haystack = [
+        ent.id,
+        ent.name,
+        ent.city,
+        ent.address,
+        ent.block,
+        ent.entrance,
+        ent.adminName,
+        ent.adminEmail,
+        ent.emailKey,
+        ent.subKeyword,
+        ent.registeredAt,
+        ent.validUntil,
+        ent.subscriptionStatus,
+        meta.stLabel
+    ].filter(Boolean).join(' ').toLowerCase();
+    return q.split(/\s+/).every(token => haystack.includes(token));
+}
+
+function renderSuperAdminEntrancesTable_(query) {
+    const tbody = document.getElementById("superAdminEntrancesList");
+    if (!tbody) return;
+    const all = Array.isArray(window._superAdminEntrancesCache) ? window._superAdminEntrancesCache : [];
+    const filtered = all.filter(ent => matchesSuperAdminEntranceQuery_(ent, query));
+
+    const countEl = document.getElementById("superAccessSearchCount");
+    if (countEl) {
+        countEl.textContent = query && String(query).trim()
+            ? `Показани: ${filtered.length} от ${all.length}`
+            : `Общо: ${all.length}`;
+    }
+
+    tbody.innerHTML = '';
+    if (all.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:12px; color:#666;">Няма регистрирани входове.</td></tr>';
+        return;
+    }
+    if (filtered.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:12px; color:#666;">Няма намерени входове по зададеното търсене.</td></tr>';
+        return;
+    }
+
+    filtered.forEach(ent => {
+        const { st, stColor, stLabel } = getSuperAdminSubStatusMeta_(ent);
+        const routeKey = String(ent.id || '');
+        const tr = document.createElement("tr");
+        tr.dataset.routeKey = routeKey;
+
+        const tdName = document.createElement("td");
+        tdName.style.padding = "8px";
+        const nameB = document.createElement("b");
+        nameB.textContent = ent.name || '';
+        tdName.appendChild(nameB);
+        if (ent.adminEmail) {
+            const subInfo = document.createElement("div");
+            subInfo.style.fontSize = "11px";
+            subInfo.style.color = "#666";
+            subInfo.textContent = ent.adminEmail;
+            tdName.appendChild(subInfo);
+        }
+
+        const tdId = document.createElement("td");
+        tdId.style.padding = "8px";
+        tdId.style.fontFamily = "monospace";
+        tdId.textContent = routeKey;
+
+        const tdValid = document.createElement("td");
+        tdValid.style.padding = "8px";
+        tdValid.style.color = st === 'HARD_BLOCKED' ? 'red' : 'inherit';
+        tdValid.textContent = ent.validUntil === '2000-01-01' ? 'Блокиран' : (ent.validUntil || '---');
+
+        const tdStatus = document.createElement("td");
+        tdStatus.style.padding = "8px";
+        const badge = document.createElement("span");
+        badge.className = "status-badge";
+        badge.style.cssText = `background:${stColor}; color:white; padding: 2px 6px; border-radius: 4px; font-size: 11px;`;
+        badge.textContent = stLabel;
+        tdStatus.appendChild(badge);
+
+        const tdActions = document.createElement("td");
+        tdActions.style.padding = "8px";
+
+        const btnUnblock = document.createElement("button");
+        btnUnblock.className = "admin-btn secondary small";
+        btnUnblock.style.cssText = "padding:4px 8px; font-size:11px; margin-right:4px;";
+        btnUnblock.textContent = "+30 дн.";
+        btnUnblock.addEventListener("click", () => manageSub(routeKey, 'unblock'));
+
+        const btnBlock = document.createElement("button");
+        btnBlock.className = "admin-btn small";
+        btnBlock.style.cssText = "background:#fa5252; color:white; padding:4px 8px; font-size:11px; margin-right:4px;";
+        btnBlock.textContent = "Спри";
+        btnBlock.addEventListener("click", () => manageSub(routeKey, 'block'));
+
+        const btnLifetime = document.createElement("button");
+        btnLifetime.className = "admin-btn small";
+        btnLifetime.style.cssText = "background:#4ade80; color:white; padding:4px 8px; font-size:11px;";
+        btnLifetime.textContent = "Безсрочен";
+        btnLifetime.addEventListener("click", () => manageSub(routeKey, 'lifetime'));
+
+        const btnDelete = document.createElement("button");
+        btnDelete.className = "admin-btn small";
+        btnDelete.style.cssText = "background:#000; color:white; padding:4px 8px; font-size:11px; margin-left:4px;";
+        btnDelete.title = "Изтрий всички данни за входа от Firestore";
+        btnDelete.textContent = "🗑️ FS";
+        btnDelete.addEventListener("click", () => deleteFirebaseData(routeKey, btnDelete));
+
+        tdActions.append(btnUnblock, btnBlock, btnLifetime, btnDelete);
+        tr.append(tdName, tdId, tdValid, tdStatus, tdActions);
+        tbody.appendChild(tr);
+    });
+}
+
+window.filterSuperAdminEntrances = function () {
+    const input = document.getElementById("superAccessSearchInput");
+    renderSuperAdminEntrancesTable_(input ? input.value : "");
+};
+
+window.clearSuperAdminEntrancesSearch = function () {
+    const input = document.getElementById("superAccessSearchInput");
+    if (input) input.value = "";
+    renderSuperAdminEntrancesTable_("");
+    if (input) input.focus();
+};
+
 async function loadSuperAdminEntrances() {
     const tbody = document.getElementById("superAdminEntrancesList");
     tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Зареждане...</td></tr>';
 
-    const result = await apiCall('getRegistryList');
+    const result = await apiCall('getRegistryList', {
+        superPin: sessionStorage.getItem("superAdminAuth")
+    });
     if (result && result.success && Array.isArray(result.registry)) {
-        tbody.innerHTML = '';
+        window._superAdminEntrancesCache = result.registry.slice();
         const select = document.getElementById("superExceptionRegistry");
-        if (select) select.innerHTML = '<option value="">-- Избери вход --</option>';
-
-        result.registry.forEach(ent => {
-            if (select) select.appendChild(new Option(ent.name + " (" + ent.id + ")", ent.id));
-            const st = ent.subscriptionStatus || (ent.validUntil === '2000-01-01' ? 'HARD_BLOCKED' : 'PAID_ACTIVE');
-            const stColor = st === 'HARD_BLOCKED' ? '#fa5252' : (st === 'TRIAL_ADMIN_GRACE' || st === 'PAID_GRACE_7D' ? '#f59e0b' : '#4ade80');
-            const stLabelMap = {
-                TRIAL_FULL: 'Пробен (1–30)',
-                TRIAL_ADMIN_GRACE: 'Гратис (31–90)',
-                PAID_ACTIVE: 'Активен',
-                PAID_GRACE_7D: 'Гратис (7 дн.)',
-                HARD_BLOCKED: 'Спрян',
-                LIFETIME: 'Безсрочен'
-            };
-            const stLabel = stLabelMap[st] || st;
-            const tr = document.createElement("tr");
-            tr.innerHTML = `
-                <td style="padding: 8px;"><b>${ent.name}</b></td>
-                <td style="padding: 8px; font-family: monospace;">${ent.id}</td>
-                <td style="padding: 8px; color: ${st === 'HARD_BLOCKED' ? 'red' : 'inherit'};">
-                    ${ent.validUntil === '2000-01-01' ? 'Блокиран' : (ent.validUntil || '---')}
-                </td>
-                <td style="padding: 8px;">
-                    <span class="status-badge" style="background:${stColor}; color:white; padding: 2px 6px; border-radius: 4px; font-size: 11px;">
-                        ${stLabel}
-                    </span>
-                </td>
-                <td style="padding: 8px;">
-                    <button class="admin-btn secondary small" onclick="manageSub('${ent.id}', 'unblock')" style="padding:4px 8px; font-size:11px; margin-right:4px;">+30 дн.</button>
-                    <button class="admin-btn small" onclick="manageSub('${ent.id}', 'block')" style="background:#fa5252; color:white; padding:4px 8px; font-size:11px; margin-right:4px;">Спри</button>
-                    <button class="admin-btn small" onclick="manageSub('${ent.id}', 'lifetime')" style="background:#4ade80; color:white; padding:4px 8px; font-size:11px;">Безсрочен</button>
-                    <button class="admin-btn small" onclick="deleteFirebaseData('${ent.id}', this)" style="background:#000; color:white; padding:4px 8px; font-size:11px; margin-left:4px;" title="Изтрий всички данни за входа от Firestore">🗑️ FS</button>
-                </td>
-            `;
-            tbody.appendChild(tr);
-        });
+        if (select) {
+            select.innerHTML = '<option value="">-- Избери вход --</option>';
+            window._superAdminEntrancesCache.forEach(ent => {
+                select.appendChild(new Option(ent.name + " (" + ent.id + ")", ent.id));
+            });
+        }
+        const searchInput = document.getElementById("superAccessSearchInput");
+        renderSuperAdminEntrancesTable_(searchInput ? searchInput.value : "");
     } else {
+        window._superAdminEntrancesCache = [];
         tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Грешка при зареждане.</td></tr>';
     }
 }

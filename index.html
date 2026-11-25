@@ -121,7 +121,7 @@
     </noscript>
     <link rel="stylesheet" href="style.css?v=1795026000002">
         <script src="firestore-client.js" defer></script>
-        <script src="app.js?v=1795026000002" defer></script>
+        <script src="app.js?v=1795026000021" defer></script>
         <script src="recurring-expenses.js" defer></script>
         <script src="fin01-payment.js" defer></script>
         <script src="maintenance-ledger.js?v=1795026000002" defer></script>
@@ -315,7 +315,7 @@
           "name": "Какво се случва, ако абонаментът на входа изтече?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "При изтичане на абонамента достъпът на живущите до салдата се ограничава, а домоуправителят разполага с гратисен период за управление (до 90-ия ден след регистрация при първоначалния период или 7 дни след изтичане на платен абонамент). След гратисния период достъпът се блокира до подновяване."
+            "text": "Всеки новорегистриран вход разполага с 2 календарни месеца безплатен пробен период с пълен достъп за домоуправителя и апартаментите. След изтичането му без плащане достъпът се блокира до подновяване. При изтичане на платен абонамент има 7 дни гратисен период за управление (достъпът на живущите до салдата е ограничен), след което достъпът се блокира до подновяване."
           }
         },
         {
@@ -462,7 +462,7 @@
           "name": "Какво се случва, ако абонаментът на входа изтече?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "При изтичане на абонамента достъпът на живущите до салдата се ограничава, а домоуправителят разполага с гратисен период за управление (до 90-ия ден след регистрация при първоначалния период или 7 дни след изтичане на платен абонамент). След гратисния период достъпът се блокира до подновяване."
+            "text": "Всеки новорегистриран вход разполага с 2 календарни месеца безплатен пробен период с пълен достъп за домоуправителя и апартаментите. След изтичането му без плащане достъпът се блокира до подновяване. При изтичане на платен абонамент има 7 дни гратисен период за управление (достъпът на живущите до салдата е ограничен), след което достъпът се блокира до подновяване."
           }
         },
         {
@@ -1888,7 +1888,12 @@
             <!-- Section 4: Access Control -->
             <div class="admin-section">
                 <h3>🔒 Управление на достъпа</h3>
-                <div style="overflow-x: auto; max-height: 250px;">
+                <div style="display:flex; gap:8px; align-items:center; margin-top:10px; flex-wrap:wrap;">
+                    <input type="text" id="superAccessSearchInput" class="admin-input" style="flex:1; min-width:200px; margin:0;" placeholder="Търсене по ID, град, блок/вход, администратор, имейл..." oninput="filterSuperAdminEntrances()">
+                    <button type="button" id="superAccessSearchClearBtn" class="admin-btn secondary small" style="padding:8px 12px; font-size:12px; white-space:nowrap;" onclick="clearSuperAdminEntrancesSearch()">Изчисти</button>
+                    <span id="superAccessSearchCount" style="font-size:12px; color:#666; white-space:nowrap;"></span>
+                </div>
+                <div style="overflow-x: auto; max-height: 280px;">
                     <table
                         style="width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; text-align: left;">
                         <thead>
@@ -1985,8 +1990,8 @@
                     
                     <nav class="landing-nav">
                         <a href="description.html" target="_blank" class="landing-nav-link">Възможности</a>
-                        <a href="#pricing" class="landing-nav-link" onclick="toggleRegistrationForm(); return false;">Абонамент на символични цени. Изчисли сам...</a>
-                        <a href="#register" class="landing-nav-link" onclick="toggleRegistrationForm(); return false;">Регистрация</a>
+                        <a href="#pricing" class="landing-nav-link" data-reg-control="true" onclick="toggleRegistrationForm(); return false;">Абонамент на символични цени. Изчисли сам...</a>
+                        <a href="#register" class="landing-nav-link" data-reg-control="true" onclick="toggleRegistrationForm(); return false;">Регистрация</a>
                         <a href="#contact" class="landing-nav-link" onclick="toggleContactForm(); return false;">Контакт</a>
                     </nav>
                     
@@ -2004,8 +2009,8 @@
                 <!-- Mobile Dropdown Menu -->
                 <div id="landing-mobile-menu" class="landing-mobile-menu hidden">
                     <a href="description.html" target="_blank" class="landing-mobile-link" onclick="toggleMobileMenu()">Възможности</a>
-                    <a href="#pricing" class="landing-mobile-link" onclick="toggleMobileMenu(); toggleRegistrationForm(); return false;">Абонамент на символични цени. Изчисли сам...</a>
-                    <a href="#register" class="landing-mobile-link" onclick="toggleMobileMenu(); toggleRegistrationForm(); return false;">Регистрация</a>
+                    <a href="#pricing" class="landing-mobile-link" data-reg-control="true" onclick="toggleMobileMenu(); toggleRegistrationForm(); return false;">Абонамент на символични цени. Изчисли сам...</a>
+                    <a href="#register" class="landing-mobile-link" data-reg-control="true" onclick="toggleMobileMenu(); toggleRegistrationForm(); return false;">Регистрация</a>
                     <a href="#contact" class="landing-mobile-link" onclick="toggleMobileMenu(); toggleContactForm(); return false;">Контакт</a>
                     <button class="landing-login-btn-mobile" onclick="toggleMobileMenu(); openLoginPrompt();">Вход</button>
                 </div>
@@ -2015,11 +2020,11 @@
                     <div class="landing-hero-content">
                         <h1 class="landing-hero-title">Онлайн <span class="text-blue">Домоуправител</span></h1>
                         <p class="landing-hero-subtitle"><strong class="hero-key-sentence">WebApp Дигитален домоуправител</strong><br>
-                            Автоматизирайте и управлявайте финансите и процедурите в етажната собственост с помощник по ЗУЕС. Предлагаме функционалност и минимализъм. Един поглед, един клик. <a href="#registration-section" onclick="toggleRegistrationForm(); return false;" class="hero-registration-link">Регистрирайте вход — 30 дни безплатно</a>.</p>
+                            Автоматизирайте и управлявайте финансите и процедурите в етажната собственост с помощник по ЗУЕС. Предлагаме функционалност и минимализъм. Един поглед, един клик. <span data-reg-control="true"><a href="#registration-section" onclick="toggleRegistrationForm(); return false;" class="hero-registration-link">Регистрирайте вход — 2 месеца безплатно</a>.</span></p>
                         
                         <div class="landing-hero-actions">
                             <div class="hero-scroll-track">
-                                <button class="landing-btn-outline hero-mobile-only-btn" onclick="toggleRegistrationForm()">
+                                <button class="landing-btn-outline hero-mobile-only-btn" data-reg-control="true" onclick="toggleRegistrationForm()">
                                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:8px;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
                                     Регистрация
                                 </button>
@@ -2180,7 +2185,7 @@
                         </details>
                         <details class="faq-item">
                             <summary>Какво се случва, ако абонаментът на входа изтече?</summary>
-                            <p>При изтичане на абонамента достъпът на живущите до салдата се ограничава, а домоуправителят разполага с гратисен период за управление (до 90-ия ден след регистрация при първоначалния период или 7 дни след изтичане на платен абонамент). След гратисния период достъпът се блокира до подновяване.</p>
+                            <p>Всеки новорегистриран вход разполага с 2 календарни месеца безплатен пробен период с пълен достъп за домоуправителя и апартаментите. След изтичането му без плащане достъпът се блокира до подновяване. При изтичане на платен абонамент има 7 дни гратисен период за управление (достъпът на живущите до салдата е ограничен), след което достъпът се блокира до подновяване.</p>
                         </details>
                         <details class="faq-item">
                             <summary>Може ли да се ползва от няколко входа в един блок едновременно?</summary>
@@ -2253,7 +2258,7 @@
                 <div style="font-size:64px; margin-bottom:20px;">🔒</div>
                 <h2 style="color:#e74c3c; margin-bottom:12px;">Достъпът до входа е спрян</h2>
                 <p style="color:#555; max-width:480px; line-height:1.6; margin-bottom:20px;">
-                    Абонаментът за този вход е изтекъл и гратисният период е приключил.<br>
+                    Абонаментът или пробният период за този вход е изтекъл.<br>
                     Достъпът до всички данни е временно блокиран до подновяване.
                 </p>
                 <div style="background:#fff3cd; border:1px solid #ffc107; border-radius:10px; padding:18px 24px; margin-bottom:24px; max-width:420px;">
