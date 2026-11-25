@@ -1028,13 +1028,19 @@ async function loadPublicSettings() {
 // Превръща обикновен текст в HTML, при което URL адреси (http/https/www.)
 // стават кликаеми линкове. Първо escape-ва HTML за безопасност (текстът
 // идва от Супер Админ настройки, но пак не се доверяваме сляпо).
-function linkifyText(text) {
-    if (!text) return "";
-    const escaped = text
+function escapeHtmlSafe_(str) {
+    if (str === null || str === undefined) return "";
+    return String(str)
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;");
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+}
+
+function linkifyText(text) {
+    if (!text) return "";
+    const escaped = escapeHtmlSafe_(text);
     const urlRegex = /((https?:\/\/[^\s<]+)|(www\.[^\s<]+\.[^\s<]+))/gi;
     return escaped.replace(urlRegex, (match) => {
         const href = /^https?:\/\//i.test(match) ? match : "https://" + match;
@@ -1950,10 +1956,14 @@ function resetApartmentData() {
 let toastTimeout;
 window.showToast = function (msg, type, durationMs) {
     const t = document.getElementById("toast");
-    // innerHTML вместо textContent, за да могат съобщения с частично оцветен
-    // текст (напр. "Записано!" в зелено + обяснение в червено) да се показват.
-    // Обикновените текстови съобщения (без HTML тагове) изглеждат идентично.
-    t.innerHTML = msg;
+    if (!t) return;
+    // Само изричната статична константа SAVED_SYNC_TOAST_MSG използва оцветен HTML;
+    // всички останали (вкл. сървърни/потребителски грешки) се рендерират безопасно като textContent.
+    if (msg === SAVED_SYNC_TOAST_MSG) {
+        t.innerHTML = SAVED_SYNC_TOAST_MSG;
+    } else {
+        t.textContent = String(msg === null || msg === undefined ? "" : msg);
+    }
     t.className = "toast " + type;
     clearTimeout(toastTimeout);
     requestAnimationFrame(() => { t.classList.add("show"); });
@@ -2276,10 +2286,13 @@ window.enterEntrance = async function () {
         const newsBanner = document.getElementById("adminGlobalNews");
         const newsText = document.getElementById("adminGlobalNewsText");
         if (info.globalMessage && info.globalMessage.trim() !== "") {
-            newsText.innerHTML = info.globalMessage.replace(/\n/g, '<br>');
-            newsBanner.style.display = "block";
+            if (newsText) {
+                newsText.style.whiteSpace = "pre-wrap";
+                newsText.textContent = info.globalMessage;
+            }
+            if (newsBanner) newsBanner.style.display = "block";
         } else {
-            newsBanner.style.display = "none";
+            if (newsBanner) newsBanner.style.display = "none";
         }
 
         const userNoticeBanner = document.getElementById("userEntranceNotice");
@@ -2290,16 +2303,21 @@ window.enterEntrance = async function () {
         const effectiveNotice = info.entranceNotice;
 
         if (effectiveNotice && effectiveNotice.trim() !== "") {
-            const formatted = effectiveNotice.replace(/\n/g, '<br>');
-            userNoticeText.innerHTML = formatted;
-            userNoticeBanner.style.display = "block";
-            if (userNoticeTextHome) userNoticeTextHome.innerHTML = formatted;
+            if (userNoticeText) {
+                userNoticeText.style.whiteSpace = "pre-wrap";
+                userNoticeText.textContent = effectiveNotice;
+            }
+            if (userNoticeBanner) userNoticeBanner.style.display = "block";
+            if (userNoticeTextHome) {
+                userNoticeTextHome.style.whiteSpace = "pre-wrap";
+                userNoticeTextHome.textContent = effectiveNotice;
+            }
             if (userNoticeBannerHome) userNoticeBannerHome.style.display = "block";
 
             const adminNoticeInput = document.getElementById("masterEntranceNotice");
             if (adminNoticeInput) adminNoticeInput.value = effectiveNotice;
         } else {
-            userNoticeBanner.style.display = "none";
+            if (userNoticeBanner) userNoticeBanner.style.display = "none";
             if (userNoticeBannerHome) userNoticeBannerHome.style.display = "none";
             const adminNoticeInput = document.getElementById("masterEntranceNotice");
             if (adminNoticeInput) adminNoticeInput.value = "";
@@ -3071,10 +3089,13 @@ async function loadApartmentData(apartment) {
         const aptNoticeBanner = document.getElementById("individualAptNotice");
         const aptNoticeText = document.getElementById("individualAptNoticeText");
         if (result.aptNotice && result.aptNotice.trim() !== "") {
-            aptNoticeText.innerHTML = result.aptNotice.replace(/\n/g, '<br>');
-            aptNoticeBanner.style.display = "block";
+            if (aptNoticeText) {
+                aptNoticeText.style.whiteSpace = "pre-wrap";
+                aptNoticeText.textContent = result.aptNotice;
+            }
+            if (aptNoticeBanner) aptNoticeBanner.style.display = "block";
         } else {
-            aptNoticeBanner.style.display = "none";
+            if (aptNoticeBanner) aptNoticeBanner.style.display = "none";
         }
 
         // --- ОБЩЕСТВЕН ДОСТЪП (ЧЛ. 51 ЗУЕС) ---
@@ -5082,12 +5103,28 @@ window.logoutSuperAdmin = async function () {
     const pinInput = document.getElementById("superPinInput");
     if (pinInput) pinInput.value = "";
 
-    if (tok) {
-        try {
-            await apiCall('superAdminLogoutV1', { superSessionToken: tok });
-        } catch (e) {}
+    if (!tok) {
+        showToast("Локалната Super-Admin сесия е изчистена.", "success");
+        return;
     }
-    showToast("Излязохте успешно от Super-Admin сесията.", "success");
+
+    let serverConfirmed = false;
+    try {
+        const res = await apiCall('superAdminLogoutV1', { superSessionToken: tok });
+        serverConfirmed = Boolean(
+            res && res.success === true &&
+            res.confirmedOnServer !== false &&
+            (res.revoked === true || res.alreadyAbsent === true)
+        );
+    } catch (e) {
+        serverConfirmed = false;
+    }
+
+    if (serverConfirmed) {
+        showToast("Излязохте успешно. Сесията е прекратена на сървъра и локално.", "success");
+    } else {
+        showToast("⚠️ Локалната сесия е изчистена, но сървърната отмяна не бе потвърдена! Проверете връзката или влезте и излезте отново.", "warning", 8000);
+    }
 }
 
 async function showSuperAdminDashboard() {
@@ -5194,14 +5231,16 @@ window.submitMasterNotice = async function () {
         const texts = ["userEntranceNoticeText", "userEntranceNoticeTextHome"];
 
         if (notice !== "") {
-            const formatted = notice.replace(/\n/g, '<br>');
             banners.forEach(bId => {
                 const b = document.getElementById(bId);
                 if (b) b.style.display = "block";
             });
             texts.forEach(tId => {
                 const t = document.getElementById(tId);
-                if (t) t.innerHTML = formatted;
+                if (t) {
+                    t.style.whiteSpace = "pre-wrap";
+                    t.textContent = notice;
+                }
             });
 
             // Изпращаме имейл до всички живущи с регистриран имейл
@@ -5489,11 +5528,22 @@ window.deleteFirebaseData = async function(buildingId, btn) {
     btn.disabled = true;
 
     try {
+        const sessionTok = getSuperSessionToken_();
+        const chRes = await apiCall('superAdminIssueDeleteChallengeV1', {
+            superSessionToken: sessionTok,
+            targetId: buildingId
+        });
+        if (!chRes || !chRes.success || !chRes.deleteChallengeId) {
+            showToast((chRes && chRes.error) || "Неуспешно издаване на еднократен сървърен код за потвърждение.", "error");
+            return;
+        }
+
         const backendRes = await apiCall('deleteClient', {
-            superSessionToken: getSuperSessionToken_(),
+            superSessionToken: sessionTok,
             stepUpSecret: stepUpSecret.trim(),
             targetId: buildingId,
-            confirmTargetId: typedId.trim()
+            confirmTargetId: typedId.trim(),
+            deleteChallengeId: chRes.deleteChallengeId
         });
 
         if (backendRes && backendRes.success && !backendRes.partial && !backendRes.recoveryRequired) {
@@ -5764,26 +5814,71 @@ window.loadFullBook = async function () {
 
 function renderBookTable(rows) {
     const tbody = document.getElementById("fullBookBody");
+    if (!tbody) return;
+    tbody.innerHTML = "";
     if (!rows || rows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" style="padding:20px; text-align:center; color:#aaa;">Няма данни в книгата.</td></tr>';
+        const emptyTr = document.createElement("tr");
+        const emptyTd = document.createElement("td");
+        emptyTd.colSpan = 7;
+        emptyTd.style.cssText = "padding:20px; text-align:center; color:#aaa;";
+        emptyTd.textContent = "Няма данни в книгата.";
+        emptyTr.appendChild(emptyTd);
+        tbody.appendChild(emptyTr);
         return;
     }
 
-    tbody.innerHTML = rows.map((r, idx) => {
-        const hasMissing = !r["Собственик"] || r["Собственик"].trim() === "";
-        const bg = hasMissing ? "background:#fffbf0;" : (idx % 2 === 0 ? "" : "background:#fafbfd;");
-        const missingMark = hasMissing ? ' <span style="color:#e67e22; font-size:11px;">⚠️</span>' : '';
+    rows.forEach((r, idx) => {
+        const ownerVal = String(r["Собственик"] || "");
+        const hasMissing = ownerVal.trim() === "";
+        const aptVal = String(r["Апартамент"] || "");
+        const tr = document.createElement("tr");
+        tr.style.cssText = (hasMissing ? "background:#fffbf0;" : (idx % 2 === 0 ? "" : "background:#fafbfd;")) + " cursor:pointer;";
+        tr.addEventListener("click", () => {
+            switchZuesSubTab('z-book');
+            const aptSel = document.getElementById('masterBookApt');
+            if (aptSel) aptSel.value = aptVal;
+            loadBookData();
+        });
 
-        return `<tr style="${bg} cursor:pointer;" onclick="switchZuesSubTab('z-book'); document.getElementById('masterBookApt').value='${r["Апартамент"] || ""}'; loadBookData();">
-            <td style="padding:9px 12px; font-weight:700; color:#3b6edc;">${r["Апартамент"] || "—"}${missingMark}</td>
-            <td style="padding:9px 12px;">${r["Собственик"] || '<span style="color:#ccc;">непопълнено</span>'}</td>
-            <td style="padding:9px 12px; font-size:12px;">${r["Имейл"] || '—'}</td>
-            <td style="padding:9px 12px; font-size:12px;">${r["Обитатели"] || '—'}</td>
-            <td style="padding:9px 12px; font-size:12px;">${r["Предназначение"] || '—'}</td>
-            <td style="padding:9px 12px; font-size:12px;">${r["Дата вписване"] || '—'}</td>
-            <td style="padding:9px 12px; font-size:12px;">${r["Домашни любимци"] || '—'}</td>
-        </tr>`;
-    }).join('');
+        const tdApt = document.createElement("td");
+        tdApt.style.cssText = "padding:9px 12px; font-weight:700; color:#3b6edc;";
+        tdApt.textContent = aptVal || "—";
+        if (hasMissing) {
+            const mark = document.createElement("span");
+            mark.style.cssText = "color:#e67e22; font-size:11px; margin-left:4px;";
+            mark.textContent = "⚠️";
+            tdApt.appendChild(mark);
+        }
+
+        const tdOwner = document.createElement("td");
+        tdOwner.style.padding = "9px 12px";
+        if (hasMissing) {
+            const ph = document.createElement("span");
+            ph.style.color = "#ccc";
+            ph.textContent = "непопълнено";
+            tdOwner.appendChild(ph);
+        } else {
+            tdOwner.textContent = ownerVal;
+        }
+
+        const makeCell = (val) => {
+            const td = document.createElement("td");
+            td.style.cssText = "padding:9px 12px; font-size:12px;";
+            td.textContent = (val !== undefined && val !== null && String(val) !== "") ? String(val) : "—";
+            return td;
+        };
+
+        tr.append(
+            tdApt,
+            tdOwner,
+            makeCell(r["Имейл"]),
+            makeCell(r["Обитатели"]),
+            makeCell(r["Предназначение"]),
+            makeCell(r["Дата вписване"]),
+            makeCell(r["Домашни любимци"])
+        );
+        tbody.appendChild(tr);
+    });
 }
 
 window.filterBookTable = function () {
@@ -5808,13 +5903,13 @@ window.printFullBook = function () {
 
     const rows = _fullBookData.map((r, idx) => `
         <tr style="${idx % 2 === 0 ? '' : 'background:#f9f9f9;'}">
-            <td style="padding:6px 8px; border:1px solid #ddd; font-weight:600;">${r["Апартамент"] || "—"}</td>
-            <td style="padding:6px 8px; border:1px solid #ddd;">${r["Собственик"] || "—"}</td>
-            <td style="padding:6px 8px; border:1px solid #ddd; font-size:11px;">${r["Имейл"] || "—"}</td>
-            <td style="padding:6px 8px; border:1px solid #ddd;">${r["Обитатели"] || "—"}</td>
-            <td style="padding:6px 8px; border:1px solid #ddd;">${r["Предназначение"] || "—"}</td>
-            <td style="padding:6px 8px; border:1px solid #ddd;">${r["Дата вписване"] || "—"}</td>
-            <td style="padding:6px 8px; border:1px solid #ddd;">${r["Домашни любимци"] || "—"}</td>
+            <td style="padding:6px 8px; border:1px solid #ddd; font-weight:600;">${escapeHtmlSafe_(r["Апартамент"] || "—")}</td>
+            <td style="padding:6px 8px; border:1px solid #ddd;">${escapeHtmlSafe_(r["Собственик"] || "—")}</td>
+            <td style="padding:6px 8px; border:1px solid #ddd; font-size:11px;">${escapeHtmlSafe_(r["Имейл"] || "—")}</td>
+            <td style="padding:6px 8px; border:1px solid #ddd;">${escapeHtmlSafe_(r["Обитатели"] || "—")}</td>
+            <td style="padding:6px 8px; border:1px solid #ddd;">${escapeHtmlSafe_(r["Предназначение"] || "—")}</td>
+            <td style="padding:6px 8px; border:1px solid #ddd;">${escapeHtmlSafe_(r["Дата вписване"] || "—")}</td>
+            <td style="padding:6px 8px; border:1px solid #ddd;">${escapeHtmlSafe_(r["Домашни любимци"] || "—")}</td>
         </tr>`).join('');
 
     const html = `<!DOCTYPE html><html><head>
@@ -9790,13 +9885,17 @@ function updateExternalIdealWarningBanner_() {
     if (!warnEl) return;
     const units = Array.isArray(window._cachedExternalUnits) ? window._cachedExternalUnits : [];
     const unest = units.filter(u => u.idealPartsStatus === 'UNESTABLISHED');
+    warnEl.textContent = '';
     if (unest.length > 0) {
-        const names = unest.map(u => `${u.unitId} (${u.name})`).join(', ');
+        const names = unest.map(u => `${String(u.unitId || '')} (${String(u.name || '')})`).join(', ');
         warnEl.style.display = 'block';
-        warnEl.innerHTML = `ℹ️ <b>Обекти с неустановени идеални части:</b> ${names}. В режими „Равно“ и „Обитатели“ те участват нормално по съответния параметър. При режим „Идеални части“ и „Фонд ремонт“ автоматичното начисляване за обект с неустановен дял е блокирано до установяване на дяловете.`;
+        warnEl.appendChild(document.createTextNode('ℹ️ '));
+        const b = document.createElement('b');
+        b.textContent = 'Обекти с неустановени идеални части:';
+        warnEl.appendChild(b);
+        warnEl.appendChild(document.createTextNode(` ${names}. В режими „Равно“ и „Обитатели“ те участват нормално по съответния параметър. При режим „Идеални части“ и „Фонд ремонт“ автоматичното начисляване за обект с неустановен дял е блокирано до установяване на дяловете.`));
     } else {
         warnEl.style.display = 'none';
-        warnEl.innerHTML = '';
     }
 }
 
@@ -9957,7 +10056,21 @@ window.saveExternalUnitSettings = async function() {
 
         showToast('Обектът е запазен', 'success');
         if (statusMsg && res.unit) {
-            statusMsg.innerHTML = `✅ Обектът е запазен успешно: <b>${res.unit.unitId} (${res.unit.name})</b> от период ${res.unit.effectiveFromPeriod}. &nbsp;🔗 <a href="#" class="ext-unit-epay-link" onclick="navigateToExternalPayerForUnit('${savedUnitId}'); return false;">За ePay: свържи обекта с платец</a>`;
+            statusMsg.textContent = '';
+            statusMsg.appendChild(document.createTextNode('✅ Обектът е запазен успешно: '));
+            const b = document.createElement('b');
+            b.textContent = `${String(res.unit.unitId || '')} (${String(res.unit.name || '')})`;
+            statusMsg.appendChild(b);
+            statusMsg.appendChild(document.createTextNode(` от период ${String(res.unit.effectiveFromPeriod || '')}.  🔗 `));
+            const link = document.createElement('a');
+            link.href = '#';
+            link.className = 'ext-unit-epay-link';
+            link.textContent = 'За ePay: свържи обекта с платец';
+            link.addEventListener('click', (ev) => {
+                ev.preventDefault();
+                navigateToExternalPayerForUnit(savedUnitId);
+            });
+            statusMsg.appendChild(link);
         }
 
         // Non-blocking background sync for statements and ideal parts checks
@@ -9989,20 +10102,20 @@ window.renderExternalUnitsRegistry = function() {
     }
     tbody.innerHTML = units.map(u => {
         const accessText = u.accessType === 'COMMON_ENTRANCE'
-            ? `Общ вход (${u.art51Active ? u.art51Multiplier + 'x чл. 51' : '1x'})`
+            ? `Общ вход (${u.art51Active ? escapeHtmlSafe_(u.art51Multiplier) + 'x чл. 51' : '1x'})`
             : 'Самостоятелен (1x, чл. 51 ал. 6)';
         const idealText = u.idealPartsStatus === 'ESTABLISHED'
             ? `${Number(u.idealPartsPercent).toFixed(2)}%`
             : 'Неустановени';
-        const areaInfo = u.areaSqm ? ` (${u.areaSqm} кв.м)` : '';
+        const areaInfo = u.areaSqm ? ` (${escapeHtmlSafe_(u.areaSqm)} кв.м)` : '';
         return `<tr>
-            <td><b>${u.unitId}</b> — ${u.name}${areaInfo}</td>
-            <td>${u.documentedPurpose} / ${u.actualUsage}</td>
+            <td><b>${escapeHtmlSafe_(u.unitId)}</b> — ${escapeHtmlSafe_(u.name)}${areaInfo}</td>
+            <td>${escapeHtmlSafe_(u.documentedPurpose)} / ${escapeHtmlSafe_(u.actualUsage)}</td>
             <td>${accessText}</td>
-            <td>${idealText} / ${u.occupantsCount} обит.</td>
+            <td>${idealText} / ${escapeHtmlSafe_(u.occupantsCount)} обит.</td>
             <td>УП: <b>${u.managementParticipation ? 'ДА' : 'НЕ'}</b> | Рем.: <b>${u.autoChargeRepairFund ? 'ДА' : 'НЕ'}</b></td>
             <td>${Number(u.contractRentAmount || 0).toFixed(2)} EUR</td>
-            <td>${u.effectiveFromPeriod}</td>
+            <td>${escapeHtmlSafe_(u.effectiveFromPeriod)}</td>
         </tr>`;
     }).join('');
 };
@@ -10025,7 +10138,7 @@ window.renderExternalUnitsStatementView = function() {
                 const rep = p.buckets.repairFund;
                 const rent = p.buckets.contractRent;
                 rows.push(`<tr>
-                    <td><b>${st.unitId}</b> (${st.name}) — ${p.period}</td>
+                    <td><b>${escapeHtmlSafe_(st.unitId)}</b> (${escapeHtmlSafe_(st.name)}) — ${escapeHtmlSafe_(p.period)}</td>
                     <td>${(mgmt.chargedCents / 100).toFixed(2)} / ${(mgmt.paidCents / 100).toFixed(2)} EUR</td>
                     <td>${(rep.chargedCents / 100).toFixed(2)} / ${(rep.paidCents / 100).toFixed(2)} EUR</td>
                     <td>${(rent.chargedCents / 100).toFixed(2)} / ${(rent.paidCents / 100).toFixed(2)} EUR</td>
@@ -10047,7 +10160,7 @@ window.renderExternalUnitsStatementView = function() {
             ? activeRecs.map(r => {
                 const resSign = r.masterRoundingResidualCents > 0 ? '+' : '';
                 return `<tr>
-                    <td><b>${r.period}</b></td>
+                    <td><b>${escapeHtmlSafe_(r.period)}</b></td>
                     <td>${(r.grossExpenseCents / 100).toFixed(2)} EUR</td>
                     <td>${(r.masterBaseCents / 100).toFixed(2)} EUR</td>
                     <td>${(r.externalBaseCents / 100).toFixed(2)} EUR</td>
@@ -10071,12 +10184,12 @@ window.renderExternalUnitActions = function() {
     tbody.innerHTML = actions.map(a => {
         const dt = a.timestamp ? new Date(a.timestamp).toLocaleString('bg-BG') : '';
         return `<tr>
-            <td>${dt}</td>
-            <td><b>${a.unitId}</b> — ${a.unitName || ''}</td>
-            <td><b>${a.managementParticipation || '—'}</b></td>
-            <td>${a.previousState || '—'}</td>
-            <td>${a.newState || '—'}</td>
-            <td>${a.effectiveFromPeriod || '—'}</td>
+            <td>${escapeHtmlSafe_(dt)}</td>
+            <td><b>${escapeHtmlSafe_(a.unitId)}</b> — ${escapeHtmlSafe_(a.unitName || '')}</td>
+            <td><b>${escapeHtmlSafe_(a.managementParticipation || '—')}</b></td>
+            <td>${escapeHtmlSafe_(a.previousState || '—')}</td>
+            <td>${escapeHtmlSafe_(a.newState || '—')}</td>
+            <td>${escapeHtmlSafe_(a.effectiveFromPeriod || '—')}</td>
         </tr>`;
     }).join('');
 };
@@ -10086,26 +10199,59 @@ function renderPendingExternalPayments_() {
     const tbody = document.getElementById('v2PendingExtPaymentsBody');
     if (!card || !tbody) return;
     const pending = Array.isArray(window._cachedExternalPendingPayments) ? window._cachedExternalPendingPayments : [];
+    tbody.innerHTML = '';
     if (pending.length === 0) {
         card.style.display = 'none';
-        tbody.innerHTML = '';
         return;
     }
     card.style.display = 'block';
-    tbody.innerHTML = pending.map((p, idx) => `<tr>
-        <td style="padding: 6px;"><b>${p.period}</b><br>${p.unitId} (${p.unitName})</td>
-        <td style="padding: 6px;">${p.payerName || ''}<br><span style="color:#666; font-size:11px;">${p.reasonFromEmail || ''}</span></td>
-        <td style="padding: 6px; text-align:right;"><b>${Number(p.amount).toFixed(2)} EUR</b></td>
-        <td style="padding: 6px;">
-            <select id="pendingExtCat_${idx}" class="admin-input" style="font-size:11px; padding:4px; margin-bottom:4px;">
-                <option value="Плащане за СО">Плащане за самостоятелен обект (автоматичен приоритет)</option>
-                <option value="Управление и поддръжка">Управление и поддръжка</option>
-                <option value="Фонд ремонт">Фонд ремонт</option>
-                <option value="Наем">Наем</option>
-            </select>
-            <button type="button" class="admin-btn primary" style="font-size:11px; padding:4px 8px;" onclick="resolvePendingExternalEpayPayment('${p.pendingId}', ${idx})">Потвърди</button>
-        </td>
-    </tr>`).join('');
+    pending.forEach((p, idx) => {
+        const tr = document.createElement('tr');
+
+        const tdUnit = document.createElement('td');
+        tdUnit.style.padding = '6px';
+        const bPeriod = document.createElement('b');
+        bPeriod.textContent = String(p.period || '');
+        tdUnit.append(bPeriod, document.createElement('br'), document.createTextNode(`${String(p.unitId || '')} (${String(p.unitName || '')})`));
+
+        const tdPayer = document.createElement('td');
+        tdPayer.style.padding = '6px';
+        const reasonSpan = document.createElement('span');
+        reasonSpan.style.cssText = 'color:#666; font-size:11px;';
+        reasonSpan.textContent = String(p.reasonFromEmail || '');
+        tdPayer.append(document.createTextNode(String(p.payerName || '')), document.createElement('br'), reasonSpan);
+
+        const tdAmt = document.createElement('td');
+        tdAmt.style.cssText = 'padding: 6px; text-align:right;';
+        const bAmt = document.createElement('b');
+        bAmt.textContent = `${Number(p.amount).toFixed(2)} EUR`;
+        tdAmt.appendChild(bAmt);
+
+        const tdAct = document.createElement('td');
+        tdAct.style.padding = '6px';
+        const sel = document.createElement('select');
+        sel.id = `pendingExtCat_${idx}`;
+        sel.className = 'admin-input';
+        sel.style.cssText = 'font-size:11px; padding:4px; margin-bottom:4px;';
+        [
+            ['Плащане за СО', 'Плащане за самостоятелен обект (автоматичен приоритет)'],
+            ['Управление и поддръжка', 'Управление и поддръжка'],
+            ['Фонд ремонт', 'Фонд ремонт'],
+            ['Наем', 'Наем']
+        ].forEach(([val, lbl]) => sel.appendChild(new Option(lbl, val)));
+
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'admin-btn primary';
+        btn.style.cssText = 'font-size:11px; padding:4px 8px;';
+        btn.textContent = 'Потвърди';
+        const pendingId = String(p.pendingId || '');
+        btn.addEventListener('click', () => resolvePendingExternalEpayPayment(pendingId, idx));
+
+        tdAct.append(sel, btn);
+        tr.append(tdUnit, tdPayer, tdAmt, tdAct);
+        tbody.appendChild(tr);
+    });
 }
 
 window.resolvePendingExternalEpayPayment = async function(pendingId, idx) {
