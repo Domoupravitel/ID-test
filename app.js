@@ -236,7 +236,7 @@ function purgeFinancialMaterializedCache_(preserveBootstrap) {
 
 function isEntranceAdminLoggedIn_(routeKey) {
     if (!routeKey) return false;
-    return Boolean(sessionStorage.getItem('adminAuth_' + routeKey) || sessionStorage.getItem('adminPin_' + routeKey));
+    return Boolean(sessionStorage.getItem('adminAuth_' + routeKey) || sessionStorage.getItem('adminPin_' + routeKey) || getSuperSessionToken_());
 }
 
 function clearProtectedFinancialDomOnBlock_(routeKey, isHardBlocked) {
@@ -351,17 +351,96 @@ function reconstructExternalUnitsClient_(summaryPayload, yearRowPayloadsByYear) 
     };
 }
 
+// ==============================================
+// SUPER-ADMIN P0 SESSION HELPERS (Opaque token only — NEVER store plaintext password!)
+// ==============================================
+let _superAdminSessionTokenMem_ = '';
+
+function getSuperSessionToken_() {
+    try {
+        // Purge any legacy plaintext superAdminAuth from older versions immediately
+        sessionStorage.removeItem('superAdminAuth');
+        return _superAdminSessionTokenMem_ || sessionStorage.getItem('superSessionV1') || '';
+    } catch (e) {
+        return _superAdminSessionTokenMem_ || '';
+    }
+}
+
+function setSuperSessionToken_(token) {
+    const tok = String(token || '').trim();
+    _superAdminSessionTokenMem_ = tok;
+    try {
+        sessionStorage.removeItem('superAdminAuth');
+        if (tok) sessionStorage.setItem('superSessionV1', tok);
+        else sessionStorage.removeItem('superSessionV1');
+    } catch (e) {}
+}
+
+function clearSuperSessionToken_() {
+    _superAdminSessionTokenMem_ = '';
+    try {
+        sessionStorage.removeItem('superAdminAuth');
+        sessionStorage.removeItem('superSessionV1');
+    } catch (e) {}
+}
+
+function hasCredentialParams_(params) {
+    if (!params || typeof params !== 'object') return false;
+    const keys = Object.keys(params);
+    for (let i = 0; i < keys.length; i++) {
+        const k = String(keys[i] || '').toLowerCase();
+        if (['pin', 'superpin', 'supersessiontoken', 'sessiontoken', 'secret', 'password', 'stepupsecret', 'token'].indexOf(k) !== -1) {
+            return true;
+        }
+    }
+    return false;
+}
+
+const SUPER_ADMIN_POST_ACTIONS_ = new Set([
+    'superAdminLoginV1', 'superAdminLogoutV1', 'superAdminSessionCheckV1',
+    'verifyPin', 'verifySuperPin',
+    'getRegistryList', 'getSuperSettings', 'updateSuperSettings', 'updateGlobalMessage',
+    'updateSubscription', 'deleteClient', 'createClient', 'runBackup',
+    'getSuperExceptions', 'addSuperException', 'deleteSuperException',
+    'getAdminConfigSnapshotV1', 'getAdminFinancialBundleV1', 'getAdminMonthlyReportV3',
+    'retryFailedProjectionsV1', 'distributeMaintenanceV1',
+    'fin01Preview', 'fin01Settle', 'addChargesV2', 'saveRecurringExpenseV1',
+    'previewExternalUnitPaymentV1', 'recordExternalUnitPaymentV1', 'reverseExternalUnitPaymentV1', 'distributeIncomeV2'
+]);
+
+function handleSuperSessionRejection_(result) {
+    if (!result || typeof result !== 'object') return false;
+    const code = String(result.errorCode || '');
+    if (code === 'SESSION_EXPIRED' || code === 'SESSION_REVOKED' || code === 'SESSION_REVOKED_PASSWORD_CHANGED') {
+        clearSuperSessionToken_();
+        window._superAdminEntrancesCache = [];
+        const dash = document.getElementById('superAdminDashboard');
+        const login = document.getElementById('superAdminLoginCard');
+        const errEl = document.getElementById('superPinError');
+        if (dash) dash.style.display = 'none';
+        if (login) login.style.display = 'block';
+        if (errEl) errEl.textContent = result.error || 'Сесията е изтекла. Моля, влезте отново.';
+        return true;
+    }
+    return false;
+}
+
 async function fetchAdminFinancialBundleV1_(routeKey) {
     const pin = sessionStorage.getItem('adminAuth_' + routeKey) || sessionStorage.getItem('adminPin_' + routeKey) || '';
-    if (!pin || !routeKey) return null;
+    const superTok = getSuperSessionToken_();
+    if ((!pin && !superTok) || !routeKey) return null;
     try {
+        const payload = { action: 'getAdminFinancialBundleV1', routeKey: routeKey };
+        if (pin) payload.pin = pin;
+        else if (superTok) payload.superSessionToken = superTok;
         const res = await fetch(SCRIPT_URL, {
             method: 'POST',
-            body: new URLSearchParams({ action: 'getAdminFinancialBundleV1', routeKey: routeKey, pin: pin })
+            body: new URLSearchParams(payload)
         });
         if (!res.ok) return null;
         const data = await res.json();
         if (!data || !data.success) {
+            handleSuperSessionRejection_(data);
             if (data && data.isHardBlocked) clearProtectedFinancialDomOnBlock_(routeKey, true);
             return null;
         }
@@ -526,15 +605,20 @@ window.clearProtectedFinancialDomOnBlock_ = clearProtectedFinancialDomOnBlock_;
 // STAGE 2C.3: Materialized Monthly Financial Reports Client (0 GAS calls on public read!)
 async function fetchAdminMonthlyReportV3_(routeKey, period) {
     const pin = sessionStorage.getItem('adminAuth_' + routeKey) || sessionStorage.getItem('adminPin_' + routeKey) || '';
-    if (!pin || !routeKey || !period) return null;
+    const superTok = getSuperSessionToken_();
+    if ((!pin && !superTok) || !routeKey || !period) return null;
     try {
+        const payload = { action: 'getAdminMonthlyReportV3', routeKey: routeKey, period: period };
+        if (pin) payload.pin = pin;
+        else if (superTok) payload.superSessionToken = superTok;
         const res = await fetch(SCRIPT_URL, {
             method: 'POST',
-            body: new URLSearchParams({ action: 'getAdminMonthlyReportV3', routeKey: routeKey, period: period, pin: pin })
+            body: new URLSearchParams(payload)
         });
         if (!res.ok) return null;
         const data = await res.json();
         if (!data || !data.success) {
+            handleSuperSessionRejection_(data);
             if (data && data.isHardBlocked) clearProtectedFinancialDomOnBlock_(routeKey, true);
             return null;
         }
@@ -832,22 +916,28 @@ async function readPrecomputedEntranceSummary_(routeKey) {
 async function fetchAdminConfigSnapshotV1_(routeKey, forceRefresh) {
     if (window._projFlags.ADMIN_ENTRANCE_CONFIG !== 'ON') return null;
     const pin = (typeof getStoredPin === 'function') ? getStoredPin() : (sessionStorage.getItem('adminPin_' + routeKey) || '');
-    if (!pin || !routeKey) { purgeAdminConfigCache_(); return null; }
+    const superTok = getSuperSessionToken_();
+    if ((!pin && !superTok) || !routeKey) { purgeAdminConfigCache_(); return null; }
+    const credKey = pin ? ('p:' + pin) : ('s:' + superTok.slice(0, 12));
     const now = Date.now();
     if (!forceRefresh && window._adminConfigCache &&
         window._adminConfigCache.routeKey === routeKey &&
-        window._adminConfigCache.pin === pin &&
+        window._adminConfigCache.pin === credKey &&
         (now - window._adminConfigCache.fetchedAt) < 60000) {
         return window._adminConfigCache.snapshot;
     }
     try {
+        const payload = { action: 'getAdminConfigSnapshotV1', routeKey: routeKey };
+        if (pin) payload.pin = pin;
+        else if (superTok) payload.superSessionToken = superTok;
         const res = await fetch(SCRIPT_URL, {
             method: 'POST',
-            body: new URLSearchParams({ action: 'getAdminConfigSnapshotV1', routeKey: routeKey, pin: pin })
+            body: new URLSearchParams(payload)
         });
         if (!res.ok) return null;
         const jsonRes = await res.json();
         if (!jsonRes || jsonRes.success === false) {
+            handleSuperSessionRejection_(jsonRes);
             if (jsonRes && (String(jsonRes.error || '').indexOf('Unauthorized') !== -1 || jsonRes.isHardBlocked)) {
                 purgeAdminConfigCache_();
                 sessionStorage.removeItem('adminPin_' + routeKey);
@@ -858,7 +948,12 @@ async function fetchAdminConfigSnapshotV1_(routeKey, forceRefresh) {
             showProjectionFreshnessBanner_(jsonRes.projectionStatus || 'UNVERIFIED', 'Админ настройки');
             return null;
         }
-        window._adminConfigCache = { routeKey: routeKey, pin: pin, fetchedAt: now, snapshot: jsonRes };
+        if (jsonRes.data.adminEmail) {
+            sessionStorage.setItem('adminEmail_' + routeKey, jsonRes.data.adminEmail);
+            const newAdminEmailInput = document.getElementById('newAdminEmailInput');
+            if (newAdminEmailInput && !newAdminEmailInput.value) newAdminEmailInput.value = jsonRes.data.adminEmail;
+        }
+        window._adminConfigCache = { routeKey: routeKey, pin: credKey, fetchedAt: now, snapshot: jsonRes };
         return jsonRes;
     } catch (e) {
         return null;
@@ -1269,10 +1364,18 @@ async function bgApiCall(action, params = {}) {
     if (!SCRIPT_URL.startsWith("https://script.google.com/macros")) return { error: 'No Script URL configured' };
     const owner = captureRouteRequestContext();
     params = apiRequestParams(action, params);
-    const queryParams = new URLSearchParams(params).toString();
+    if (!params.pin && !params.superSessionToken && getSuperSessionToken_() && currentRouteKey && !sessionStorage.getItem('adminAuth_' + currentRouteKey)) {
+        if (['forceSync', 'forceDataSync'].indexOf(action) !== -1) {
+            params.superSessionToken = getSuperSessionToken_();
+        }
+    }
+    const usePost = SUPER_ADMIN_POST_ACTIONS_.has(action) || hasCredentialParams_(params);
     try {
-        const response = await fetch(`${SCRIPT_URL}?${queryParams}`);
+        const response = usePost
+            ? await fetch(SCRIPT_URL, { method: 'POST', body: new URLSearchParams(params) })
+            : await fetch(`${SCRIPT_URL}?${new URLSearchParams(params).toString()}`);
         const result = await response.json();
+        handleSuperSessionRejection_(result);
         throwIfStaleRouteRequestContext(owner);
         return result;
     } catch (error) {
@@ -1742,8 +1845,14 @@ async function apiCall(action, params = {}, operationContext) {
     }
 
     params = apiRequestParams(action, params);
+    // If Super-Admin is managing an entrance via active session (without storing entrance PIN), attach superSessionToken in POST body
+    if ((!params.pin || params.pin === '') && !params.superSessionToken && getSuperSessionToken_() && Object.prototype.hasOwnProperty.call(params, 'pin')) {
+        delete params.pin;
+        params.superSessionToken = getSuperSessionToken_();
+    }
 
-    const queryParams = new URLSearchParams(params).toString();
+    const usePost = SUPER_ADMIN_POST_ACTIONS_.has(action) || hasCredentialParams_(params);
+    const queryParams = usePost ? '' : new URLSearchParams(params).toString();
 
     try {
         // STAGE 2A.2: Cache invalidation on config writes & fast cached read for admin config tabs when flag is ON
@@ -1763,12 +1872,13 @@ async function apiCall(action, params = {}, operationContext) {
                 }
             }
         }
-        // The accepted form-POST contract avoids URL limits for nine per-category notes.
-        const response = (action === 'getAdminConfigSnapshotV1' || action === 'getAdminFinancialBundleV1' || action === 'retryFailedProjectionsV1' || action === 'distributeMaintenanceV1' || action === 'fin01Preview' || action === 'fin01Settle' || action === 'addChargesV2' || action === 'saveRecurringExpenseV1' || action === 'previewExternalUnitPaymentV1' || action === 'recordExternalUnitPaymentV1' || action === 'reverseExternalUnitPaymentV1' || action === 'distributeIncomeV2') ? // SLICE5_RECURRING_UI // FIN01_POST // MAINTENANCE_POST
+        // Strict POST-only for all auth, Super-Admin, credentialed, and protected financial operations (zero URL secrets!)
+        const response = usePost ?
             await fetch(SCRIPT_URL, {method: 'POST', body: new URLSearchParams(params)}) :
             await fetch(`${SCRIPT_URL}?${queryParams}`);
         if (!response.ok) throw new Error('HTTP_' + response.status);
         const result = await response.json();
+        handleSuperSessionRejection_(result);
         if (result && (String(result.error || '').indexOf('Unauthorized') !== -1 || result.isHardBlocked)) {
             purgeAdminConfigCache_();
         }
@@ -3075,15 +3185,24 @@ window.renderPublicExternalUnitCard_ = function () {
 // ADMIN PANEL LOGIC 
 // ==============================================
 
-window.openAdmin = function () {
+window.openAdmin = async function () {
     document.getElementById("adminOverlay").classList.add("active");
     if (sessionStorage.getItem("adminAuth_" + currentRouteKey)) {
         showAdminContent();
+    } else if (getSuperSessionToken_()) {
+        // Active Super-Admin session grants authenticated access to the entrance admin panel (server-verified via POST)
+        const check = await apiCall('verifyPin', { superSessionToken: getSuperSessionToken_() });
+        if (check && check.success) {
+            showAdminContent();
+            return;
+        }
+        document.getElementById("loginCard").style.display = "block";
+        document.getElementById("adminCard").style.display = "none";
+        document.getElementById("pinInput").value = "";
     } else {
         document.getElementById("loginCard").style.display = "block";
         document.getElementById("adminCard").style.display = "none";
         document.getElementById("pinInput").value = "";
-
     }
 }
 
@@ -4902,17 +5021,24 @@ window.submitAptNotice = async function () {
 // SUPER ADMIN LOGIC 
 // ==============================================
 
-window.openSuperAdmin = function () {
+window.openSuperAdmin = async function () {
     console.log("Opening Super Admin Overlay...");
     document.getElementById("superAdminOverlay").style.display = "flex";
-    if (sessionStorage.getItem("superAdminAuth")) {
-        showSuperAdminDashboard();
-    } else {
-        document.getElementById("superAdminLoginCard").style.display = "block";
-        document.getElementById("superAdminDashboard").style.display = "none";
-        document.getElementById("superPinInput").value = "";
-        document.getElementById("superPinInput").focus();
+    const tok = getSuperSessionToken_();
+    if (tok) {
+        const check = await apiCall('superAdminSessionCheckV1', { superSessionToken: tok });
+        if (check && check.success) {
+            showSuperAdminDashboard();
+            return;
+        }
+        clearSuperSessionToken_();
     }
+    document.getElementById("superAdminLoginCard").style.display = "block";
+    document.getElementById("superAdminDashboard").style.display = "none";
+    document.getElementById("superPinInput").value = "";
+    const errEl = document.getElementById("superPinError");
+    if (errEl) errEl.textContent = "";
+    document.getElementById("superPinInput").focus();
 }
 
 window.closeSuperAdmin = function () {
@@ -4920,31 +5046,64 @@ window.closeSuperAdmin = function () {
 }
 
 window.loginSuperAdmin = async function () {
-    const pin = document.getElementById("superPinInput").value.trim();
-    if (!pin) {
-        document.getElementById("superPinError").textContent = "Въведете парола!";
+    const secret = document.getElementById("superPinInput").value.trim();
+    const errEl = document.getElementById("superPinError");
+    if (!secret) {
+        if (errEl) errEl.textContent = "Въведете парола!";
         return;
     }
 
-    // ПИН кодът се проверява централно през специалния endpoint verifySuperPin
-    const result = await apiCall('verifySuperPin', { pin: pin });
+    // Паролата се проверява сървърно през POST superAdminLoginV1 (PBKDF2 + opaque session token)
+    const result = await apiCall('superAdminLoginV1', { secret: secret });
+    document.getElementById("superPinInput").value = "";
 
-    if (result && result.success) {
-        sessionStorage.setItem("superAdminAuth", pin);
+    if (result && result.success && result.sessionToken) {
+        if (errEl) errEl.textContent = "";
+        setSuperSessionToken_(result.sessionToken);
         showSuperAdminDashboard();
     } else {
-        document.getElementById("superPinError").textContent = result.error || "Грешна парола за Супер Админ.";
+        clearSuperSessionToken_();
+        if (errEl) errEl.textContent = (result && result.error) || "Грешна парола за Супер Админ.";
     }
+}
+
+window.logoutSuperAdmin = async function () {
+    const tok = getSuperSessionToken_();
+    clearSuperSessionToken_();
+    window._superAdminEntrancesCache = [];
+    const tbody = document.getElementById("superAdminEntrancesList");
+    if (tbody) tbody.innerHTML = "";
+    const exList = document.getElementById("superAdminExceptionsList");
+    if (exList) exList.innerHTML = "";
+    document.getElementById("superAdminDashboard").style.display = "none";
+    document.getElementById("superAdminLoginCard").style.display = "block";
+    const errEl = document.getElementById("superPinError");
+    if (errEl) errEl.textContent = "";
+    const pinInput = document.getElementById("superPinInput");
+    if (pinInput) pinInput.value = "";
+
+    if (tok) {
+        try {
+            await apiCall('superAdminLogoutV1', { superSessionToken: tok });
+        } catch (e) {}
+    }
+    showToast("Излязохте успешно от Super-Admin сесията.", "success");
 }
 
 async function showSuperAdminDashboard() {
     const requestContext = captureRouteRequestContext();
+    const tok = getSuperSessionToken_();
+    if (!tok) {
+        document.getElementById("superAdminLoginCard").style.display = "block";
+        document.getElementById("superAdminDashboard").style.display = "none";
+        return;
+    }
     console.log("Loading Super Admin Dashboard...");
     document.getElementById("superAdminLoginCard").style.display = "none";
     document.getElementById("superAdminDashboard").style.display = "block";
 
     try {
-        const res = await apiCall('getSuperSettings');
+        const res = await apiCall('getSuperSettings', { superSessionToken: tok });
         throwIfStaleRouteRequestContext(requestContext);
         if (res && res.success) {
             const setVal = (id, val) => {
@@ -4958,6 +5117,8 @@ async function showSuperAdminDashboard() {
             setVal("superGlobalMessage", res.globalMessage);
             setVal("superShowRegForm", String(res.showRegForm) === "false" ? "false" : "true");
             setVal("superRegFormText", res.regFormText);
+        } else if (handleSuperSessionRejection_(res)) {
+            return;
         }
     } catch (e) {
         if (isStaleRouteRequestError(e)) return;
@@ -4989,7 +5150,7 @@ window.saveSuperSettings = async function () {
         };
 
         const result = await apiCall('updateSuperSettings', {
-            pin: sessionStorage.getItem("superAdminAuth"),
+            superSessionToken: getSuperSessionToken_(),
             settings: JSON.stringify(reqData)
         });
         throwIfStaleRouteRequestContext(requestContext);
@@ -5104,7 +5265,7 @@ window.saveGlobalMessage = async function () {
 
     try {
         const result = await apiCall('updateGlobalMessage', {
-            pin: sessionStorage.getItem("superAdminAuth"),
+            superSessionToken: getSuperSessionToken_(),
             message: msg
         });
         throwIfStaleRouteRequestContext(requestContext);
@@ -5271,7 +5432,7 @@ async function loadSuperAdminEntrances() {
     tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Зареждане...</td></tr>';
 
     const result = await apiCall('getRegistryList', {
-        superPin: sessionStorage.getItem("superAdminAuth")
+        superSessionToken: getSuperSessionToken_()
     });
     if (result && result.success && Array.isArray(result.registry)) {
         window._superAdminEntrancesCache = result.registry.slice();
@@ -5294,7 +5455,7 @@ window.manageSub = async function (targetId, subAction) {
     if (!confirm(`Сигурни ли сте, че искате да промените достъпа на ID: ${targetId}?`)) return;
 
     const result = await apiCall('updateSubscription', {
-        superPin: sessionStorage.getItem("superAdminAuth"),
+        superSessionToken: getSuperSessionToken_(),
         targetId: targetId,
         subAction: subAction
     });
@@ -5309,11 +5470,17 @@ window.manageSub = async function (targetId, subAction) {
 
 
 window.deleteFirebaseData = async function(buildingId, btn) {
-    if(!confirm("⚠️ ВНИМАНИЕ!\nСигурни ли сте, че искате да ИЗТРИЕТЕ ВСИЧКИ ДАННИ за вход " + buildingId + " от Firestore?\nТова действие не може да бъде отменено!")) return;
-    
-    const rawPin = prompt("Моля, въведете паролата за Супер Админ, за да потвърдите изтриването:");
-    if (!rawPin || rawPin.trim() !== sessionStorage.getItem("superAdminAuth")) {
-        showToast("Грешна парола! Действието е прекратено.", "error");
+    if (!confirm("⚠️ ВНИМАНИЕ!\nТова действие ще изтрие данните за вход " + buildingId + " (Firestore, Drive таблици и регистър) и НЕ може да бъде отменено!\nСигурни ли сте?")) return;
+
+    const typedId = prompt("За потвърждение въведете точния ID код на входа (" + buildingId + "):");
+    if (!typedId || typedId.trim() !== String(buildingId || '').trim()) {
+        showToast("ID кодът не съвпада! Действието е прекратено.", "error");
+        return;
+    }
+
+    const stepUpSecret = prompt("Въведете Super-Admin паролата за повторно сървърно потвърждение:");
+    if (!stepUpSecret || !stepUpSecret.trim()) {
+        showToast("Липсва парола за потвърждение! Действието е прекратено.", "error");
         return;
     }
 
@@ -5323,8 +5490,10 @@ window.deleteFirebaseData = async function(buildingId, btn) {
 
     try {
         const backendRes = await apiCall('deleteClient', {
-            superPin: rawPin.trim(),
-            targetId: buildingId
+            superSessionToken: getSuperSessionToken_(),
+            stepUpSecret: stepUpSecret.trim(),
+            targetId: buildingId,
+            confirmTargetId: typedId.trim()
         });
 
         if (backendRes && backendRes.success && !backendRes.partial && !backendRes.recoveryRequired) {
@@ -5369,7 +5538,7 @@ window.submitNewClient = async function () {
     btn.textContent = "Генериране (Изчакайте до 15 сек)...";
 
     const result = await apiCall('createClient', {
-        superPin: sessionStorage.getItem("superAdminAuth"),
+        superSessionToken: getSuperSessionToken_(),
         city: city,
         block: block,
         entrance: entrance,
@@ -5408,27 +5577,37 @@ window.runSystemBackup = async function () {
     btn.disabled = true;
     btn.textContent = "Архивиране (Моля, изчакайте)...";
     statusDiv.style.display = "block";
-    statusDiv.innerHTML = "⏳ Обикаляне на всички входове и копиране на таблици...";
+    statusDiv.textContent = "⏳ Обикаляне на всички входове и копиране на таблици...";
     statusDiv.style.color = "#666";
 
     const result = await apiCall('runBackup', {
-        superPin: sessionStorage.getItem("superAdminAuth")
+        superSessionToken: getSuperSessionToken_()
     });
 
     btn.disabled = false;
     btn.textContent = "📦 Създай Ръчен Архив Сега";
 
+    statusDiv.textContent = "";
     if (result && result.success) {
-        statusDiv.innerHTML = "✅ " + result.message;
         statusDiv.style.color = "green";
-        if (result.folderUrl) {
-            linkA.href = result.folderUrl;
-            // Показваме и временен линк директно в статуса за удобство
-            statusDiv.innerHTML += `<br><a href="${result.folderUrl}" target="_blank" style="color:var(--primary); font-weight:bold;">Виж новия архив тук ➔</a>`;
+        const msgSpan = document.createElement("span");
+        msgSpan.textContent = "✅ " + String(result.message || "Архивът е създаден успешно.");
+        statusDiv.appendChild(msgSpan);
+        const safeUrl = (typeof result.folderUrl === "string" && /^https:\/\//i.test(result.folderUrl)) ? result.folderUrl : "";
+        if (safeUrl) {
+            if (linkA) linkA.href = safeUrl;
+            statusDiv.appendChild(document.createElement("br"));
+            const a = document.createElement("a");
+            a.href = safeUrl;
+            a.target = "_blank";
+            a.rel = "noopener noreferrer";
+            a.style.cssText = "color:var(--primary); font-weight:bold;";
+            a.textContent = "Виж новия архив тук ➔";
+            statusDiv.appendChild(a);
         }
     } else {
-        statusDiv.innerHTML = "❌ Грешка: " + (result?.error || "Проблем при архивиране");
         statusDiv.style.color = "red";
+        statusDiv.textContent = "❌ Грешка: " + String((result && result.error) || "Проблем при архивиране");
     }
 }
 
@@ -5438,24 +5617,46 @@ async function loadSuperExceptions() {
     list.innerHTML = '<tr><td colspan="4" style="text-align:center;">Зареждане...</td></tr>';
 
     const result = await apiCall('getSuperExceptions', {
-        superPin: sessionStorage.getItem("superAdminAuth")
+        superSessionToken: getSuperSessionToken_()
     });
 
-    if (result && result.success && Array.isArray(result.exceptions)) {
-        list.innerHTML = "";
+    list.innerHTML = "";
+    if (result && result.success && Array.isArray(result.exceptions) && result.exceptions.length > 0) {
         result.exceptions.forEach(ex => {
             const tr = document.createElement("tr");
-            tr.innerHTML = `
-                <td style="padding:6px;">${ex.targetId}</td>
-                <td style="padding:6px;">${ex.price} EUR</td>
-                <td style="padding:6px;">${ex.validUntil}</td>
-                <td style="padding:6px;"><button class="delete-super-exception" style="color:red; background:none; border:none; cursor:pointer; font-size:14px;">✕</button></td>
-            `;
-            tr.querySelector('.delete-super-exception').addEventListener('click', () => deleteSuperException(ex.rowIdx, ex.targetId, ex.exceptionId));
+            const tdId = document.createElement("td");
+            tdId.style.padding = "6px";
+            tdId.textContent = String(ex.targetId || "");
+
+            const tdPrice = document.createElement("td");
+            tdPrice.style.padding = "6px";
+            tdPrice.textContent = String(ex.price !== undefined ? ex.price : "") + " EUR";
+
+            const tdValid = document.createElement("td");
+            tdValid.style.padding = "6px";
+            tdValid.textContent = String(ex.validUntil || "");
+
+            const tdAct = document.createElement("td");
+            tdAct.style.padding = "6px";
+            const delBtn = document.createElement("button");
+            delBtn.type = "button";
+            delBtn.className = "delete-super-exception";
+            delBtn.style.cssText = "color:red; background:none; border:none; cursor:pointer; font-size:14px;";
+            delBtn.textContent = "✕";
+            delBtn.addEventListener("click", () => deleteSuperException(ex.rowIdx, ex.targetId, ex.exceptionId));
+            tdAct.appendChild(delBtn);
+
+            tr.append(tdId, tdPrice, tdValid, tdAct);
             list.appendChild(tr);
         });
     } else {
-        list.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:10px; color:#999;">Няма активни изключения.</td></tr>';
+        const emptyTr = document.createElement("tr");
+        const emptyTd = document.createElement("td");
+        emptyTd.colSpan = 4;
+        emptyTd.style.cssText = "text-align:center; padding:10px; color:#999;";
+        emptyTd.textContent = "Няма активни изключения.";
+        emptyTr.appendChild(emptyTd);
+        list.appendChild(emptyTr);
     }
 }
 
@@ -5470,7 +5671,7 @@ window.addSuperException = async function () {
     }
 
     const res = await apiCall('addSuperException', {
-        superPin: sessionStorage.getItem("superAdminAuth"),
+        superSessionToken: getSuperSessionToken_(),
         targetId: targetId,
         apartment: "ALL", // изключенията вече важат само за целия вход, не за отделен апартамент
         price: price,
@@ -5489,7 +5690,7 @@ window.addSuperException = async function () {
 window.deleteSuperException = async function (rowIdx, expectedTargetId, expectedExceptionId) {
     if (!confirm("Сигурни ли сте, че искате да премахнете това изключение?")) return;
     const res = await apiCall('deleteSuperException', {
-        superPin: sessionStorage.getItem("superAdminAuth"),
+        superSessionToken: getSuperSessionToken_(),
         rowIdx: rowIdx,
         expectedTargetId: expectedTargetId,
         expectedExceptionId: expectedExceptionId
@@ -5498,7 +5699,7 @@ window.deleteSuperException = async function (rowIdx, expectedTargetId, expected
         showToast("Изключението е премахнато", "success");
         loadSuperExceptions();
     } else {
-        showToast("Грешка при изтриване", "error");
+        showToast((res && res.error) || "Грешка при изтриване", "error");
     }
 }
 

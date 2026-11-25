@@ -121,7 +121,7 @@
     </noscript>
     <link rel="stylesheet" href="style.css?v=1795026000002">
         <script src="firestore-client.js" defer></script>
-        <script src="app.js?v=1795026000021" defer></script>
+        <script src="app.js?v=1795026000022" defer></script>
         <script src="recurring-expenses.js" defer></script>
         <script src="fin01-payment.js" defer></script>
         <script src="maintenance-ledger.js?v=1795026000002" defer></script>
@@ -1804,7 +1804,13 @@
         </div>
 
         <div class="admin-card" id="superAdminDashboard" style="display:none; max-width: 500px;">
-            <button class="admin-close" onclick="closeSuperAdmin()">✕</button>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; gap:8px;">
+                <span style="font-size:12px; color:#64748b; font-weight:600;">👑 Супер Админ сесия</span>
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <button type="button" id="superAdminLogoutBtn" class="admin-btn secondary small" style="padding:5px 10px; font-size:12px; margin:0; width:auto;" onclick="logoutSuperAdmin()">🚪 Изход</button>
+                    <button class="admin-close" style="position:static; margin:0;" onclick="closeSuperAdmin()">✕</button>
+                </div>
+            </div>
 
             <!-- Section 1: Create Client -->
             <div class="admin-section">
