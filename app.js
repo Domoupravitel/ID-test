@@ -6629,10 +6629,13 @@ window.generateReport = async function () {
                     const displayCat = formatVisibleCategory(inc.category);
                     const displayNote = parsedExt ? parsedExt.cleanNote : inc.note;
                     const noteStr = displayNote ? ` (${displayNote})` : "";
-                    tr.innerHTML = `
-                        <td style="padding: 10px 0; border-bottom: 1px dashed #eee;">Приход от ${payer} - кат. "${displayCat}"${noteStr}</td>
-                        <td style="text-align: right; padding: 10px 0; border-bottom: 1px dashed #eee;">${Number(inc.amount || 0).toFixed(2)} EUR</td>
-                    `;
+                    const tdDesc = document.createElement("td");
+                    tdDesc.style.cssText = "padding: 10px 0; border-bottom: 1px dashed #eee;";
+                    tdDesc.textContent = `Приход от ${payer} - кат. "${displayCat}"${noteStr}`;
+                    const tdAmt = document.createElement("td");
+                    tdAmt.style.cssText = "text-align: right; padding: 10px 0; border-bottom: 1px dashed #eee;";
+                    tdAmt.textContent = `${Number(inc.amount || 0).toFixed(2)} EUR`;
+                    tr.append(tdDesc, tdAmt);
                     collectedRows.appendChild(tr);
                 });
             }
@@ -6650,10 +6653,13 @@ window.generateReport = async function () {
                     const destType = dist.type === "balance" ? "На салдо" : "На каса";
                     const distCat = dist.sourceBreakdownSummary ? `${formatVisibleCategory(dist.category)} [${formatVisibleSummaryText(dist.sourceBreakdownSummary)}]` : formatVisibleCategory(dist.category);
                     const noteStr = dist.note ? ` (${dist.note})` : "";
-                    tr.innerHTML = `
-                        <td style="padding: 10px 0; border-bottom: 1px dashed #eee;">Разпределено от "${distCat}" към ${destType}${noteStr}</td>
-                        <td style="text-align: right; padding: 10px 0; border-bottom: 1px dashed #eee;">${Number(dist.amount || 0).toFixed(2)} EUR</td>
-                    `;
+                    const tdDesc = document.createElement("td");
+                    tdDesc.style.cssText = "padding: 10px 0; border-bottom: 1px dashed #eee;";
+                    tdDesc.textContent = `Разпределено от "${distCat}" към ${destType}${noteStr}`;
+                    const tdAmt = document.createElement("td");
+                    tdAmt.style.cssText = "text-align: right; padding: 10px 0; border-bottom: 1px dashed #eee;";
+                    tdAmt.textContent = `${Number(dist.amount || 0).toFixed(2)} EUR`;
+                    tr.append(tdDesc, tdAmt);
                     distRows.appendChild(tr);
                 });
             } else {
@@ -8666,12 +8672,18 @@ window.loadIncomesV2 = async function(operationContext) {
         
         records.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
 
+        tbody.innerHTML = "";
         if (records.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Няма въведени приходи.</td></tr>';
+            const emptyTr = document.createElement("tr");
+            const emptyTd = document.createElement("td");
+            emptyTd.colSpan = 5;
+            emptyTd.style.textAlign = "center";
+            emptyTd.textContent = "Няма въведени приходи.";
+            emptyTr.appendChild(emptyTd);
+            tbody.appendChild(emptyTr);
             return;
         }
 
-        let html = "";
         records.forEach(r => {
             const parsedExt = typeof parseExternalUnitTagClient_ === 'function' ? parseExternalUnitTagClient_(r.note) : null;
             const extUnitLabel = parsedExt
@@ -8679,43 +8691,87 @@ window.loadIncomesV2 = async function(operationContext) {
                 : (r.extUnitId ? `Външен обект: ${r.extUnitName || r.extUnitId} (${r.extUnitId})` : null);
             const payer = r.apt === "EXTERNAL"
                 ? (extUnitLabel || "Външен източник")
-                : "Ап. " + r.apt;
+                : "Ап. " + String(r.apt !== undefined && r.apt !== null ? r.apt : "");
             const displayCat = formatVisibleCategory(r.category);
             let rawNote = parsedExt ? parsedExt.cleanNote : (r.note || "");
             if (r.paymentId && r.allocationSummary) rawNote = rawNote + (rawNote ? '\n' : '') + formatVisibleSummaryText(r.allocationSummary); // FIN01_UI
-            const docText = r.docNum ? `<b>Док:</b> ${r.docNum}<br>` : "";
-            const noteText = rawNote ? `<span style="color:#666; font-size:11px;">${rawNote}</span>` : "";
-            let extSummaryHtml = "";
-            if (r.extPaymentId && r.allocationSummary && (!r.note || !r.note.includes(r.allocationSummary))) {
-                extSummaryHtml = `<div style="margin-top:4px; font-size:11px; color:#1e40af; font-weight:600;">${formatVisibleSummaryText(r.allocationSummary)}</div>`;
-            }
-            let stornoHtml = "";
-            if (r.extPaymentId && r.kind !== "REVERSAL" && r.settlementStatus !== "REVERSED" && !r.reversedByPaymentId) {
-                const safePayId = String(r.extPaymentId).replace(/'/g, "\\'");
-                stornoHtml = `<div style="margin-top:4px;"><button type="button" class="admin-btn" style="background:#ef4444; color:#fff; padding:2px 8px; font-size:11px;" onclick="reverseExternalUnitPaymentUI('${safePayId}')">↩ Сторно</button></div>`;
-            } else if (r.settlementStatus === "REVERSED" || r.reversedByPaymentId) {
-                stornoHtml = `<div style="margin-top:4px; font-size:11px; color:#dc2626; font-weight:600;">[СТОРНИРАНО]</div>`;
-            }
 
             const amtNum = parseFloat(r.amount) || 0;
             const amtColor = amtNum < 0 ? "#dc2626" : "#16a34a";
 
-            html += `
-                <tr>
-                    <td style="padding: 8px; border-bottom: 1px solid #eee;">${formatRegisterDate(r.timestamp)}</td>
-                    <td style="padding: 8px; border-bottom: 1px solid #eee;">${payer}</td>
-                    <td style="padding: 8px; border-bottom: 1px solid #eee;">${displayCat}</td>
-                    <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right; font-weight: bold; color: ${amtColor};">${amtNum.toFixed(2)}</td>
-                    <td style="padding: 8px; border-bottom: 1px solid #eee;">${docText}${noteText}${extSummaryHtml}${stornoHtml}</td>
-                </tr>
-            `;
+            const tr = document.createElement("tr");
+            const cellStyle = "padding: 8px; border-bottom: 1px solid #eee;";
+
+            const tdDate = document.createElement("td");
+            tdDate.style.cssText = cellStyle;
+            tdDate.textContent = formatRegisterDate(r.timestamp);
+
+            const tdPayer = document.createElement("td");
+            tdPayer.style.cssText = cellStyle;
+            tdPayer.textContent = String(payer || "");
+
+            const tdCat = document.createElement("td");
+            tdCat.style.cssText = cellStyle;
+            tdCat.textContent = String(displayCat || "");
+
+            const tdAmt = document.createElement("td");
+            tdAmt.style.cssText = `${cellStyle} text-align: right; font-weight: bold; color: ${amtColor};`;
+            tdAmt.textContent = amtNum.toFixed(2);
+
+            const tdDetails = document.createElement("td");
+            tdDetails.style.cssText = cellStyle;
+
+            if (r.docNum) {
+                const bDoc = document.createElement("b");
+                bDoc.textContent = "Док:";
+                tdDetails.append(bDoc, document.createTextNode(" " + String(r.docNum)), document.createElement("br"));
+            }
+            if (rawNote) {
+                const noteSpan = document.createElement("span");
+                noteSpan.style.cssText = "color:#666; font-size:11px; white-space:pre-wrap;";
+                noteSpan.textContent = String(rawNote);
+                tdDetails.appendChild(noteSpan);
+            }
+            if (r.extPaymentId && r.allocationSummary && (!r.note || !r.note.includes(r.allocationSummary))) {
+                const sumDiv = document.createElement("div");
+                sumDiv.style.cssText = "margin-top:4px; font-size:11px; color:#1e40af; font-weight:600;";
+                sumDiv.textContent = String(formatVisibleSummaryText(r.allocationSummary) || "");
+                tdDetails.appendChild(sumDiv);
+            }
+            if (r.extPaymentId && r.kind !== "REVERSAL" && r.settlementStatus !== "REVERSED" && !r.reversedByPaymentId) {
+                const stWrap = document.createElement("div");
+                stWrap.style.marginTop = "4px";
+                const stBtn = document.createElement("button");
+                stBtn.type = "button";
+                stBtn.className = "admin-btn";
+                stBtn.style.cssText = "background:#ef4444; color:#fff; padding:2px 8px; font-size:11px;";
+                stBtn.textContent = "↩ Сторно";
+                const extPayIdVal = String(r.extPaymentId);
+                stBtn.addEventListener("click", () => reverseExternalUnitPaymentUI(extPayIdVal));
+                stWrap.appendChild(stBtn);
+                tdDetails.appendChild(stWrap);
+            } else if (r.settlementStatus === "REVERSED" || r.reversedByPaymentId) {
+                const revDiv = document.createElement("div");
+                revDiv.style.cssText = "margin-top:4px; font-size:11px; color:#dc2626; font-weight:600;";
+                revDiv.textContent = "[СТОРНИРАНО]";
+                tdDetails.appendChild(revDiv);
+            }
+
+            tr.append(tdDate, tdPayer, tdCat, tdAmt, tdDetails);
+            tbody.appendChild(tr);
         });
-        tbody.innerHTML = html;
         
     } catch (e) {
         if (isStaleRouteRequestError(e)) return;
         console.error(e);
-        tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color: red;">Грешка при зареждане: ${e.message}</td></tr>`;
+        tbody.innerHTML = "";
+        const errTr = document.createElement("tr");
+        const errTd = document.createElement("td");
+        errTd.colSpan = 5;
+        errTd.style.cssText = "text-align:center; color: red;";
+        errTd.textContent = "Грешка при зареждане: " + String((e && e.message) || e);
+        errTr.appendChild(errTd);
+        tbody.appendChild(errTr);
     }
 };
 
