@@ -121,7 +121,7 @@
     </noscript>
     <link rel="stylesheet" href="style.css?v=1795026000002">
         <script src="firestore-client.js" defer></script>
-        <script src="app.js?v=1795026000024" defer></script>
+        <script src="app.js?v=1795026000025" defer></script>
         <script src="recurring-expenses.js" defer></script>
         <script src="fin01-payment.js" defer></script>
         <script src="maintenance-ledger.js?v=1795026000002" defer></script>
@@ -2046,6 +2046,10 @@
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:6px;"><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/><circle cx="12" cy="12" r="10"/></svg>
                                 Чести въпроси
                             </button>
+                            <a href="./guide/" id="heroZuesGuideBtn" target="_blank" rel="noopener noreferrer" class="landing-btn-outline" onclick="if (typeof openPublicZuesGuide_ === 'function') openPublicZuesGuide_();" style="text-decoration:none; display:inline-flex; align-items:center; justify-content:center;">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:6px;"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+                                ЗУЕС помощник
+                            </a>
                         </div>
                     </div>
                 </section>
@@ -2055,7 +2059,7 @@
                     <h2 class="section-title">Всичко необходимо на едно място</h2>
                     
                     <div class="features-grid">
-                        <a href="https://domoupravitel.github.io/ID/guide/" target="_blank" class="feature-card feature-card-link">
+                        <a href="./guide/" id="featureZuesGuideCard" target="_blank" rel="noopener noreferrer" onclick="if (typeof openPublicZuesGuide_ === 'function') openPublicZuesGuide_();" class="feature-card feature-card-link">
                             <span class="feature-card-badge">Отвори <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M7 17L17 7M17 7H8M17 7V16"/></svg></span>
                             <div class="feature-icon bg-gold">
                                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
@@ -2315,7 +2319,7 @@
                     <a id="btn-electric-link" href="#" target="_blank" style="display: none;">
                         <button class="btn blue">Фактури/Документи</button>
                     </a>
-                    <a href="./guide/" target="_blank">
+                    <a href="./guide/" id="entranceZuesGuideBtn" target="_blank" rel="noopener noreferrer" onclick="if (typeof openEntranceZuesGuide_ === 'function') openEntranceZuesGuide_();">
                         <button class="btn" style="background: linear-gradient(135deg, #e67e22, #d35400); padding: 10px 15px; font-size: 0.85rem;">ЗУЕС 💡</button>
                     </a>
                 </div>

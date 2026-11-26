@@ -93,6 +93,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     } else {
         await loadPublicSettings();
+        if (urlParams.get('register') === '1' && typeof window.toggleRegistrationForm === 'function') {
+            const regSec = document.getElementById('registration-section');
+            if (regSec && regSec.classList.contains('hidden')) {
+                window.toggleRegistrationForm();
+            }
+        }
     }
 
     // Ако сме се върнали от ръководството, отваряме админ панела автоматично
@@ -238,6 +244,31 @@ function isEntranceAdminLoggedIn_(routeKey) {
     if (!routeKey) return false;
     return Boolean(sessionStorage.getItem('adminAuth_' + routeKey) || sessionStorage.getItem('adminPin_' + routeKey) || getSuperSessionToken_());
 }
+
+// ЗУЕС Помощник — контекст за навигация (САМО идентификатор на входа; никога PIN, Super-Admin токен или сляп флаг за достъп).
+// Самият помощник валидира абонаментния статус сървърно чрез съществуващия Subscription V2.1 access gate.
+window.openPublicZuesGuide_ = function () {
+    try {
+        sessionStorage.removeItem('zuesGuideEntranceContextV1');
+        localStorage.removeItem('zuesGuideEntranceHandoffV1');
+    } catch (e) {}
+};
+
+window.openEntranceZuesGuide_ = function () {
+    try {
+        if (currentRouteKey) {
+            const payload = JSON.stringify({
+                routeKey: String(currentRouteKey).trim(),
+                openedAtMs: Date.now()
+            });
+            sessionStorage.setItem('zuesGuideEntranceContextV1', payload);
+            localStorage.setItem('zuesGuideEntranceHandoffV1', payload);
+        } else {
+            sessionStorage.removeItem('zuesGuideEntranceContextV1');
+            localStorage.removeItem('zuesGuideEntranceHandoffV1');
+        }
+    } catch (e) {}
+};
 
 function clearProtectedFinancialDomOnBlock_(routeKey, isHardBlocked) {
     purgeFinancialMaterializedCache_();
