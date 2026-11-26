@@ -119,7 +119,7 @@
     <noscript>
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
     </noscript>
-    <link rel="stylesheet" href="style.css?v=1795026000002">
+    <link rel="stylesheet" href="style.css?v=1795026000003">
         <script src="firestore-client.js" defer></script>
         <script src="app.js?v=1795026000025" defer></script>
         <script src="recurring-expenses.js" defer></script>
@@ -1966,6 +1966,12 @@
 
     <!-- TOAST NOTIFICATIONS -->
     <div id="toast" class="toast"></div>
+
+    <!-- DIRECT ENTRANCE ROUTE LOADER (shown only while html.direct-entrance-route is active) -->
+    <div id="directRouteLoader" class="direct-route-loader" role="status" aria-live="polite">
+        <div class="direct-route-spinner" aria-hidden="true"></div>
+        <span>Зареждане на входа…</span>
+    </div>
 
     <div class="app-container">
 
