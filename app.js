@@ -420,7 +420,7 @@ function hasCredentialParams_(params) {
     const keys = Object.keys(params);
     for (let i = 0; i < keys.length; i++) {
         const k = String(keys[i] || '').toLowerCase();
-        if (['pin', 'superpin', 'supersessiontoken', 'sessiontoken', 'secret', 'password', 'stepupsecret', 'token'].indexOf(k) !== -1) {
+        if (['pin', 'superpin', 'supersessiontoken', 'sessiontoken', 'secret', 'password', 'stepupsecret', 'token', 'otp', 'downloadtoken'].indexOf(k) !== -1) {
             return true;
         }
     }
@@ -436,7 +436,11 @@ const SUPER_ADMIN_POST_ACTIONS_ = new Set([
     'getAdminConfigSnapshotV1', 'getAdminFinancialBundleV1', 'getAdminMonthlyReportV3',
     'retryFailedProjectionsV1', 'distributeMaintenanceV1',
     'fin01Preview', 'fin01Settle', 'addChargesV2', 'saveRecurringExpenseV1',
-    'previewExternalUnitPaymentV1', 'recordExternalUnitPaymentV1', 'reverseExternalUnitPaymentV1', 'distributeIncomeV2'
+    'previewExternalUnitPaymentV1', 'recordExternalUnitPaymentV1', 'reverseExternalUnitPaymentV1', 'distributeIncomeV2',
+    'closureGetStatusV1', 'closureExportPackageV1', 'closureDownloadExportV1',
+    'closureRequestChallengeV1', 'closureConfirmRequestV1', 'closureCancelRequestV1',
+    'closureSuperAdminStatusV1', 'closureSuperAdminReopenV1', 'closureSuperAdminLegalHoldV1',
+    'closureAdvanceWorkerTickV1', 'closurePurgeWorkerTickV1'
 ]);
 
 function handleSuperSessionRejection_(result) {
@@ -5476,9 +5480,9 @@ function renderSuperAdminEntrancesTable_(query) {
 
         const btnDelete = document.createElement("button");
         btnDelete.className = "admin-btn small";
-        btnDelete.style.cssText = "background:#000; color:white; padding:4px 8px; font-size:11px; margin-left:4px;";
-        btnDelete.title = "Изтрий всички данни за входа от Firestore";
-        btnDelete.textContent = "🗑️ FS";
+        btnDelete.style.cssText = "background:#334155; color:white; padding:4px 8px; font-size:11px; margin-left:4px;";
+        btnDelete.title = "Жизнен цикъл на входа (директното физическо изтриване е изключено)";
+        btnDelete.textContent = "🔒 Статус";
         btnDelete.addEventListener("click", () => deleteFirebaseData(routeKey, btnDelete));
 
         tdActions.append(btnUnblock, btnBlock, btnLifetime, btnDelete);
@@ -5541,62 +5545,78 @@ window.manageSub = async function (targetId, subAction) {
 }
 
 
+// Phase 2A Guard: Prevent accidental destructive `deleteClient` via the legacy 🗑️ FS UI button.
+// Provides safe Super-Admin lifecycle inspection & controlled CLOSED -> ACTIVE recovery only.
 window.deleteFirebaseData = async function(buildingId, btn) {
-    if (!confirm("⚠️ ВНИМАНИЕ!\nТова действие ще изтрие данните за вход " + buildingId + " (Firestore, Drive таблици и регистър) и НЕ може да бъде отменено!\nСигурни ли сте?")) return;
-
-    const typedId = prompt("За потвърждение въведете точния ID код на входа (" + buildingId + "):");
-    if (!typedId || typedId.trim() !== String(buildingId || '').trim()) {
-        showToast("ID кодът не съвпада! Действието е прекратено.", "error");
-        return;
+    const oldText = btn ? btn.textContent : '';
+    if (btn) {
+        btn.textContent = "⏳ Проверка...";
+        btn.disabled = true;
     }
-
-    const stepUpSecret = prompt("Въведете Super-Admin паролата за повторно сървърно потвърждение:");
-    if (!stepUpSecret || !stepUpSecret.trim()) {
-        showToast("Липсва парола за потвърждение! Действието е прекратено.", "error");
-        return;
-    }
-
-    const oldText = btn.innerHTML;
-    btn.innerHTML = "⏳ Изтриване...";
-    btn.disabled = true;
-
     try {
         const sessionTok = getSuperSessionToken_();
-        const chRes = await apiCall('superAdminIssueDeleteChallengeV1', {
+        const stRes = await apiCall('closureSuperAdminStatusV1', {
             superSessionToken: sessionTok,
             targetId: buildingId
         });
-        if (!chRes || !chRes.success || !chRes.deleteChallengeId) {
-            showToast((chRes && chRes.error) || "Неуспешно издаване на еднократен сървърен код за потвърждение.", "error");
+        if (!stRes || !stRes.success) {
+            showToast((stRes && stRes.error) || "Грешка при проверка на жизнения цикъл.", "error");
             return;
         }
-
-        const backendRes = await apiCall('deleteClient', {
-            superSessionToken: sessionTok,
-            stepUpSecret: stepUpSecret.trim(),
-            targetId: buildingId,
-            confirmTargetId: typedId.trim(),
-            deleteChallengeId: chRes.deleteChallengeId
-        });
-
-        if (backendRes && backendRes.success && !backendRes.partial && !backendRes.recoveryRequired) {
-            showToast("✅ Входът, Firestore данните и таблиците са проверено заличени.", "success");
-            loadSuperAdminEntrances(); // Refresh list
-        } else if (backendRes && (backendRes.partial || backendRes.recoveryRequired)) {
-            showToast("⚠️ Изтриването е частично. Не повтаряйте действието на сляпо. " + (backendRes.warning || backendRes.error || "Необходима е контролирана проверка."), "warning", 9000);
-        } else {
-            showToast(backendRes?.error || "Изтриването не е завършено; ресурсите не са обявени за заличени.", "error");
+        const state = stRes.state || 'ACTIVE';
+        const infoLines = [
+            "Вход: " + buildingId,
+            "Статус на жизнения цикъл: " + state,
+            "Legal Hold: " + (stRes.legalHold ? "ДА" : "НЕ"),
+            "Експорт верифициран: " + (stRes.exportVerifiedAtUtc || "—"),
+            "Физическо изтриване (Purge): ИЗКЛЮЧЕНО (Phase 2A)"
+        ];
+        if (state === 'CLOSED') {
+            infoLines.push("\nЗатворен на: " + (stRes.closedAtUtc || "—"));
+            infoLines.push("Защитен 30-дневен срок до: " + (stRes.purgeEligibleAtUtc || "—"));
+            if (confirm(infoLines.join("\n") + "\n\nЖелаете ли да ВЪЗСТАНОВИТЕ този закрит вход обратно към ACTIVE?")) {
+                const typedId = prompt("Въведете точния ID код на входа (" + buildingId + ") за потвърждение:");
+                if (!typedId || typedId.trim() !== String(buildingId).trim()) {
+                    showToast("ID кодът не съвпада.", "error");
+                    return;
+                }
+                const reason = prompt("Въведете причина за възстановяване (минимум 5 символа):");
+                if (!reason || reason.trim().length < 5) {
+                    showToast("Причината е задължителна (минимум 5 символа).", "error");
+                    return;
+                }
+                const stepUpSecret = prompt("Въведете Super-Admin паролата за повторно потвърждение:");
+                if (!stepUpSecret || !stepUpSecret.trim()) {
+                    showToast("Липсва Super-Admin парола.", "error");
+                    return;
+                }
+                const reopenRes = await apiCall('closureSuperAdminReopenV1', {
+                    superSessionToken: sessionTok,
+                    stepUpSecret: stepUpSecret.trim(),
+                    targetId: buildingId,
+                    confirmTargetId: typedId.trim(),
+                    reason: reason.trim()
+                });
+                if (reopenRes && reopenRes.success) {
+                    showToast("✅ Входът е възстановен към ACTIVE.", "success");
+                    loadSuperAdminEntrances();
+                } else {
+                    showToast((reopenRes && reopenRes.error) || "Неуспешно възстановяване.", "error");
+                }
+            }
+            return;
         }
-    } catch(e) {
+        alert(infoLines.join("\n") + "\n\nДиректното разрушително изтриване през стария бутон е деактивирано. Използвайте безопасния жизнен цикъл.");
+    } catch (e) {
         console.error(e);
-        showToast("Грешка при изтриване: " + e.message, "error");
+        showToast("Грешка при проверка на статуса: " + e.message, "error");
     } finally {
-        if(btn) {
-            btn.innerHTML = oldText;
+        if (btn) {
+            btn.textContent = oldText;
             btn.disabled = false;
         }
     }
-}
+};
 window.submitNewClient = async function () {
     const city = document.getElementById("newCity").value.trim();
     const block = document.getElementById("newBlock").value.trim();
@@ -7000,6 +7020,7 @@ function switchAdminTab(tab) {
         if (newAdminEmailInput && !newAdminEmailInput.value) {
             newAdminEmailInput.value = sessionStorage.getItem("adminEmail_" + currentRouteKey) || "";
         }
+        if (typeof loadEntranceClosureSection_ === 'function') loadEntranceClosureSection_();
         if (quickNav) {
             quickNav.style.display = 'block';
             // Скриване на бутона "Начисления" от quick nav
@@ -10382,4 +10403,205 @@ window.resolvePendingExternalEpayPayment = async function(pendingId, idx) {
 };
 // ============================================================================
 // END EXTERNAL UNITS CLIENT
+// ============================================================================
+
+// ============================================================================
+// PHASE 2A: SAFE ENTRANCE ACCOUNT CLOSURE CLIENT (Settings -> Закриване на акаунта)
+// ============================================================================
+let _closureLastChallengeId_ = '';
+let _closureLastExportId_ = '';
+let _closureLastDownloadToken_ = '';
+
+function setClosureMsg_(text, isError) {
+    const el = document.getElementById('closureActionMessage');
+    if (!el) return;
+    el.textContent = text || '';
+    el.style.color = isError ? '#b91c1c' : '#047857';
+}
+
+function renderEntranceClosureState_(st) {
+    const wrap = document.getElementById('admin-section-closure-wrap');
+    if (!wrap) return;
+    const state = (st && st.state) ? String(st.state) : 'ACTIVE';
+    const showSection = Boolean(st && (st.selfClosureEnabled === true || state !== 'ACTIVE'));
+    wrap.style.display = showSection ? 'block' : 'none';
+    if (!showSection) return;
+
+    const badge = document.getElementById('closureStateBadge');
+    if (badge) {
+        badge.textContent = state;
+        const colors = {
+            ACTIVE: ['#e2e8f0', '#334155'],
+            CLOSURE_REQUESTED: ['#ffedd5', '#9a3412'],
+            CLOSING: ['#fee2e2', '#991b1b'],
+            CLOSED: ['#fecaca', '#7f1d1d']
+        };
+        const pair = colors[state] || colors.ACTIVE;
+        badge.style.background = pair[0];
+        badge.style.color = pair[1];
+    }
+
+    const lftWarn = document.getElementById('closureLifetimeWarning');
+    if (lftWarn) lftWarn.style.display = (st && st.isLifetime) ? 'block' : 'none';
+
+    const reqBanner = document.getElementById('closureRequestedBanner');
+    const reqText = document.getElementById('closureCoolingOffText');
+    const formBox = document.getElementById('closureRequestFormBox');
+    if (reqBanner) reqBanner.style.display = (state === 'CLOSURE_REQUESTED') ? 'block' : 'none';
+    if (reqText && state === 'CLOSURE_REQUESTED') {
+        reqText.textContent = 'Срок за самостоятелен отказ (72 ч.): до ' + (st.coolingOffEndsAtUtc || '—') + '. През този период входът е в режим само за четене и експорт.';
+    }
+    if (formBox) formBox.style.display = (state === 'ACTIVE') ? 'block' : 'none';
+
+    const expInfo = document.getElementById('closureExportInfo');
+    const dlBtn = document.getElementById('closureDownloadBtn');
+    if (st && st.exportId) {
+        _closureLastExportId_ = st.exportId;
+        if (expInfo) {
+            expInfo.textContent = '✅ Верифициран архив: ' + st.exportId + ' | SHA-256: ' + String(st.exportSha256 || '').slice(0, 16) + '… | ' + (st.exportVerifiedAtUtc || '');
+        }
+        if (dlBtn) dlBtn.style.display = 'inline-block';
+    } else {
+        if (expInfo) expInfo.textContent = 'Все още няма генериран експортен архив.';
+        if (dlBtn) dlBtn.style.display = 'none';
+    }
+}
+
+async function loadEntranceClosureSection_() {
+    const wrap = document.getElementById('admin-section-closure-wrap');
+    if (!wrap || !currentRouteKey) return;
+    const pin = sessionStorage.getItem('adminAuth_' + currentRouteKey) || '';
+    const superTok = getSuperSessionToken_();
+    if (!pin && !superTok) {
+        wrap.style.display = 'none';
+        return;
+    }
+    try {
+        const res = await apiCall('closureGetStatusV1', pin ? { pin: pin } : { superSessionToken: superTok });
+        if (res && res.success) {
+            renderEntranceClosureState_(res);
+        } else {
+            wrap.style.display = 'none';
+        }
+    } catch (e) {
+        wrap.style.display = 'none';
+    }
+}
+
+window.generateEntranceClosureExport = async function () {
+    const btn = document.getElementById('closureExportBtn');
+    const pin = sessionStorage.getItem('adminAuth_' + currentRouteKey) || '';
+    const superTok = getSuperSessionToken_();
+    if (!pin && !superTok) return showToast('Липсва администраторска сесия.', 'error');
+    if (btn) btn.disabled = true;
+    setClosureMsg_('Генериране и верификация на архива...', false);
+    try {
+        const res = await apiCall('closureExportPackageV1', pin ? { pin: pin } : { superSessionToken: superTok });
+        if (res && res.success) {
+            _closureLastExportId_ = res.exportId;
+            _closureLastDownloadToken_ = res.downloadToken || '';
+            setClosureMsg_('✅ Архивът е генериран и SHA-256 верифициран.', false);
+            await loadEntranceClosureSection_();
+        } else {
+            setClosureMsg_((res && res.error) || 'Грешка при генериране на експорта.', true);
+        }
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+};
+
+window.downloadEntranceClosureExport = async function () {
+    if (!_closureLastExportId_) return showToast('Първо генерирайте архив.', 'error');
+    const pin = sessionStorage.getItem('adminAuth_' + currentRouteKey) || '';
+    const superTok = getSuperSessionToken_();
+    const payload = { exportId: _closureLastExportId_ };
+    if (_closureLastDownloadToken_) payload.downloadToken = _closureLastDownloadToken_;
+    if (pin) payload.pin = pin;
+    else if (superTok) payload.superSessionToken = superTok;
+    const res = await apiCall('closureDownloadExportV1', payload);
+    if (res && res.success && res.archiveJson) {
+        const blob = new Blob([res.archiveJson], { type: 'application/json;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = res.fileName || ('archive_' + currentRouteKey + '.json');
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+        showToast('Архивът е изтеглен успешно.', 'success');
+    } else {
+        showToast((res && res.error) || 'Грешка при изтегляне на архива.', 'error');
+    }
+};
+
+window.requestEntranceClosureOtp = async function () {
+    const pin = (document.getElementById('closurePinInput')?.value || '').trim() || sessionStorage.getItem('adminAuth_' + currentRouteKey) || '';
+    if (!pin) return setClosureMsg_('Моля, въведете PIN паролата на входа.', true);
+    const btn = document.getElementById('closureSendOtpBtn');
+    if (btn) btn.disabled = true;
+    setClosureMsg_('Изпращане на еднократен код...', false);
+    try {
+        const res = await apiCall('closureRequestChallengeV1', { pin: pin });
+        if (res && res.success && res.challengeId) {
+            _closureLastChallengeId_ = res.challengeId;
+            const info = document.getElementById('closureOtpSentInfo');
+            if (info) info.textContent = '📧 Кодът е изпратен на ' + (res.maskedEmail || 'регистрирания имейл') + ' (валиден 15 мин).';
+            setClosureMsg_('Еднократният код е изпратен. Въведете го по-долу заедно с PIN и ID на входа.', false);
+        } else {
+            setClosureMsg_((res && res.error) || 'Неуспешно изпращане на еднократен код.', true);
+        }
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+};
+
+window.submitEntranceClosureRequest = async function () {
+    const otp = (document.getElementById('closureOtpInput')?.value || '').trim();
+    const pin = (document.getElementById('closurePinInput')?.value || '').trim();
+    const confirmRouteKey = (document.getElementById('closureConfirmIdInput')?.value || '').trim();
+    const ack = Boolean(document.getElementById('closureAckCheckbox')?.checked);
+    if (!_closureLastChallengeId_) return setClosureMsg_('Първо изпратете еднократен код на регистрирания имейл.', true);
+    if (!otp || !pin || !confirmRouteKey) return setClosureMsg_('Попълнете еднократния код, PIN паролата и ID кода на входа.', true);
+    if (!ack) return setClosureMsg_('Трябва да потвърдите отметката за последствията.', true);
+
+    const btn = document.getElementById('closureConfirmSubmitBtn');
+    if (btn) btn.disabled = true;
+    try {
+        const res = await apiCall('closureConfirmRequestV1', {
+            pin: pin,
+            challengeId: _closureLastChallengeId_,
+            otp: otp,
+            confirmRouteKey: confirmRouteKey,
+            acknowledgedConsequences: 'true',
+            idempotencyKey: 'ui_' + _closureLastChallengeId_
+        });
+        if (res && res.success) {
+            _closureLastChallengeId_ = '';
+            setClosureMsg_('✅ Заявката за закриване е приета (72-часов срок за отказ до ' + (res.coolingOffEndsAtUtc || '') + ').', false);
+            await loadEntranceClosureSection_();
+        } else {
+            setClosureMsg_((res && res.error) || 'Заявката за закриване беше отхвърлена.', true);
+        }
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+};
+
+window.cancelEntranceClosureRequest = async function () {
+    const pin = prompt('Въведете PIN паролата на входа за потвърждение на отказа:');
+    if (!pin || !pin.trim()) return;
+    const res = await apiCall('closureCancelRequestV1', {
+        pin: pin.trim(),
+        confirmRouteKey: currentRouteKey
+    });
+    if (res && res.success) {
+        setClosureMsg_('✅ Заявката за закриване е отказана. Входът отново е активен.', false);
+        await loadEntranceClosureSection_();
+    } else {
+        setClosureMsg_((res && res.error) || 'Неуспешен отказ на заявката.', true);
+    }
+};
+// ============================================================================
+// END PHASE 2A ENTRANCE CLOSURE CLIENT
 // ============================================================================

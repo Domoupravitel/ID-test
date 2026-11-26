@@ -121,7 +121,7 @@
     </noscript>
     <link rel="stylesheet" href="style.css?v=1795026000003">
         <script src="firestore-client.js" defer></script>
-        <script src="app.js?v=1795026000026" defer></script>
+        <script src="app.js?v=1795026000027" defer></script>
         <script src="recurring-expenses.js" defer></script>
         <script src="fin01-payment.js" defer></script>
         <script src="maintenance-ledger.js?v=1795026000002" defer></script>
@@ -1781,6 +1781,68 @@
                         <p style="font-size: 11px; font-weight: 700; text-transform: uppercase; margin: 0 0 6px 0; color: var(--primary);">💳 Начини на плащане към Супер Админа:</p>
                         <div id="platformPaymentInfoText" style="font-size: 13px; white-space: pre-line; line-height: 1.6; color: #333;"></div>
                     </div>
+                </div>
+
+                <!-- Phase 2A: Safe Entrance Account Closure Section -->
+                <div class="admin-section" data-tab="settings" id="admin-section-closure-wrap"
+                    style="display:none; background: rgba(220, 38, 38, 0.04); padding: 15px; border-radius: 8px; border: 1px solid rgba(220,38,38,0.28); margin-top: 15px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:8px;">
+                        <h3 id="admin-section-closure" style="color: #b91c1c; margin: 0;">🔒 Закриване на акаунта на входа</h3>
+                        <span id="closureStateBadge" style="font-size:11px; font-weight:700; padding:3px 8px; border-radius:999px; background:#e2e8f0; color:#334155;">ACTIVE</span>
+                    </div>
+
+                    <p style="font-size: 12px; color: #475569; line-height: 1.5; margin: 0 0 10px 0;">
+                        При заявяване на закриване акаунтът влиза в <strong>72-часов период за самостоятелен отказ</strong> (режим само за четене и експорт), след което се закрива с <strong>30-дневен защитен период за възстановяване</strong> чрез Super-Admin. Всички автоматични имейли и операции се спират. Неизползваните предплатени суми не се възстановяват автоматично.
+                    </p>
+                    <p style="font-size: 12px; color: #1e40af; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; padding: 8px 10px; margin: 0 0 10px 0;">
+                        💡 <strong>Сменяте домоуправителя?</strong> Не закривайте акаунта — използвайте секция
+                        <a href="javascript:void(0)" onclick="document.getElementById('newAdminEmailInput')?.scrollIntoView({behavior:'smooth', block:'center'})" style="color:#1d4ed8; font-weight:700;">„Имейл на Домоуправителя“</a>, за да запазите историята на входа.
+                    </p>
+                    <div id="closureLifetimeWarning" style="display:none; font-size:12px; color:#92400e; background:#fef3c7; border:1px solid #f59e0b; border-radius:6px; padding:8px 10px; margin-bottom:10px;">
+                        ⚠️ <strong>ВНИМАНИЕ (Lifetime абонамент):</strong> Този вход има безсрочен (Lifetime) достъп. При окончателно закриване безсрочният достъп ще бъде прекратен без автоматично възстановяване или прехвърляне.
+                    </div>
+
+                    <!-- Active CLOSURE_REQUESTED Banner -->
+                    <div id="closureRequestedBanner" style="display:none; background:#fff7ed; border:1px solid #fb923c; border-radius:6px; padding:10px 12px; margin-bottom:12px;">
+                        <div style="font-size:13px; font-weight:700; color:#9a3412; margin-bottom:4px;">⏳ Заявката за закриване е активна (72-часов срок за отказ)</div>
+                        <div id="closureCoolingOffText" style="font-size:12px; color:#7c2d12; margin-bottom:8px;"></div>
+                        <button type="button" class="admin-btn secondary" id="closureCancelBtn" onclick="cancelEntranceClosureRequest()" style="background:#0f766e; color:#fff;">↩️ Откажи закриването</button>
+                    </div>
+
+                    <!-- Step 1: Mandatory Export -->
+                    <div style="background:#fff; border:1px solid #e2e8f0; border-radius:6px; padding:10px 12px; margin-bottom:12px;">
+                        <div style="font-size:12px; font-weight:700; color:#1e293b; margin-bottom:6px;">1. Задължителен експорт на документацията (ЗУЕС)</div>
+                        <p style="font-size:11px; color:#64748b; margin:0 0 8px 0;">Архивът включва Книгата на ЕС, финансовите таблици, месечните отчети, външните обекти, регистрите и SHA-256 контролен манифест. Изтегля се директно с ограничен сървърен достъп (не се праща като имейл прикачен файл).</p>
+                        <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+                            <button type="button" class="admin-btn secondary" id="closureExportBtn" onclick="generateEntranceClosureExport()">📦 Генерирай и верифицирай архив</button>
+                            <button type="button" class="admin-btn" id="closureDownloadBtn" onclick="downloadEntranceClosureExport()" style="display:none;">⬇️ Изтегли верифицирания архив</button>
+                        </div>
+                        <div id="closureExportInfo" style="margin-top:6px; font-size:11px; color:#334155;"></div>
+                    </div>
+
+                    <!-- Step 2: Protected Closure Form (ACTIVE only) -->
+                    <div id="closureRequestFormBox" style="background:#fff; border:1px solid #fecaca; border-radius:6px; padding:10px 12px;">
+                        <div style="font-size:12px; font-weight:700; color:#991b1b; margin-bottom:8px;">2. Защитено потвърждение (PIN + Еднократен имейл код + ID на входа)</div>
+                        <div style="margin-bottom:8px;">
+                            <button type="button" class="admin-btn secondary" id="closureSendOtpBtn" onclick="requestEntranceClosureOtp()">📧 Изпрати еднократен код на регистрирания имейл</button>
+                            <div id="closureOtpSentInfo" style="font-size:11px; color:#475569; margin-top:4px;"></div>
+                        </div>
+                        <label class="admin-label">Еднократен код от имейла (OTP)</label>
+                        <input type="text" id="closureOtpInput" class="admin-input" placeholder="Въведете 8-символния код..." autocomplete="one-time-code">
+
+                        <label class="admin-label">Повторно въвеждане на PIN паролата на входа</label>
+                        <input type="password" id="closurePinInput" class="admin-input" placeholder="PIN парола..." autocomplete="current-password">
+
+                        <label class="admin-label">Потвърдете точния ID код на входа</label>
+                        <input type="text" id="closureConfirmIdInput" class="admin-input" placeholder="Въведете ID кода на входа...">
+
+                        <label style="display:flex; align-items:flex-start; gap:8px; font-size:12px; color:#334155; margin:10px 0;">
+                            <input type="checkbox" id="closureAckCheckbox" style="margin-top:3px;">
+                            <span>Потвърждавам, че съм упълномощен да заявя закриването на този вход, запознат съм с 72-часовия срок за отказ и отговорността за съхранение на документацията по ЗУЕС.</span>
+                        </label>
+                        <button type="button" class="admin-btn" id="closureConfirmSubmitBtn" onclick="submitEntranceClosureRequest()" style="background:#dc2626; color:#fff; width:100%;">🔒 Потвърди закриването на входа</button>
+                    </div>
+                    <div id="closureActionMessage" style="margin-top:8px; font-size:12px; font-weight:600;"></div>
                 </div>
             </div>
         </div>
