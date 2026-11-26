@@ -119,9 +119,9 @@
     <noscript>
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
     </noscript>
-    <link rel="stylesheet" href="style.css?v=1795026000003">
+    <link rel="stylesheet" href="style.css?v=1795026000004">
         <script src="firestore-client.js" defer></script>
-        <script src="app.js?v=1795026000027" defer></script>
+        <script src="app.js?v=1795026000028" defer></script>
         <script src="recurring-expenses.js" defer></script>
         <script src="fin01-payment.js" defer></script>
         <script src="maintenance-ledger.js?v=1795026000002" defer></script>
@@ -857,7 +857,7 @@
             <!-- Floating Quick Nav -->
             <div class="admin-quick-nav">
                 <a href="javascript:void(0)" class="quick-nav-btn" onclick="document.getElementById('admin-section-charges')?.scrollIntoView({behavior:'smooth',block:'start'})">Начисления</a>
-                <a href="javascript:void(0)" class="quick-nav-btn" onclick="document.getElementById('admin-section-email')?.scrollIntoView({behavior:'smooth',block:'start'})">Имейл</a>
+                <a href="javascript:void(0)" class="quick-nav-btn" onclick="openSettingsSubPanel('info','aptemail','admin-section-email')">Имейл</a>
                 <a href="javascript:void(0)" class="quick-nav-btn" onclick="document.getElementById('admin-section-master')?.scrollIntoView({behavior:'smooth',block:'start'})">Настройки</a>
             </div>
 
@@ -973,32 +973,6 @@
                     <button id="adminRangeReportBtn" class="admin-btn" style="white-space:nowrap;" onclick="calcEntranceRangeReport()">Изпрати по имейл</button>
                 </div>
                 <div id="adminRangeReportResult" style="margin-top: 12px; font-size: 13px;"></div>
-            </div>
-
-            <div class="admin-section" data-tab="settings">
-                <h3 id="admin-section-email">✉️ Имейл на апартамент</h3>
-                <p class="subtitle" style="font-size: 12px; margin-bottom: 15px;">Задайте имейл за получаване на
-                    автоматични месечни отчети.</p>
-                <label class="admin-label">Апартамент</label>
-                <select id="adminEmailApt" class="admin-input" onchange="loadCurrentEmail()"></select>
-                <div id="currentEmailBox" style="display:none; background: linear-gradient(135deg, #e8f4fd, #d1ecf9); border: 1px solid #91cef4; border-radius: 8px; padding: 10px 14px; margin-top: 8px; margin-bottom: 12px;">
-                    <span style="font-size: 13px; color: #555;">📧 Текущ имейл:</span>
-                    <span id="currentEmail" style="display: block; font-weight: 700; font-size: 15px; color: #1a6dab; margin-top: 3px; word-break: break-all;">—</span>
-                </div>
-                <label class="admin-label">Нов имейл</label>
-                <input type="email" id="adminEmail" class="admin-input" placeholder="email@example.com">
-                <button class="admin-btn secondary" id="emailBtn" onclick="submitEmail()">Запази имейл</button>
-            </div>
-
-            <div class="admin-section" data-tab="settings">
-                <h3>👤 Имейл на Домоуправителя</h3>
-                <p class="subtitle" style="font-size: 12px; margin-bottom: 15px;">
-                    Задайте нов имейл на домоуправителя на този вход.
-                    <strong style="color: #d32f2f;"> Имайте предвид, че смяната ще спре автоматичното разпознаване на разходи и приходи, ако текущият имейл е настроен за автоматизация към платформата. За да продължи автоматизацията, трябва да повторите настройката на препращане към новия имейл.</strong>
-                </p>
-                <label class="admin-label">Нов имейл</label>
-                <input type="email" id="newAdminEmailInput" class="admin-input" placeholder="email@example.com">
-                <button class="admin-btn secondary" id="adminEmailBtn" onclick="submitAdminEmail()">Запази имейл</button>
             </div>
 
             <!-- MASTER Section -->
@@ -1246,6 +1220,25 @@
                                 </div>
                             </div>
 
+                            <!-- Имейл на апартамент (2-ра подсекция в Инфо/Съобщения) -->
+                            <div class="master-acc-item">
+                                <button type="button" class="master-tab" data-master-tab="aptemail" aria-expanded="false" onclick="switchMasterTab('aptemail',this)"><span>✉️ Имейл на апартамент</span><span class="master-item-chevron">▸</span></button>
+                                <div id="master-tab-aptemail" class="master-panel" style="display:none;">
+                                    <h4 id="admin-section-email" class="admin-subtitle" style="margin-top:0;">✉️ Имейл на апартамент</h4>
+                                    <p class="subtitle" style="font-size: 12px; margin-bottom: 15px;">Задайте имейл за получаване на
+                                        автоматични месечни отчети.</p>
+                                    <label class="admin-label">Апартамент</label>
+                                    <select id="adminEmailApt" class="admin-input" onchange="loadCurrentEmail()"></select>
+                                    <div id="currentEmailBox" style="display:none; background: linear-gradient(135deg, #e8f4fd, #d1ecf9); border: 1px solid #91cef4; border-radius: 8px; padding: 10px 14px; margin-top: 8px; margin-bottom: 12px;">
+                                        <span style="font-size: 13px; color: #555;">📧 Текущ имейл:</span>
+                                        <span id="currentEmail" style="display: block; font-weight: 700; font-size: 15px; color: #1a6dab; margin-top: 3px; word-break: break-all;">—</span>
+                                    </div>
+                                    <label class="admin-label">Нов имейл</label>
+                                    <input type="email" id="adminEmail" class="admin-input" placeholder="email@example.com">
+                                    <button class="admin-btn secondary" id="emailBtn" onclick="submitEmail()">Запази имейл</button>
+                                </div>
+                            </div>
+
                             <!-- Инфо апарт. -->
                             <div class="master-acc-item">
                                 <button type="button" class="master-tab" data-master-tab="info" onclick="switchMasterTab('info',this)"><span>🏠 Инфо апарт.</span><span class="master-item-chevron">▸</span></button>
@@ -1340,17 +1333,16 @@
                         </div>
                     </div>
 
-                    <!-- 3. Самостоятелни бутони -->
-                    <!-- Самостоятелни обекти (извън A1–AN) -->
-                    <div class="master-acc-item master-acc-standalone">
-                        <button type="button" class="master-tab master-standalone-btn" data-master-tab="extunits" onclick="switchMasterTab('extunits',this)">
-                            <span>🏪 Самостоятелни обекти (извън A1–AN)</span>
+                    <!-- 3. Самостоятелни обекти (извън апартаментите) -->
+                    <div class="master-acc-item master-acc-standalone" id="masterGroupExtUnits">
+                        <button type="button" class="master-tab master-standalone-btn" data-master-tab="extunits" aria-expanded="false" onclick="switchMasterTab('extunits',this)">
+                            <span>🏪 Самостоятелни обекти (извън апартаментите)</span>
                             <span class="master-item-chevron">▸</span>
                         </button>
                         <!-- BEGIN EXTERNAL UNITS UI -->
                         <div id="master-tab-extunits" class="master-panel" style="display:none;">
                             <div id="externalUnitsSettings" class="art51-details-container ext-units-details-container">
-                                <p class="art51-header-text" style="margin-top:0;">Регистър и конфигурация на външни самостоятелни обекти (магазини, гаражи, ателиета, офиси, кабинети) с двустепенно разпределение без промяна на формулите за апартаментите.</p>
+                                <p class="art51-header-text" style="margin-top:0;">Конфигурация и регистър на самостоятелни обекти извън апартаментите (магазини, гаражи, ателиета, офиси, кабинети).</p>
 
                                 <div id="extUnitIdealWarning" class="ext-unit-warning-banner" style="display:none;" role="alert"></div>
 
@@ -1571,9 +1563,152 @@
                         <!-- END EXTERNAL UNITS UI -->
                     </div>
 
-                    <!-- ⚖ ЗУЕС Мениджър -->
-                    <div class="master-acc-item master-acc-standalone">
-                        <button type="button" class="master-tab master-standalone-btn" data-master-tab="zues" onclick="switchMasterTab('zues',this)">
+                    <!-- 4. Абонаментни данни и изтриване Акаунт -->
+                    <div id="masterGroupSubscription" class="master-acc-group">
+                        <button type="button" class="master-acc-group-btn" onclick="toggleMasterAccordionGroup('subscription', this)" aria-expanded="false">
+                            <span>⭐ Абонаментни данни и изтриване Акаунт</span>
+                            <span class="master-acc-chevron">▸</span>
+                        </button>
+                        <div id="masterGroupBody_subscription" class="master-acc-group-body" style="display:none;">
+                            <!-- 4.1 Абонаментни данни -->
+                            <div class="master-acc-item">
+                                <button type="button" class="master-tab" data-master-tab="subdata" aria-expanded="false" onclick="switchMasterTab('subdata',this)"><span>⭐ Абонаментни данни</span><span class="master-item-chevron">▸</span></button>
+                                <div id="master-tab-subdata" class="master-panel" style="display:none;">
+                                    <!-- А. Абонамент към Платформата -->
+                                    <div style="background: rgba(0, 122, 255, 0.05); padding: 14px; border-radius: 8px; border: 1px solid rgba(0,122,255,0.2);">
+                                        <h4 id="admin-section-subscription" style="color: var(--primary); margin: 0 0 8px 0; font-size: 15px;">⭐ Абонамент към Платформата</h4>
+                                        <p style="font-size: 13px; color: var(--text-muted); line-height: 1.4; margin-bottom: 12px;">
+                                            За да удължите автоматично вашия абонамент за тази система, направете банков/ePay превод към
+                                            Супер Админа. Системата ще отчете плащането ви автоматично, стига да посочите точния код за вашия вход:
+                                        </p>
+
+                                        <div style="display: flex; gap: 10px; margin-bottom: 12px;">
+                                            <div style="flex:1; background: #fff; padding: 10px; border-radius: 6px; border: 1px solid rgba(0,122,255,0.1); text-align: center;">
+                                                <p style="font-size: 11px; font-weight: 600; text-transform: uppercase; margin: 0 0 5px 0; color: #555;">
+                                                    Месечна Такса <br><span style="font-size: 9px; opacity: 0.7">(за целия вход)</span></p>
+                                                <div id="subMonthlyPrice" style="font-size: 16px; font-weight: 700; color: #333;">...</div>
+                                            </div>
+                                            <div style="flex:1; background: #fff; padding: 10px; border-radius: 6px; border: 1px solid rgba(0,122,255,0.1); text-align: center;">
+                                                <p style="font-size: 11px; font-weight: 600; text-transform: uppercase; margin: 0 0 5px 0; color: #555;">
+                                                    Безсрочно <br><span style="font-size: 9px; opacity: 0.7">(Lifetime Оферта)</span></p>
+                                                <div id="subLifetimePrice" style="font-size: 16px; font-weight: 700; color: #333;">...</div>
+                                            </div>
+                                        </div>
+
+                                        <div style="background: #fff; padding: 10px; border-radius: 6px; border: 1px dashed var(--primary); text-align: center;">
+                                            <p style="font-size: 11px; font-weight: 600; text-transform: uppercase; margin: 0 0 5px 0;">
+                                                Основание за превод (Вашият ID код):</p>
+                                            <div id="subscriptionCodeDisplay" style="font-size: 18px; font-weight: 700; color: var(--primary); font-family: monospace;">
+                                                Зарежда се...</div>
+                                        </div>
+
+                                        <div id="platformPaymentInfoBox" style="display:none; margin-top: 12px; background: #fff; padding: 12px; border-radius: 6px; border: 1px solid rgba(0,122,255,0.15); text-align: left;">
+                                            <p style="font-size: 11px; font-weight: 700; text-transform: uppercase; margin: 0 0 6px 0; color: var(--primary);">💳 Начини на плащане към Супер Админа:</p>
+                                            <div id="platformPaymentInfoText" style="font-size: 13px; white-space: pre-line; line-height: 1.6; color: #333;"></div>
+                                        </div>
+                                    </div>
+
+                                    <hr class="settings-sub-divider">
+
+                                    <!-- Б. Имейл на Домоуправителя -->
+                                    <div id="admin-section-manager-email">
+                                        <h4 class="admin-subtitle" style="margin-top:0;">👤 Имейл на Домоуправителя</h4>
+                                        <p class="subtitle" style="font-size: 12px; margin-bottom: 12px;">
+                                            Задайте нов имейл на домоуправителя на този вход.
+                                            <strong style="color: #d32f2f;"> Имайте предвид, че смяната ще спре автоматичното разпознаване на разходи и приходи, ако текущият имейл е настроен за автоматизация към платформата. За да продължи автоматизацията, трябва да повторите настройката на препращане към новия имейл.</strong>
+                                        </p>
+                                        <label class="admin-label">Нов имейл</label>
+                                        <input type="email" id="newAdminEmailInput" class="admin-input" placeholder="email@example.com">
+                                        <button class="admin-btn secondary" id="adminEmailBtn" onclick="submitAdminEmail()">Запази имейл</button>
+                                    </div>
+
+                                    <hr class="settings-sub-divider">
+
+                                    <!-- В. Данни за фактуриране (бъдеща функция — неактивно обозначение) -->
+                                    <div id="invoicingPlaceholderBox" class="settings-invoicing-placeholder" aria-disabled="true">
+                                        <div style="font-weight: 700; color: #334155;">🧾 Данни за фактуриране — предстояща функционалност</div>
+                                        <div style="font-size: 12px; color: #64748b; margin-top: 4px;">Зона за данни на получател на фактурите. Ще бъде активирана в следващ етап след внедряването.</div>
+                                        <span class="settings-invoicing-badge">Планирана функционалност</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 4.2 Изтриване на Акаунта -->
+                            <div class="master-acc-item">
+                                <button type="button" class="master-tab" data-master-tab="closure" aria-expanded="false" onclick="switchMasterTab('closure',this)"><span>🔒 Изтриване на Акаунта</span><span class="master-item-chevron">▸</span></button>
+                                <div id="master-tab-closure" class="master-panel" style="display:none;">
+                                    <div id="admin-section-closure-wrap" style="background: rgba(220, 38, 38, 0.04); padding: 14px; border-radius: 8px; border: 1px solid rgba(220,38,38,0.28);">
+                                        <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:8px;">
+                                            <h4 id="admin-section-closure" style="color: #b91c1c; margin: 0; font-size: 15px;">🔒 Закриване на акаунта на входа</h4>
+                                            <span id="closureStateBadge" style="font-size:11px; font-weight:700; padding:3px 8px; border-radius:999px; background:#e2e8f0; color:#475569;">ПРЕДСТОИ</span>
+                                        </div>
+
+                                        <div id="closureDisabledBanner" class="closure-disabled-banner" role="status">
+                                            <strong>ℹ️ Функцията предстои да бъде активирана.</strong><br>
+                                            Самостоятелното закриване на акаунта ще стане активно след окончателното одобрение. В момента не могат да се изпращат заявки за закриване.
+                                        </div>
+
+                                        <p style="font-size: 12px; color: #475569; line-height: 1.5; margin: 0 0 10px 0;">
+                                            При заявяване на закриване акаунтът влиза в <strong>72-часов период за самостоятелен отказ</strong> (режим само за четене и експорт), след което се закрива с <strong>30-дневен защитен период за възстановяване</strong> чрез Super-Admin. Всички автоматични имейли и операции се спират. Неизползваните предплатени суми не се възстановяват автоматично.
+                                        </p>
+                                        <p style="font-size: 12px; color: #1e40af; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; padding: 8px 10px; margin: 0 0 10px 0;">
+                                            💡 <strong>Сменяте домоуправителя?</strong> Не закривайте акаунта — използвайте подсекция
+                                            <a href="javascript:void(0)" onclick="openSettingsSubPanel('subscription','subdata','newAdminEmailInput')" style="color:#1d4ed8; font-weight:700;">„Абонаментни данни → Имейл на Домоуправителя“</a>, за да запазите историята на входа.
+                                        </p>
+                                        <div id="closureLifetimeWarning" style="display:none; font-size:12px; color:#92400e; background:#fef3c7; border:1px solid #f59e0b; border-radius:6px; padding:8px 10px; margin-bottom:10px;">
+                                            ⚠️ <strong>ВНИМАНИЕ (Lifetime абонамент):</strong> Този вход има безсрочен (Lifetime) достъп. При окончателно закриване безсрочният достъп ще бъде прекратен без автоматично възстановяване или прехвърляне.
+                                        </div>
+
+                                        <!-- Active CLOSURE_REQUESTED Banner -->
+                                        <div id="closureRequestedBanner" style="display:none; background:#fff7ed; border:1px solid #fb923c; border-radius:6px; padding:10px 12px; margin-bottom:12px;">
+                                            <div style="font-size:13px; font-weight:700; color:#9a3412; margin-bottom:4px;">⏳ Заявката за закриване е активна (72-часов срок за отказ)</div>
+                                            <div id="closureCoolingOffText" style="font-size:12px; color:#7c2d12; margin-bottom:8px;"></div>
+                                            <button type="button" class="admin-btn secondary" id="closureCancelBtn" onclick="cancelEntranceClosureRequest()" disabled style="background:#0f766e; color:#fff;">↩️ Откажи закриването</button>
+                                        </div>
+
+                                        <!-- Step 1: Mandatory Export -->
+                                        <div id="closureExportBox" style="display:none; background:#fff; border:1px solid #e2e8f0; border-radius:6px; padding:10px 12px; margin-bottom:12px;">
+                                            <div style="font-size:12px; font-weight:700; color:#1e293b; margin-bottom:6px;">1. Задължителен експорт на документацията (ЗУЕС)</div>
+                                            <p style="font-size:11px; color:#64748b; margin:0 0 8px 0;">Архивът включва Книгата на ЕС, финансовите таблици, месечните отчети, външните обекти, регистрите и SHA-256 контролен манифест. Изтегля се директно с ограничен сървърен достъп (не се праща като имейл прикачен файл).</p>
+                                            <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+                                                <button type="button" class="admin-btn secondary" id="closureExportBtn" onclick="generateEntranceClosureExport()" disabled>📦 Генерирай и верифицирай архив</button>
+                                                <button type="button" class="admin-btn" id="closureDownloadBtn" onclick="downloadEntranceClosureExport()" disabled style="display:none;">⬇️ Изтегли верифицирания архив</button>
+                                            </div>
+                                            <div id="closureExportInfo" style="margin-top:6px; font-size:11px; color:#334155;"></div>
+                                        </div>
+
+                                        <!-- Step 2: Protected Closure Form (ACTIVE & Flag ON only) -->
+                                        <div id="closureRequestFormBox" style="display:none; background:#fff; border:1px solid #fecaca; border-radius:6px; padding:10px 12px;">
+                                            <div style="font-size:12px; font-weight:700; color:#991b1b; margin-bottom:8px;">2. Защитено потвърждение (PIN + Еднократен имейл код + ID на входа)</div>
+                                            <div style="margin-bottom:8px;">
+                                                <button type="button" class="admin-btn secondary" id="closureSendOtpBtn" onclick="requestEntranceClosureOtp()" disabled>📧 Изпрати еднократен код на регистрирания имейл</button>
+                                                <div id="closureOtpSentInfo" style="font-size:11px; color:#475569; margin-top:4px;"></div>
+                                            </div>
+                                            <label class="admin-label">Еднократен код от имейла (OTP)</label>
+                                            <input type="text" id="closureOtpInput" class="admin-input" placeholder="Въведете 8-символния код..." autocomplete="one-time-code">
+
+                                            <label class="admin-label">Повторно въвеждане на PIN паролата на входа</label>
+                                            <input type="password" id="closurePinInput" class="admin-input" placeholder="PIN парола..." autocomplete="current-password">
+
+                                            <label class="admin-label">Потвърдете точния ID код на входа</label>
+                                            <input type="text" id="closureConfirmIdInput" class="admin-input" placeholder="Въведете ID кода на входа...">
+
+                                            <label style="display:flex; align-items:flex-start; gap:8px; font-size:12px; color:#334155; margin:10px 0;">
+                                                <input type="checkbox" id="closureAckCheckbox" style="margin-top:3px;">
+                                                <span>Потвърждавам, че съм упълномощен да заявя закриването на този вход, запознат съм с 72-часовия срок за отказ и отговорността за съхранение на документацията по ЗУЕС.</span>
+                                            </label>
+                                            <button type="button" class="admin-btn" id="closureConfirmSubmitBtn" onclick="submitEntranceClosureRequest()" disabled style="background:#dc2626; color:#fff; width:100%;">🔒 Потвърди закриването на входа</button>
+                                        </div>
+                                        <div id="closureActionMessage" style="margin-top:8px; font-size:12px; font-weight:600;"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 5. ⚖ ЗУЕС Мениджър -->
+                    <div class="master-acc-item master-acc-standalone" id="masterGroupZues">
+                        <button type="button" class="master-tab master-standalone-btn" data-master-tab="zues" aria-expanded="false" onclick="switchMasterTab('zues',this)">
                             <span>⚖ ЗУЕС Мениджър</span>
                             <span class="master-item-chevron">▸</span>
                         </button>
@@ -1736,113 +1871,6 @@
                             </div>
                         </div>
                     </div>
-                </div>
-
-                <div class="admin-divider" style="margin-top: 20px;"></div>
-
-                <!-- Platform Subscription Section for Domoupraviteli -->
-                <div class="admin-section" data-tab="settings"
-                    style="background: rgba(0, 122, 255, 0.05); padding: 15px; border-radius: 8px; border: 1px solid rgba(0,122,255,0.2); margin-top: 15px;">
-                    <h3 id="admin-section-subscription" style="color: var(--primary); margin-bottom: 8px;">⭐ Абонамент към Платформата</h3>
-                    <p style="font-size: 13px; color: var(--text-muted); line-height: 1.4; margin-bottom: 12px;">
-                        За да удължите автоматично вашия абонамент за тази система, направете банков/ePay превод към
-                        Супер
-                        Админа. Системата ще отчете плащането ви автоматично, стига да посочите точния код за вашия
-                        вход:
-                    </p>
-
-                    <div style="display: flex; gap: 10px; margin-bottom: 12px;">
-                        <div
-                            style="flex:1; background: #fff; padding: 10px; border-radius: 6px; border: 1px solid rgba(0,122,255,0.1); text-align: center;">
-                            <p
-                                style="font-size: 11px; font-weight: 600; text-transform: uppercase; margin: 0 0 5px 0; color: #555;">
-                                Месечна Такса <br><span style="font-size: 9px; opacity: 0.7">(за целия вход)</span></p>
-                            <div id="subMonthlyPrice" style="font-size: 16px; font-weight: 700; color: #333;">...</div>
-                        </div>
-                        <div
-                            style="flex:1; background: #fff; padding: 10px; border-radius: 6px; border: 1px solid rgba(0,122,255,0.1); text-align: center;">
-                            <p
-                                style="font-size: 11px; font-weight: 600; text-transform: uppercase; margin: 0 0 5px 0; color: #555;">
-                                Безсрочно <br><span style="font-size: 9px; opacity: 0.7">(Lifetime Оферта)</span></p>
-                            <div id="subLifetimePrice" style="font-size: 16px; font-weight: 700; color: #333;">...</div>
-                        </div>
-                    </div>
-
-                    <div
-                        style="background: #fff; padding: 10px; border-radius: 6px; border: 1px dashed var(--primary); text-align: center;">
-                        <p style="font-size: 11px; font-weight: 600; text-transform: uppercase; margin: 0 0 5px 0;">
-                            Основание за превод (Вашият ID код):</p>
-                        <div id="subscriptionCodeDisplay"
-                            style="font-size: 18px; font-weight: 700; color: var(--primary); font-family: monospace;">
-                            Зарежда се...</div>
-                    </div>
-
-                    <div id="platformPaymentInfoBox" style="display:none; margin-top: 12px; background: #fff; padding: 12px; border-radius: 6px; border: 1px solid rgba(0,122,255,0.15); text-align: left;">
-                        <p style="font-size: 11px; font-weight: 700; text-transform: uppercase; margin: 0 0 6px 0; color: var(--primary);">💳 Начини на плащане към Супер Админа:</p>
-                        <div id="platformPaymentInfoText" style="font-size: 13px; white-space: pre-line; line-height: 1.6; color: #333;"></div>
-                    </div>
-                </div>
-
-                <!-- Phase 2A: Safe Entrance Account Closure Section -->
-                <div class="admin-section" data-tab="settings" id="admin-section-closure-wrap"
-                    style="display:none; background: rgba(220, 38, 38, 0.04); padding: 15px; border-radius: 8px; border: 1px solid rgba(220,38,38,0.28); margin-top: 15px;">
-                    <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:8px;">
-                        <h3 id="admin-section-closure" style="color: #b91c1c; margin: 0;">🔒 Закриване на акаунта на входа</h3>
-                        <span id="closureStateBadge" style="font-size:11px; font-weight:700; padding:3px 8px; border-radius:999px; background:#e2e8f0; color:#334155;">ACTIVE</span>
-                    </div>
-
-                    <p style="font-size: 12px; color: #475569; line-height: 1.5; margin: 0 0 10px 0;">
-                        При заявяване на закриване акаунтът влиза в <strong>72-часов период за самостоятелен отказ</strong> (режим само за четене и експорт), след което се закрива с <strong>30-дневен защитен период за възстановяване</strong> чрез Super-Admin. Всички автоматични имейли и операции се спират. Неизползваните предплатени суми не се възстановяват автоматично.
-                    </p>
-                    <p style="font-size: 12px; color: #1e40af; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; padding: 8px 10px; margin: 0 0 10px 0;">
-                        💡 <strong>Сменяте домоуправителя?</strong> Не закривайте акаунта — използвайте секция
-                        <a href="javascript:void(0)" onclick="document.getElementById('newAdminEmailInput')?.scrollIntoView({behavior:'smooth', block:'center'})" style="color:#1d4ed8; font-weight:700;">„Имейл на Домоуправителя“</a>, за да запазите историята на входа.
-                    </p>
-                    <div id="closureLifetimeWarning" style="display:none; font-size:12px; color:#92400e; background:#fef3c7; border:1px solid #f59e0b; border-radius:6px; padding:8px 10px; margin-bottom:10px;">
-                        ⚠️ <strong>ВНИМАНИЕ (Lifetime абонамент):</strong> Този вход има безсрочен (Lifetime) достъп. При окончателно закриване безсрочният достъп ще бъде прекратен без автоматично възстановяване или прехвърляне.
-                    </div>
-
-                    <!-- Active CLOSURE_REQUESTED Banner -->
-                    <div id="closureRequestedBanner" style="display:none; background:#fff7ed; border:1px solid #fb923c; border-radius:6px; padding:10px 12px; margin-bottom:12px;">
-                        <div style="font-size:13px; font-weight:700; color:#9a3412; margin-bottom:4px;">⏳ Заявката за закриване е активна (72-часов срок за отказ)</div>
-                        <div id="closureCoolingOffText" style="font-size:12px; color:#7c2d12; margin-bottom:8px;"></div>
-                        <button type="button" class="admin-btn secondary" id="closureCancelBtn" onclick="cancelEntranceClosureRequest()" style="background:#0f766e; color:#fff;">↩️ Откажи закриването</button>
-                    </div>
-
-                    <!-- Step 1: Mandatory Export -->
-                    <div style="background:#fff; border:1px solid #e2e8f0; border-radius:6px; padding:10px 12px; margin-bottom:12px;">
-                        <div style="font-size:12px; font-weight:700; color:#1e293b; margin-bottom:6px;">1. Задължителен експорт на документацията (ЗУЕС)</div>
-                        <p style="font-size:11px; color:#64748b; margin:0 0 8px 0;">Архивът включва Книгата на ЕС, финансовите таблици, месечните отчети, външните обекти, регистрите и SHA-256 контролен манифест. Изтегля се директно с ограничен сървърен достъп (не се праща като имейл прикачен файл).</p>
-                        <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-                            <button type="button" class="admin-btn secondary" id="closureExportBtn" onclick="generateEntranceClosureExport()">📦 Генерирай и верифицирай архив</button>
-                            <button type="button" class="admin-btn" id="closureDownloadBtn" onclick="downloadEntranceClosureExport()" style="display:none;">⬇️ Изтегли верифицирания архив</button>
-                        </div>
-                        <div id="closureExportInfo" style="margin-top:6px; font-size:11px; color:#334155;"></div>
-                    </div>
-
-                    <!-- Step 2: Protected Closure Form (ACTIVE only) -->
-                    <div id="closureRequestFormBox" style="background:#fff; border:1px solid #fecaca; border-radius:6px; padding:10px 12px;">
-                        <div style="font-size:12px; font-weight:700; color:#991b1b; margin-bottom:8px;">2. Защитено потвърждение (PIN + Еднократен имейл код + ID на входа)</div>
-                        <div style="margin-bottom:8px;">
-                            <button type="button" class="admin-btn secondary" id="closureSendOtpBtn" onclick="requestEntranceClosureOtp()">📧 Изпрати еднократен код на регистрирания имейл</button>
-                            <div id="closureOtpSentInfo" style="font-size:11px; color:#475569; margin-top:4px;"></div>
-                        </div>
-                        <label class="admin-label">Еднократен код от имейла (OTP)</label>
-                        <input type="text" id="closureOtpInput" class="admin-input" placeholder="Въведете 8-символния код..." autocomplete="one-time-code">
-
-                        <label class="admin-label">Повторно въвеждане на PIN паролата на входа</label>
-                        <input type="password" id="closurePinInput" class="admin-input" placeholder="PIN парола..." autocomplete="current-password">
-
-                        <label class="admin-label">Потвърдете точния ID код на входа</label>
-                        <input type="text" id="closureConfirmIdInput" class="admin-input" placeholder="Въведете ID кода на входа...">
-
-                        <label style="display:flex; align-items:flex-start; gap:8px; font-size:12px; color:#334155; margin:10px 0;">
-                            <input type="checkbox" id="closureAckCheckbox" style="margin-top:3px;">
-                            <span>Потвърждавам, че съм упълномощен да заявя закриването на този вход, запознат съм с 72-часовия срок за отказ и отговорността за съхранение на документацията по ЗУЕС.</span>
-                        </label>
-                        <button type="button" class="admin-btn" id="closureConfirmSubmitBtn" onclick="submitEntranceClosureRequest()" style="background:#dc2626; color:#fff; width:100%;">🔒 Потвърди закриването на входа</button>
-                    </div>
-                    <div id="closureActionMessage" style="margin-top:8px; font-size:12px; font-weight:600;"></div>
                 </div>
             </div>
         </div>

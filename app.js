@@ -4214,6 +4214,9 @@ window.toggleMasterAccordionGroup = function (groupKey, btn) {
             btn.scrollIntoView({ behavior: "smooth", block: "nearest" });
         }
     }
+    if (groupKey === 'subscription' && typeof loadEntranceClosureSection_ === 'function') {
+        loadEntranceClosureSection_();
+    }
 };
 
 window.switchMasterTab = function (tab, btn) {
@@ -4225,6 +4228,7 @@ window.switchMasterTab = function (tab, btn) {
         pane.style.display = "none";
         if (btn) {
             btn.classList.remove("active");
+            btn.setAttribute("aria-expanded", "false");
             btn.style.background = "";
             btn.style.color = "";
             btn.style.borderColor = "";
@@ -4264,6 +4268,7 @@ window.switchMasterTab = function (tab, btn) {
     document.querySelectorAll(".master-panel").forEach(p => p.style.display = "none");
     document.querySelectorAll(".master-tab").forEach(b => {
         b.classList.remove("active");
+        b.setAttribute("aria-expanded", "false");
         // Reset special styles for ZUES toggle
         b.style.background = "";
         b.style.color = "";
@@ -4275,8 +4280,13 @@ window.switchMasterTab = function (tab, btn) {
     if (pane) pane.style.display = "block";
     if (btn) {
         btn.classList.add("active");
+        btn.setAttribute("aria-expanded", "true");
         const chev = btn.querySelector(".master-item-chevron");
         if (chev) chev.textContent = "▾";
+    }
+
+    if (tab === 'closure' && typeof loadEntranceClosureSection_ === 'function') {
+        loadEntranceClosureSection_();
     }
 
     if (tab === 'idealni') {
@@ -9997,13 +10007,8 @@ function updateExternalIdealWarningBanner_() {
     const unest = units.filter(u => u.idealPartsStatus === 'UNESTABLISHED');
     warnEl.textContent = '';
     if (unest.length > 0) {
-        const names = unest.map(u => `${String(u.unitId || '')} (${String(u.name || '')})`).join(', ');
         warnEl.style.display = 'block';
-        warnEl.appendChild(document.createTextNode('ℹ️ '));
-        const b = document.createElement('b');
-        b.textContent = 'Обекти с неустановени идеални части:';
-        warnEl.appendChild(b);
-        warnEl.appendChild(document.createTextNode(` ${names}. В режими „Равно“ и „Обитатели“ те участват нормално по съответния параметър. При режим „Идеални части“ и „Фонд ремонт“ автоматичното начисляване за обект с неустановен дял е блокирано до установяване на дяловете.`));
+        warnEl.appendChild(document.createTextNode('ℹ️ Обекти с неустановени идеални части в режими „Равно“ и „Обитатели“ участват нормално по съответния параметър. При режим „Идеални части“ автоматичното начисляване за „Фонд ремонт“ за обект с неустановен дял е блокирано до установяване на дяловете.'));
     } else {
         warnEl.style.display = 'none';
     }
@@ -10411,6 +10416,30 @@ window.resolvePendingExternalEpayPayment = async function(pendingId, idx) {
 let _closureLastChallengeId_ = '';
 let _closureLastExportId_ = '';
 let _closureLastDownloadToken_ = '';
+let _closureSelfEnabled_ = false;
+
+window.openSettingsSubPanel = function (groupKey, tabKey, focusElId) {
+    const groupBtn = document.querySelector(`#masterGroupBody_${groupKey}`)?.previousElementSibling;
+    const body = document.getElementById(`masterGroupBody_${groupKey}`);
+    if (body && body.style.display === 'none' && groupBtn && typeof toggleMasterAccordionGroup === 'function') {
+        toggleMasterAccordionGroup(groupKey, groupBtn);
+    }
+    if (tabKey && typeof switchMasterTab === 'function') {
+        const tabBtn = document.querySelector(`.master-tab[data-master-tab="${tabKey}"]`);
+        const pane = document.getElementById(`master-tab-${tabKey}`);
+        if (tabBtn && (!pane || pane.style.display !== 'block')) {
+            switchMasterTab(tabKey, tabBtn);
+        }
+    }
+    if (focusElId) {
+        setTimeout(() => {
+            const target = document.getElementById(focusElId);
+            if (target && typeof target.scrollIntoView === 'function') {
+                target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }, 60);
+    }
+};
 
 function setClosureMsg_(text, isError) {
     const el = document.getElementById('closureActionMessage');
@@ -10423,22 +10452,37 @@ function renderEntranceClosureState_(st) {
     const wrap = document.getElementById('admin-section-closure-wrap');
     if (!wrap) return;
     const state = (st && st.state) ? String(st.state) : 'ACTIVE';
-    const showSection = Boolean(st && (st.selfClosureEnabled === true || state !== 'ACTIVE'));
-    wrap.style.display = showSection ? 'block' : 'none';
-    if (!showSection) return;
+    const isEnabled = Boolean(st && st.selfClosureEnabled === true);
+    const isInteractive = isEnabled || state !== 'ACTIVE';
+    _closureSelfEnabled_ = isInteractive;
+
+    // Phase 2A.1: Sub-section "Изтриване на Акаунта" is ALWAYS visible inside the Settings accordion
+    // so admins can see where the feature lives, while blocking actions when ENTRANCE_SELF_CLOSURE_V1 = OFF.
+    wrap.style.display = 'block';
+
+    const disabledBanner = document.getElementById('closureDisabledBanner');
+    if (disabledBanner) {
+        disabledBanner.style.display = isInteractive ? 'none' : 'block';
+    }
 
     const badge = document.getElementById('closureStateBadge');
     if (badge) {
-        badge.textContent = state;
-        const colors = {
-            ACTIVE: ['#e2e8f0', '#334155'],
-            CLOSURE_REQUESTED: ['#ffedd5', '#9a3412'],
-            CLOSING: ['#fee2e2', '#991b1b'],
-            CLOSED: ['#fecaca', '#7f1d1d']
-        };
-        const pair = colors[state] || colors.ACTIVE;
-        badge.style.background = pair[0];
-        badge.style.color = pair[1];
+        if (!isInteractive) {
+            badge.textContent = 'ПРЕДСТОИ';
+            badge.style.background = '#e2e8f0';
+            badge.style.color = '#475569';
+        } else {
+            badge.textContent = state;
+            const colors = {
+                ACTIVE: ['#e2e8f0', '#334155'],
+                CLOSURE_REQUESTED: ['#ffedd5', '#9a3412'],
+                CLOSING: ['#fee2e2', '#991b1b'],
+                CLOSED: ['#fecaca', '#7f1d1d']
+            };
+            const pair = colors[state] || colors.ACTIVE;
+            badge.style.background = pair[0];
+            badge.style.color = pair[1];
+        }
     }
 
     const lftWarn = document.getElementById('closureLifetimeWarning');
@@ -10446,16 +10490,24 @@ function renderEntranceClosureState_(st) {
 
     const reqBanner = document.getElementById('closureRequestedBanner');
     const reqText = document.getElementById('closureCoolingOffText');
+    const exportBox = document.getElementById('closureExportBox');
     const formBox = document.getElementById('closureRequestFormBox');
-    if (reqBanner) reqBanner.style.display = (state === 'CLOSURE_REQUESTED') ? 'block' : 'none';
-    if (reqText && state === 'CLOSURE_REQUESTED') {
+
+    if (reqBanner) reqBanner.style.display = (isInteractive && state === 'CLOSURE_REQUESTED') ? 'block' : 'none';
+    if (reqText && isInteractive && state === 'CLOSURE_REQUESTED') {
         reqText.textContent = 'Срок за самостоятелен отказ (72 ч.): до ' + (st.coolingOffEndsAtUtc || '—') + '. През този период входът е в режим само за четене и експорт.';
     }
-    if (formBox) formBox.style.display = (state === 'ACTIVE') ? 'block' : 'none';
+    if (exportBox) exportBox.style.display = isInteractive ? 'block' : 'none';
+    if (formBox) formBox.style.display = (isInteractive && state === 'ACTIVE') ? 'block' : 'none';
+
+    ['closureExportBtn', 'closureDownloadBtn', 'closureSendOtpBtn', 'closureConfirmSubmitBtn', 'closureCancelBtn'].forEach(id => {
+        const b = document.getElementById(id);
+        if (b) b.disabled = !isInteractive;
+    });
 
     const expInfo = document.getElementById('closureExportInfo');
     const dlBtn = document.getElementById('closureDownloadBtn');
-    if (st && st.exportId) {
+    if (isInteractive && st && st.exportId) {
         _closureLastExportId_ = st.exportId;
         if (expInfo) {
             expInfo.textContent = '✅ Верифициран архив: ' + st.exportId + ' | SHA-256: ' + String(st.exportSha256 || '').slice(0, 16) + '… | ' + (st.exportVerifiedAtUtc || '');
@@ -10470,25 +10522,25 @@ function renderEntranceClosureState_(st) {
 async function loadEntranceClosureSection_() {
     const wrap = document.getElementById('admin-section-closure-wrap');
     if (!wrap || !currentRouteKey) return;
+    // Render safe OFF state immediately so the section is always visible without flicker
+    renderEntranceClosureState_({ selfClosureEnabled: false, state: 'ACTIVE' });
     const pin = sessionStorage.getItem('adminAuth_' + currentRouteKey) || '';
     const superTok = getSuperSessionToken_();
-    if (!pin && !superTok) {
-        wrap.style.display = 'none';
-        return;
-    }
+    if (!pin && !superTok) return;
     try {
         const res = await apiCall('closureGetStatusV1', pin ? { pin: pin } : { superSessionToken: superTok });
         if (res && res.success) {
             renderEntranceClosureState_(res);
         } else {
-            wrap.style.display = 'none';
+            renderEntranceClosureState_({ selfClosureEnabled: false, state: 'ACTIVE' });
         }
     } catch (e) {
-        wrap.style.display = 'none';
+        renderEntranceClosureState_({ selfClosureEnabled: false, state: 'ACTIVE' });
     }
 }
 
 window.generateEntranceClosureExport = async function () {
+    if (!_closureSelfEnabled_) return setClosureMsg_('Функцията предстои да бъде активирана.', true);
     const btn = document.getElementById('closureExportBtn');
     const pin = sessionStorage.getItem('adminAuth_' + currentRouteKey) || '';
     const superTok = getSuperSessionToken_();
@@ -10506,11 +10558,12 @@ window.generateEntranceClosureExport = async function () {
             setClosureMsg_((res && res.error) || 'Грешка при генериране на експорта.', true);
         }
     } finally {
-        if (btn) btn.disabled = false;
+        if (btn) btn.disabled = !_closureSelfEnabled_;
     }
 };
 
 window.downloadEntranceClosureExport = async function () {
+    if (!_closureSelfEnabled_) return setClosureMsg_('Функцията предстои да бъде активирана.', true);
     if (!_closureLastExportId_) return showToast('Първо генерирайте архив.', 'error');
     const pin = sessionStorage.getItem('adminAuth_' + currentRouteKey) || '';
     const superTok = getSuperSessionToken_();
@@ -10536,6 +10589,7 @@ window.downloadEntranceClosureExport = async function () {
 };
 
 window.requestEntranceClosureOtp = async function () {
+    if (!_closureSelfEnabled_) return setClosureMsg_('Функцията предстои да бъде активирана.', true);
     const pin = (document.getElementById('closurePinInput')?.value || '').trim() || sessionStorage.getItem('adminAuth_' + currentRouteKey) || '';
     if (!pin) return setClosureMsg_('Моля, въведете PIN паролата на входа.', true);
     const btn = document.getElementById('closureSendOtpBtn');
@@ -10552,11 +10606,12 @@ window.requestEntranceClosureOtp = async function () {
             setClosureMsg_((res && res.error) || 'Неуспешно изпращане на еднократен код.', true);
         }
     } finally {
-        if (btn) btn.disabled = false;
+        if (btn) btn.disabled = !_closureSelfEnabled_;
     }
 };
 
 window.submitEntranceClosureRequest = async function () {
+    if (!_closureSelfEnabled_) return setClosureMsg_('Функцията предстои да бъде активирана.', true);
     const otp = (document.getElementById('closureOtpInput')?.value || '').trim();
     const pin = (document.getElementById('closurePinInput')?.value || '').trim();
     const confirmRouteKey = (document.getElementById('closureConfirmIdInput')?.value || '').trim();
@@ -10584,11 +10639,12 @@ window.submitEntranceClosureRequest = async function () {
             setClosureMsg_((res && res.error) || 'Заявката за закриване беше отхвърлена.', true);
         }
     } finally {
-        if (btn) btn.disabled = false;
+        if (btn) btn.disabled = !_closureSelfEnabled_;
     }
 };
 
 window.cancelEntranceClosureRequest = async function () {
+    if (!_closureSelfEnabled_) return setClosureMsg_('Функцията предстои да бъде активирана.', true);
     const pin = prompt('Въведете PIN паролата на входа за потвърждение на отказа:');
     if (!pin || !pin.trim()) return;
     const res = await apiCall('closureCancelRequestV1', {
