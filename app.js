@@ -2195,6 +2195,7 @@ window.enterEntrance = async function () {
         if (info.isHardBlocked) {
             hideLoading();
             // Показваме заключен екран вместо на екрана за избор на вход
+            document.documentElement.classList.remove('direct-entrance-route');
             document.getElementById('view-selector').classList.remove('active');
             document.getElementById('view-selector').classList.add('hidden');
             const hardBlockView = document.getElementById('view-hard-blocked');
@@ -2375,6 +2376,7 @@ window.enterEntrance = async function () {
             document.getElementById('entrance-title').textContent = `Етажна собственост - ID ${currentRouteKey}`;
         }
 
+        document.documentElement.classList.remove('direct-entrance-route');
         document.getElementById('view-selector').classList.remove('active');
         document.getElementById('view-selector').classList.add('hidden');
         document.getElementById('view-entrance-home').classList.remove('hidden');
