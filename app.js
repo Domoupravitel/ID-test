@@ -16,6 +16,9 @@ const issuedFinancialOperationContexts_ = new WeakSet();
 // ==============================================
 
 document.addEventListener('DOMContentLoaded', async () => {
+    // REM-B10-01 (T1.3): Clean up any legacy persistent externalPayers_* localStorage entries without touching unrelated keys
+    if (typeof cleanupLegacyExternalPayersCache_ === 'function') cleanupLegacyExternalPayersCache_();
+
     // Възстановяване на запазени данни, ако има такива
     const savedEmail = localStorage.getItem("savedAdminEmail");
     const savedId = localStorage.getItem("savedAccessId");
@@ -299,6 +302,7 @@ function clearProtectedFinancialDomOnBlock_(routeKey, isHardBlocked) {
     if (extNote) extNote.style.display = 'none';
     if (isHardBlocked) {
         purgeAdminConfigCache_();
+        if (typeof cleanupLegacyExternalPayersCache_ === 'function') cleanupLegacyExternalPayersCache_();
         sessionStorage.removeItem('adminAuth_' + routeKey);
         sessionStorage.removeItem('adminPin_' + routeKey);
         const adminOverlay = document.getElementById('adminOverlay');
@@ -434,6 +438,7 @@ const SUPER_ADMIN_POST_ACTIONS_ = new Set([
     'updateSubscription', 'deleteClient', 'createClient', 'runBackup',
     'getSuperExceptions', 'addSuperException', 'deleteSuperException',
     'getAdminConfigSnapshotV1', 'getAdminFinancialBundleV1', 'getAdminMonthlyReportV3',
+    'getExternalPayersV2', 'saveExternalPayerV2', 'deleteExternalPayerV2',
     'retryFailedProjectionsV1', 'distributeMaintenanceV1',
     'fin01Preview', 'fin01Settle', 'addChargesV2', 'saveRecurringExpenseV1',
     'previewExternalUnitPaymentV1', 'recordExternalUnitPaymentV1', 'reverseExternalUnitPaymentV1', 'distributeIncomeV2',
@@ -8843,6 +8848,26 @@ window.loadIncomesV2 = async function(operationContext) {
 // V2 EXTERNAL PAYERS REGISTRY
 // ==============================================
 
+// REM-B10-01 (T1.3): Safely removes ONLY legacy externalPayers_* keys from localStorage
+// without affecting any unrelated keys.
+function cleanupLegacyExternalPayersCache_() {
+    try {
+        if (typeof localStorage === 'undefined' || !localStorage) return 0;
+        const keysToRemove = [];
+        for (let i = 0; i < localStorage.length; i++) {
+            const k = localStorage.key(i);
+            if (typeof k === 'string' && k.startsWith('externalPayers_')) {
+                keysToRemove.push(k);
+            }
+        }
+        keysToRemove.forEach(k => localStorage.removeItem(k));
+        return keysToRemove.length;
+    } catch (e) {
+        return 0;
+    }
+}
+window.cleanupLegacyExternalPayersCache_ = cleanupLegacyExternalPayersCache_;
+
 window.saveExternalPayer = async function() {
     const operationContext = captureFinancialOperationContext();
     const payerType = document.getElementById("v2PayerType").value;
@@ -8864,10 +8889,7 @@ window.saveExternalPayer = async function() {
         return;
     }
 
-    if (!window.fb || !window.fb.addDoc) {
-        showToast("Грешка при връзка с базата данни (Firebase AddDoc липсва).", "error");
-        return;
-    }
+    cleanupLegacyExternalPayersCache_();
 
     const btn = document.getElementById("v2SavePayerBtn");
     btn.disabled = true;
@@ -8879,15 +8901,14 @@ window.saveExternalPayer = async function() {
     const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
     const dd = String(dateObj.getDate()).padStart(2, '0');
     const dateStr = `${yyyy}/${mm}/${dd}`;
-    const recordData = {
+    const recordData = Object.assign({
         routeKey: operationContext.routeKey,
         payerType: payerType,
         payerName: payerName,
         note: note,
         dateAdded: dateStr,
         timestamp: new Date().getTime()
-    };
-    let primaryPayerPersisted = false;
+    }, extUnitId ? { externalUnitId: extUnitId } : {});
 
     try {
         assertFinancialOperationContextCurrent(operationContext);
@@ -8898,7 +8919,6 @@ window.saveExternalPayer = async function() {
         }, operationContext);
         assertFinancialOperationContextCurrent(operationContext);
         assertSuccessfulApiResult(saveRes, "Записването на външния платец");
-        primaryPayerPersisted = true;
         showToast("Успешно записан външен платец!", "success");
 
         // Clear input fields
@@ -8911,27 +8931,8 @@ window.saveExternalPayer = async function() {
         if (isStaleRouteRequestError(e)) return;
         console.error(e);
         if (!isFinancialOperationContextCurrent(operationContext)) return;
-        if (!primaryPayerPersisted && isFirestorePermissionFallbackError(e)) {
-            try {
-                const storageKey = 'externalPayers_' + operationContext.routeKey;
-                const localPayers = readLocalFinancialRecords_(storageKey);
-                localPayers.push({ ...recordData, id: 'loc_' + new Date().getTime() });
-                assertFinancialOperationContextCurrent(operationContext);
-                localStorage.setItem(storageKey, JSON.stringify(localPayers));
-                assertFinancialOperationContextCurrent(operationContext);
-                showToast("Липсват Firebase права за externalPayers. Записът е запазен ЛОКАЛНО.", "error");
-                document.getElementById("v2PayerName").value = "";
-                document.getElementById("v2PayerNote").value = "";
-                await loadExternalPayers(operationContext);
-                assertFinancialOperationContextCurrent(operationContext);
-            } catch (fallbackError) {
-                if (isStaleRouteRequestError(fallbackError) || !isFinancialOperationContextCurrent(operationContext)) return;
-                console.error("Local external payer persistence failed", fallbackError);
-                showToast("Локалното запазване на външния платец не бе извършено: " + fallbackError.message, "error");
-            }
-        } else {
-            showToast("Грешка при запис: " + e.message, "error");
-        }
+        // REM-B10-01: Never persist external payer PII in localStorage on API error.
+        showToast("Грешка при запис: " + e.message, "error");
     }
 
     if (isFinancialOperationContextCurrent(operationContext)) {
@@ -8944,22 +8945,17 @@ window.deleteExternalPayer = async function(id) {
     const operationContext = captureFinancialOperationContext(undefined, id);
     if (!confirm("Сигурни ли сте, че искате да изтриете този външен платец?")) return;
 
+    cleanupLegacyExternalPayersCache_();
+
     try {
         assertFinancialOperationContextCurrent(operationContext);
-        const storageKey = 'externalPayers_' + operationContext.routeKey;
-        if (id.startsWith('loc_')) {
-            let localPayers = JSON.parse(localStorage.getItem(storageKey) || '[]');
-            localPayers = localPayers.filter(r => r.id !== id);
-            localStorage.setItem(storageKey, JSON.stringify(localPayers));
-        } else {
-            const delRes = await apiCall('deleteExternalPayerV2', {
-                routeKey: operationContext.routeKey,
-                pin: sessionStorage.getItem("adminAuth_" + operationContext.routeKey) || getStoredPin(),
-                request: JSON.stringify({ id: operationContext.documentId })
-            }, operationContext);
-            assertFinancialOperationContextCurrent(operationContext);
-            assertSuccessfulApiResult(delRes, "Изтриването на външния платец");
-        }
+        const delRes = await apiCall('deleteExternalPayerV2', {
+            routeKey: operationContext.routeKey,
+            pin: sessionStorage.getItem("adminAuth_" + operationContext.routeKey) || getStoredPin(),
+            request: JSON.stringify({ id: operationContext.documentId })
+        }, operationContext);
+        assertFinancialOperationContextCurrent(operationContext);
+        assertSuccessfulApiResult(delRes, "Изтриването на външния платец");
         showToast("Външният платец е изтрит.", "success");
         await loadExternalPayers(operationContext);
         assertFinancialOperationContextCurrent(operationContext);
@@ -8976,59 +8972,94 @@ window.loadExternalPayers = async function(operationContext) {
     const tbody = document.getElementById("v2PayersTableBody");
     if (!tbody) return;
 
-    if (!window.fb || !window.fb.getDocs) {
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Грешка: Firebase не е зареден.</td></tr>';
+    // REM-B10-01: Always clear any legacy localStorage externalPayers_* cache; never read direct Firestore or localStorage fallback.
+    cleanupLegacyExternalPayersCache_();
+
+    const adminPin = sessionStorage.getItem("adminAuth_" + operationContext.routeKey) || getStoredPin() || "";
+    const hasSuperSession = typeof getSuperSessionToken_ === 'function' && Boolean(getSuperSessionToken_());
+    if (!adminPin && !hasSuperSession) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color: #b91c1c;">Изисква се администраторски вход (PIN).</td></tr>';
         return;
     }
 
     tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Зареждане...</td></tr>';
 
     try {
-        const { collection, getDocs, query, where } = window.fb;
-        const db = window.db;
+        assertFinancialOperationContextCurrent(operationContext);
+        const res = await apiCall('getExternalPayersV2', {
+            routeKey: operationContext.routeKey,
+            pin: adminPin
+        }, operationContext);
+        assertFinancialOperationContextCurrent(operationContext);
+        assertSuccessfulApiResult(res, "Зареждането на външните платци");
 
-        const q = query(collection(db, "externalPayers"), where("routeKey", "==", operationContext.routeKey));
-        let records = [];
-        try {
-            const snap = await getDocs(q);
-            assertFinancialOperationContextCurrent(operationContext);
-            snap.forEach(d => {
-                records.push({ id: d.id, ...d.data() });
-            });
-        } catch (fbErr) {
-            if (isStaleRouteRequestError(fbErr)) throw fbErr;
-            assertFinancialOperationContextCurrent(operationContext, fbErr);
-            console.warn("Firebase Read Error, loading from LocalStorage", fbErr);
-            const localPayers = JSON.parse(localStorage.getItem('externalPayers_' + operationContext.routeKey) || '[]');
-            records = localPayers;
-        }
-
+        const records = Array.isArray(res.payers) ? res.payers.slice() : [];
         records.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
 
+        if (Array.isArray(res.pendingExternalPayments)) {
+            window._cachedExternalPendingPayments = res.pendingExternalPayments;
+            window._cachedExternalPendingPaymentsRoute = operationContext.routeKey;
+            if (typeof renderPendingExternalPayments_ === 'function') {
+                renderPendingExternalPayments_();
+            }
+        }
+
+        tbody.innerHTML = '';
         if (records.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Няма въведени външни платци.</td></tr>';
+            const emptyTr = document.createElement('tr');
+            const emptyTd = document.createElement('td');
+            emptyTd.colSpan = 5;
+            emptyTd.style.textAlign = 'center';
+            emptyTd.textContent = 'Няма въведени външни платци.';
+            emptyTr.appendChild(emptyTd);
+            tbody.appendChild(emptyTr);
             return;
         }
 
-        let html = "";
         records.forEach(r => {
-            html += `
-                <tr>
-                    <td style="padding: 8px; border-bottom: 1px solid #eee;">${r.dateAdded}</td>
-                    <td style="padding: 8px; border-bottom: 1px solid #eee;">${r.payerType}</td>
-                    <td style="padding: 8px; border-bottom: 1px solid #eee;">${r.payerName}</td>
-                    <td style="padding: 8px; border-bottom: 1px solid #eee;">${r.note || ""}</td>
-                    <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: center;">
-                        <button class="admin-btn" style="background: #ef4444; color: white; padding: 2px 6px; font-size: 11px;" onclick="deleteExternalPayer('${r.id}')">🗑️</button>
-                    </td>
-                </tr>
-            `;
+            const tr = document.createElement('tr');
+
+            const tdDate = document.createElement('td');
+            tdDate.style.cssText = 'padding: 8px; border-bottom: 1px solid #eee;';
+            tdDate.textContent = String(r.dateAdded || '');
+
+            const tdType = document.createElement('td');
+            tdType.style.cssText = 'padding: 8px; border-bottom: 1px solid #eee;';
+            tdType.textContent = String(r.payerType || '');
+
+            const tdName = document.createElement('td');
+            tdName.style.cssText = 'padding: 8px; border-bottom: 1px solid #eee;';
+            tdName.textContent = String(r.payerName || '');
+
+            const tdNote = document.createElement('td');
+            tdNote.style.cssText = 'padding: 8px; border-bottom: 1px solid #eee;';
+            tdNote.textContent = String(r.note || '');
+
+            const tdAction = document.createElement('td');
+            tdAction.style.cssText = 'padding: 8px; border-bottom: 1px solid #eee; text-align: center;';
+            const delBtn = document.createElement('button');
+            delBtn.type = 'button';
+            delBtn.className = 'admin-btn';
+            delBtn.style.cssText = 'background: #ef4444; color: white; padding: 2px 6px; font-size: 11px;';
+            delBtn.textContent = '🗑️';
+            delBtn.addEventListener('click', () => deleteExternalPayer(String(r.id || '')));
+            tdAction.appendChild(delBtn);
+
+            tr.append(tdDate, tdType, tdName, tdNote, tdAction);
+            tbody.appendChild(tr);
         });
-        tbody.innerHTML = html;
     } catch (e) {
         if (isStaleRouteRequestError(e)) return;
         console.error(e);
-        tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color: red;">Грешка при зареждане: ${e.message}</td></tr>`;
+        if (!isFinancialOperationContextCurrent(operationContext)) return;
+        tbody.innerHTML = '';
+        const errTr = document.createElement('tr');
+        const errTd = document.createElement('td');
+        errTd.colSpan = 5;
+        errTd.style.cssText = 'text-align:center; color: red;';
+        errTd.textContent = 'Грешка при зареждане: ' + (e && e.message ? e.message : String(e));
+        errTr.appendChild(errTd);
+        tbody.appendChild(errTr);
     }
 };
 
@@ -9944,7 +9975,12 @@ window.loadExternalUnitsData = async function(silent) {
             window._cachedExternalUnits = Array.isArray(res.units) ? res.units : [];
             window._cachedExternalUnitStatements = Array.isArray(res.unitStatements) ? res.unitStatements : [];
             window._cachedExternalReconciliation = Array.isArray(res.reconciliationByPeriod) ? res.reconciliationByPeriod : [];
-            window._cachedExternalPendingPayments = Array.isArray(res.pendingPayments) ? res.pendingPayments : [];
+            if (!res._fromPrecomputed && Array.isArray(res.pendingPayments) && res.pendingPayments.length > 0) {
+                window._cachedExternalPendingPayments = res.pendingPayments;
+                window._cachedExternalPendingPaymentsRoute = currentRouteKey;
+            } else if (window._cachedExternalPendingPaymentsRoute !== currentRouteKey) {
+                window._cachedExternalPendingPayments = [];
+            }
             window._cachedExternalUnitActions = Array.isArray(res.actions) ? res.actions : [];
 
             const sel = document.getElementById('extUnitSelect');
@@ -10388,7 +10424,8 @@ window.resolvePendingExternalEpayPayment = async function(pendingId, idx) {
                 basis: explicitBasis,
                 amount: pending.amount,
                 docNum: pending.ePayCode ? ('ePay ' + pending.ePayCode) : 'ePay',
-                note: 'Потвърдено ePay плащане. Наредител: ' + (pending.payerName || '') + '. Основание: ' + (pending.reasonFromEmail || ''),
+                note: 'Потвърдено ePay плащане' + (pending.reasonFromEmail ? ('. Основание: ' + pending.reasonFromEmail) : ''),
+                payerName: pending.payerName || '',
                 source: 'epay-resolved',
                 timestamp: pending.timestamp
             })
@@ -10397,6 +10434,7 @@ window.resolvePendingExternalEpayPayment = async function(pendingId, idx) {
             showToast('Плащането е разпределено успешно!', 'success');
             purgeFinancialMaterializedCache_();
             await loadExternalUnitsData(true);
+            if (typeof loadExternalPayers === 'function') await loadExternalPayers();
             if (typeof loadIncomesV2 === 'function') loadIncomesV2();
             if (typeof updateV2DistAvailableSum === 'function') updateV2DistAvailableSum();
         } else {
