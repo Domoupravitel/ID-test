@@ -607,6 +607,11 @@ html.direct-entrance-route .direct-route-loader {
   color: white;
 }
 
+.admin-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
 .admin-btn.primary {
   background: #3b6edc;
 }
@@ -652,6 +657,10 @@ html.direct-entrance-route .direct-route-loader {
   text-align: center;
   min-height: 18px;
   margin-top: 8px;
+}
+
+.admin-error.is-pending {
+  color: #475569;
 }
 
 /* Master Tabs Styling */

@@ -119,9 +119,9 @@
     <noscript>
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
     </noscript>
-    <link rel="stylesheet" href="style.css?v=1795026000004">
+    <link rel="stylesheet" href="style.css?v=1795026000005">
         <script src="firestore-client.js" defer></script>
-        <script src="app.js?v=1795026000029" defer></script>
+        <script src="app.js?v=1795026000030" defer></script>
         <script src="recurring-expenses.js" defer></script>
         <script src="fin01-payment.js" defer></script>
         <script src="maintenance-ledger.js?v=1795026000002" defer></script>
@@ -500,7 +500,7 @@
                 onkeydown="if(event.key==='Enter')verifyPin()">
 
             <div id="pinError" class="admin-error"></div>
-            <button class="admin-btn primary" onclick="verifyPin()">Вход</button>
+            <button id="adminLoginBtn" class="admin-btn primary" onclick="verifyPin()">Вход</button>
         </div>
 
         <!-- Admin Content (hidden until login ok) -->

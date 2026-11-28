@@ -1919,9 +1919,23 @@ async function apiCall(action, params = {}, operationContext) {
             }
         }
         // Strict POST-only for all auth, Super-Admin, credentialed, and protected financial operations (zero URL secrets!)
-        const response = usePost ?
-            await fetch(SCRIPT_URL, {method: 'POST', body: new URLSearchParams(params)}) :
-            await fetch(`${SCRIPT_URL}?${queryParams}`);
+        const isAuthVerify = action === 'verifyPin';
+        const loginTimeoutMs = Number(window.ADMIN_LOGIN_TIMEOUT_MS) > 0 ? Number(window.ADMIN_LOGIN_TIMEOUT_MS) : 45000;
+        const abortCtrl = (isAuthVerify && typeof AbortController !== 'undefined') ? new AbortController() : null;
+        const timeoutHandle = abortCtrl ? setTimeout(() => {
+            try { abortCtrl.abort(); } catch (_) {}
+        }, loginTimeoutMs) : null;
+        let response;
+        try {
+            const fetchOpts = usePost
+                ? Object.assign({ method: 'POST', body: new URLSearchParams(params) }, abortCtrl ? { signal: abortCtrl.signal } : {})
+                : (abortCtrl ? { signal: abortCtrl.signal } : undefined);
+            response = usePost
+                ? await fetch(SCRIPT_URL, fetchOpts)
+                : await fetch(`${SCRIPT_URL}?${queryParams}`, fetchOpts);
+        } finally {
+            if (timeoutHandle !== null) clearTimeout(timeoutHandle);
+        }
         if (!response.ok) throw new Error('HTTP_' + response.status);
         const result = await response.json();
         handleSuperSessionRejection_(result);
@@ -3248,21 +3262,73 @@ window.renderPublicExternalUnitCard_ = function () {
 // ADMIN PANEL LOGIC 
 // ==============================================
 
+function setAdminLoginBusyState_(busy, pendingMessage) {
+    const loginCard = document.getElementById("loginCard");
+    const btn = document.getElementById("adminLoginBtn") || (loginCard ? loginCard.querySelector(".admin-btn.primary") : null);
+    const emailInput = document.getElementById("adminEmailInput");
+    const pinInput = document.getElementById("pinInput");
+    const err = document.getElementById("pinError");
+    if (btn) {
+        btn.disabled = Boolean(busy);
+        btn.textContent = busy ? "Проверка..." : "Вход";
+    }
+    if (emailInput) emailInput.disabled = Boolean(busy);
+    if (pinInput) pinInput.disabled = Boolean(busy);
+    if (err && busy) {
+        if (err.classList) err.classList.add("is-pending");
+        err.textContent = pendingMessage || "Проверка на данните за вход...";
+    } else if (err && err.classList) {
+        err.classList.remove("is-pending");
+    }
+}
+
+function formatAdminLoginError_(rawError) {
+    const msg = String(rawError === null || rawError === undefined ? "" : rawError).trim();
+    if (!msg) return "Неуспешен вход. Моля, проверете данните и опитайте отново.";
+    if (msg === "No Script URL configured") {
+        return "Липсва връзка със сървъра (SCRIPT_URL).";
+    }
+    if (/AbortError|aborted|The user aborted a request|TimeoutError/i.test(msg)) {
+        return "Сървърът не отговори навреме. Моля, изчакайте няколко секунди и опитайте отново.";
+    }
+    if (/Failed to fetch|NetworkError|Load failed|HTTP_\d+/i.test(msg)) {
+        return "Проблем с връзката към сървъра. Моля, опитайте отново.";
+    }
+    return msg;
+}
+
 window.openAdmin = async function () {
     document.getElementById("adminOverlay").classList.add("active");
+    const err = document.getElementById("pinError");
+    if (err) {
+        if (err.classList) err.classList.remove("is-pending");
+        err.textContent = "";
+    }
     if (sessionStorage.getItem("adminAuth_" + currentRouteKey)) {
         showAdminContent();
     } else if (getSuperSessionToken_()) {
         // Active Super-Admin session grants authenticated access to the entrance admin panel (server-verified via POST)
-        const check = await apiCall('verifyPin', { superSessionToken: getSuperSessionToken_() });
-        if (check && check.success) {
-            showAdminContent();
-            return;
+        document.getElementById("loginCard").style.display = "block";
+        document.getElementById("adminCard").style.display = "none";
+        setAdminLoginBusyState_(true, "Проверка на активна сесия...");
+        try {
+            const check = await apiCall('verifyPin', { superSessionToken: getSuperSessionToken_() });
+            if (check && check.success) {
+                if (err) err.textContent = "";
+                showAdminContent();
+                return;
+            }
+        } catch (_) {
+            // Fall through to standard PIN login screen
+        } finally {
+            setAdminLoginBusyState_(false);
         }
+        if (err) err.textContent = "";
         document.getElementById("loginCard").style.display = "block";
         document.getElementById("adminCard").style.display = "none";
         document.getElementById("pinInput").value = "";
     } else {
+        setAdminLoginBusyState_(false);
         document.getElementById("loginCard").style.display = "block";
         document.getElementById("adminCard").style.display = "none";
         document.getElementById("pinInput").value = "";
@@ -3273,25 +3339,54 @@ window.closeAdmin = function () {
     document.getElementById("adminOverlay").classList.remove("active");
 }
 
-window.verifyPin = async function () {
-    const email = document.getElementById("adminEmailInput").value.trim();
-    const pin = document.getElementById("pinInput").value.trim();
-    const err = document.getElementById("pinError");
+window._verifyPinInFlight_ = false;
 
-    if (!email || !pin) {
-        err.textContent = "Моля, въведете имейл и парола.";
+window.verifyPin = async function () {
+    if (window._verifyPinInFlight_) return;
+
+    const emailEl = document.getElementById("adminEmailInput");
+    const pinEl = document.getElementById("pinInput");
+    const err = document.getElementById("pinError");
+    const email = emailEl ? emailEl.value.trim() : "";
+    const pin = pinEl ? pinEl.value.trim() : "";
+
+    if (err && err.classList) err.classList.remove("is-pending");
+
+    if (!currentRouteKey) {
+        if (err) err.textContent = "Липсва избран вход. Моля, заредете отново таблото на входа.";
         return;
     }
 
-    const result = await apiCall('verifyPin', { pin: pin });
+    if (!email || !pin) {
+        if (err) err.textContent = "Моля, въведете имейл и парола.";
+        return;
+    }
 
-    if (result && result.success) {
-        sessionStorage.setItem("adminAuth_" + currentRouteKey, pin);
-        localStorage.setItem("savedAdminEmail", email);
-        err.textContent = "";
-        showAdminContent();
-    } else {
-        err.textContent = result?.error || "Грешен PIN код.";
+    const targetRouteKey = currentRouteKey;
+    window._verifyPinInFlight_ = true;
+    setAdminLoginBusyState_(true, "Проверка на данните за вход...");
+
+    try {
+        const result = await apiCall('verifyPin', { pin: pin });
+        if (currentRouteKey !== targetRouteKey) return;
+
+        if (result && result.success) {
+            setAdminLoginBusyState_(false);
+            sessionStorage.setItem("adminAuth_" + targetRouteKey, pin);
+            localStorage.setItem("savedAdminEmail", email);
+            if (err) err.textContent = "";
+            showAdminContent();
+        } else {
+            setAdminLoginBusyState_(false);
+            if (err) err.textContent = formatAdminLoginError_(result && result.error ? result.error : "Грешен PIN код.");
+        }
+    } catch (e) {
+        setAdminLoginBusyState_(false);
+        if (typeof isStaleRouteRequestError === "function" && isStaleRouteRequestError(e)) return;
+        if (err) err.textContent = formatAdminLoginError_(e && e.message ? e.message : e);
+    } finally {
+        window._verifyPinInFlight_ = false;
+        setAdminLoginBusyState_(false);
     }
 }
 
